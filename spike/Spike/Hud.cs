@@ -13,11 +13,10 @@ internal sealed class Hud : IWindowHandler
     public nint Hwnd { get; }
     private readonly nint _text;
     private readonly string _mode;
-    private readonly Process _process = Process.GetCurrentProcess();
     private readonly string _csv;
     private readonly long _start = Stopwatch.GetTimestamp();
 
-    private TimeSpan _lastCpu;
+    private long _lastCpu; // 100 ns units
     private long _lastTicks;
     private readonly Queue<double> _idleCpu = new();  // last 30 one-second idle samples
     private double _peakMovingCpu;
@@ -32,9 +31,9 @@ internal sealed class Hud : IWindowHandler
     {
         _mode = mode;
         Hwnd = Win.Create(this, Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW,
-            Native.WS_CAPTION | Native.WS_SYSMENU | Native.WS_VISIBLE, 24, 24, 420, 250, $"Spike HUD - mode {mode}");
-        _text = Win.CreateStatic(Hwnd, 12, 10, 390, 200);
-        _lastCpu = _process.TotalProcessorTime;
+            Native.WS_CAPTION | Native.WS_SYSMENU | Native.WS_VISIBLE, 24, 24, 460, 250, $"Spike HUD - mode {mode}");
+        _text = Win.CreateStatic(Hwnd, 12, 10, 430, 200);
+        _lastCpu = Native.ProcessStats().cpu;
         _lastTicks = Stopwatch.GetTimestamp();
 
         Directory.CreateDirectory(Log.Folder);
@@ -47,6 +46,9 @@ internal sealed class Hud : IWindowHandler
     public void CountFrame() => _framesThisSecond++;
 
     public void SetState(string state) => _state = state;
+
+    /// <summary>Why the blob is hidden, shown under the state.</summary>
+    public string? HiddenReason;
 
     public nint? OnMessage(nint hwnd, uint msg, nuint wParam, nint lParam)
     {
@@ -65,13 +67,15 @@ internal sealed class Hud : IWindowHandler
 
     private void Update()
     {
-        _process.Refresh();
-        var cpu = _process.TotalProcessorTime;
+        // Cheap per-process counters: Process.Refresh() would snapshot every process on the
+        // machine each second and dominate the very numbers it reports.
+        var (cpu, ws, priv) = Native.ProcessStats();
         long now = Stopwatch.GetTimestamp();
         double wall = Stopwatch.GetElapsedTime(_lastTicks, now).TotalSeconds;
-        double cpuPct = wall > 0 ? (cpu - _lastCpu).TotalSeconds / wall / Environment.ProcessorCount * 100 : 0;
+        double cpuMs = (cpu - _lastCpu) / 10_000.0;
+        double cpuPct = wall > 0 ? cpuMs / 1000 / wall / Environment.ProcessorCount * 100 : 0;
         // Also as "ms of CPU per 10 s", the unit the plan's target uses.
-        double cpuMsPer10s = wall > 0 ? (cpu - _lastCpu).TotalMilliseconds / wall * 10 : 0;
+        double cpuMsPer10s = wall > 0 ? cpuMs / wall * 10 : 0;
         _lastCpu = cpu;
         _lastTicks = now;
 
@@ -79,7 +83,8 @@ internal sealed class Hud : IWindowHandler
         _framesThisSecond = 0;
         if (_state == "moving") _bestFps = Math.Max(_bestFps, _lastFps);
 
-        if (_state == "idle")
+        // Skip the first seconds: start-up work is not idle cost.
+        if (_state == "idle" && Stopwatch.GetElapsedTime(_start, now).TotalSeconds > 5)
         {
             _idleCpu.Enqueue(cpuMsPer10s);
             while (_idleCpu.Count > 30) _idleCpu.Dequeue();
@@ -89,14 +94,12 @@ internal sealed class Hud : IWindowHandler
             _peakMovingCpu = Math.Max(_peakMovingCpu, cpuPct);
         }
 
-        double ws = _process.WorkingSet64 / 1048576.0;
-        double priv = _process.PrivateMemorySize64 / 1048576.0;
         double idleAvg = _idleCpu.Count > 0 ? _idleCpu.Average() : double.NaN;
         double up = Stopwatch.GetElapsedTime(_start, now).TotalSeconds;
 
         string text =
             $"Mode: {_mode}\n" +
-            $"State: {_state}\n" +
+            $"State: {_state}{(HiddenReason != null ? $" ({HiddenReason})" : "")}\n" +
             $"RAM: {ws:F1} MB working set, {priv:F1} MB private\n" +
             $"CPU now: {cpuPct:F2} %  ({cpuMsPer10s:F1} ms per 10 s)\n" +
             $"CPU idle avg (last {_idleCpu.Count}s): {(double.IsNaN(idleAvg) ? "-" : idleAvg.ToString("F1"))} ms per 10 s\n" +

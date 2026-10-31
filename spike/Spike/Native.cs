@@ -68,6 +68,31 @@ internal struct BITMAPINFOHEADER
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct MONITORINFO
+{
+    public uint CbSize;
+    public RECT Monitor;
+    public RECT Work;
+    public uint Flags;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct PROCESS_MEMORY_COUNTERS_EX
+{
+    public uint Cb;
+    public uint PageFaultCount;
+    public nuint PeakWorkingSetSize;
+    public nuint WorkingSetSize;
+    public nuint QuotaPeakPagedPoolUsage;
+    public nuint QuotaPagedPoolUsage;
+    public nuint QuotaPeakNonPagedPoolUsage;
+    public nuint QuotaNonPagedPoolUsage;
+    public nuint PagefileUsage;
+    public nuint PeakPagefileUsage;
+    public nuint PrivateUsage;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct DispatcherQueueOptions
 {
     public int DwSize;
@@ -261,12 +286,83 @@ internal static unsafe partial class Native
         return r;
     }
 
-    /// <summary>True when a fullscreen game, video or presentation is in front.</summary>
-    public static bool SomethingFullscreen()
+    [LibraryImport("user32.dll")]
+    public static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetShellWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetDesktopWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetWindowRect(nint hwnd, RECT* rect);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint MonitorFromWindow(nint hwnd, uint flags);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    public static partial int GetMonitorInfo(nint monitor, MONITORINFO* info);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
+    public static partial int GetClassName(nint hwnd, char* name, int max);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nint GetCurrentProcess();
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int GetProcessTimes(nint process, long* creation, long* exit, long* kernel, long* user);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo")]
+    public static partial int GetProcessMemoryInfo(nint process, PROCESS_MEMORY_COUNTERS_EX* counters, uint size);
+
+    /// <summary>Our own windows, never counted as "something fullscreen" (the overlay covers the screen).</summary>
+    public static readonly HashSet<nint> OwnWindows = new();
+
+    /// <summary>
+    /// Why the companion should hide, or null. A window in front that covers its whole monitor
+    /// (a fullscreen video or game), or Windows saying a D3D fullscreen app or presentation is on.
+    /// QUNS_BUSY is ignored: on some machines it is reported with nothing fullscreen at all.
+    /// </summary>
+    public static string? FullscreenReason()
     {
         int state = 0;
-        if (SHQueryUserNotificationState(&state) != 0) return false;
-        return state is QUNS_BUSY or QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE;
+        if (SHQueryUserNotificationState(&state) == 0 && state is QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE)
+            return $"notification state {state}";
+
+        nint fg = GetForegroundWindow();
+        if (fg == 0 || fg == GetShellWindow() || fg == GetDesktopWindow() || OwnWindows.Contains(fg)) return null;
+        char* cls = stackalloc char[64];
+        int n = GetClassName(fg, cls, 64);
+        var name = new string(cls, 0, n);
+        if (name is "Progman" or "WorkerW" or "Shell_TrayWnd") return null;
+
+        RECT w;
+        if (GetWindowRect(fg, &w) == 0) return null;
+        var info = new MONITORINFO { CbSize = (uint)sizeof(MONITORINFO) };
+        if (GetMonitorInfo(MonitorFromWindow(fg, 2 /* NEAREST */), &info) == 0) return null;
+        var m = info.Monitor;
+        bool covers = w.Left <= m.Left && w.Top <= m.Top && w.Right >= m.Right && w.Bottom >= m.Bottom;
+        return covers ? $"window '{name}' covers the monitor" : null;
+    }
+
+    /// <summary>Raw notification state, for the log.</summary>
+    public static int NotificationState()
+    {
+        int state = -1;
+        SHQueryUserNotificationState(&state);
+        return state;
+    }
+
+    /// <summary>Process CPU time (100 ns units) and memory, without enumerating every process.</summary>
+    public static (long cpu, double workingSetMb, double privateMb) ProcessStats()
+    {
+        nint self = GetCurrentProcess();
+        long c, e, k, u;
+        GetProcessTimes(self, &c, &e, &k, &u);
+        var m = new PROCESS_MEMORY_COUNTERS_EX { Cb = (uint)sizeof(PROCESS_MEMORY_COUNTERS_EX) };
+        GetProcessMemoryInfo(self, &m, m.Cb);
+        return (k + u, m.WorkingSetSize / 1048576.0, m.PrivateUsage / 1048576.0);
     }
 
     public static void SetText(nint hwnd, string text)

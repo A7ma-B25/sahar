@@ -50,6 +50,7 @@ internal static unsafe class Win
         _pending = null;
         if (hwnd == 0) throw new InvalidOperationException($"CreateWindowEx failed: {Marshal.GetLastPInvokeError()}");
         Handlers[hwnd] = handler;
+        Native.OwnWindows.Add(hwnd);
         return hwnd;
     }
 

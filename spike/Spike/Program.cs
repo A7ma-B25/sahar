@@ -57,17 +57,20 @@ internal static unsafe class Program
         IBlobView view = mode == "A" ? new CompositionView(blob) : new SkiaView(blob);
         blob.Attach(view);
         view.SetExcludedFromCapture(true);
+        Log.Write($"notification state at start: {Native.NotificationState()}");
 
         bool visible = true;
         var ticker = new Ticker(blob, view, mode);
         hud.OnTick = _ =>
         {
-            bool show = !Native.SomethingFullscreen();
+            string? reason = Native.FullscreenReason();
+            bool show = reason == null;
+            hud.HiddenReason = reason;
             if (show != visible)
             {
                 visible = show;
                 view.SetVisible(show);
-                Log.Write(show ? "shown" : "hidden: something fullscreen");
+                Log.Write(show ? "shown" : $"hidden: {reason}");
             }
             blob.RefreshWorkArea();
         };
@@ -98,7 +101,7 @@ internal static unsafe class Program
             else
             {
                 last = 0;
-                hud.SetState(!visible ? "hidden (fullscreen)" : blob.Dragging ? "dragging" : "idle");
+                hud.SetState(!visible ? "hidden" : blob.Dragging ? "dragging" : "idle");
                 int r = Native.GetMessage(&msg, 0, 0, 0);
                 if (r <= 0) return;
                 Native.TranslateMessage(&msg);
