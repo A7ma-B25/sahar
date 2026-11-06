@@ -32,8 +32,8 @@ function Wait-Pipe([int]$seconds) {
     throw "pipe 'sahar' did not appear within $seconds s"
 }
 
-function Start-Engine {
-    $script:engine = Start-Process -FilePath $Exe -ArgumentList '--test-mode', '--capturable' -PassThru
+function Start-Engine([string[]]$Extra = @()) {
+    $script:engine = Start-Process -FilePath $Exe -ArgumentList (@('--test-mode', '--capturable') + $Extra) -PassThru
     Wait-Pipe 5
 }
 
@@ -394,6 +394,51 @@ function Stage-Motion {
             }
         }
     }
+    $script:moveTimes = @{ FollowCursor = 6; HideBehindWindow = 7.5; Shy = 2.5; StartupEntry = 3; Goodbye = 2; HopIcons = 3.5; Attention = 3.6; NapOnIcon = 3 }
+    foreach ($kind in 'FollowCursor', 'HideBehindWindow', 'Shy', 'StartupEntry', 'Goodbye', 'HopIcons', 'Attention', 'NapOnIcon') {
+        Step "motion $kind" {
+            $w = $null
+            if ($kind -eq 'HideBehindWindow') { $w = Start-TestWindow 'typing' }
+            try {
+                Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+                Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"250"}}' | Out-Null
+                [Mouse]::Move(5, 5)   # pointer away from her
+                if ($w) { & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null; Start-Sleep -Milliseconds 300 }
+                $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}')
+                if (-not $r.ok) { throw "motion $kind not ok: $($r.error)" }
+                if ($r.state.motion -ne $kind) { throw "state.motion is '$($r.state.motion)', expected '$kind'" }
+                $frames = Join-Path $dir "move-$kind"
+                New-Item -ItemType Directory -Force -Path $frames | Out-Null
+                $t0 = Get-Date
+                $f = 0
+                $end = $t0.AddSeconds($script:moveTimes[$kind] + 2)
+                $back = $false
+                while ((Get-Date) -lt $end) {
+                    Start-Sleep -Milliseconds 200
+                    $st = State
+                    if ($kind -ne 'StartupEntry' -or ((Get-Date) - $t0).TotalSeconds -gt 1.8) { Assert-BodyInWork $st "$kind" }
+                    if ($f -lt 2 -and ((Get-Date) - $t0).TotalSeconds -gt (0.4 + $f * 1.2)) {
+                        $f++
+                        Copy-Item (Screenshot 'motion-full.png') (Join-Path $frames "$f.png") -Force
+                    }
+                    if ($kind -notin 'Goodbye', 'NapOnIcon' -and $st.motion -eq 'Hover') { $back = $true; break }
+                }
+                if ($kind -notin 'Goodbye', 'NapOnIcon' -and -not $back) { throw "$kind did not end in Hover (motion '$((State).motion)')" }
+                if ($kind -in 'Goodbye', 'NapOnIcon') {
+                    if ((State).motion -ne $kind) { throw "$kind ended early: '$((State).motion)'" }
+                    Send '{"type":"cmd","name":"motion","args":{"kind":"Wake"}}' | Out-Null
+                    Start-Sleep -Seconds 1
+                }
+            }
+            finally { if ($w) { $w.Kill() } }
+        }
+    }
+    Step 'the PC just started: she flies in and says hello' {
+        Stop-Engine
+        Start-Engine @('--simulate-boot')
+        Wait-State { param($st) $st.motion -eq 'StartupEntry' } 3000 'hello at start' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Hover' } 6000 'hovering after hello' | Out-Null
+    }
     Step 'every flight stays on screen, from every corner' {
         $patterns = 'Zigzag', 'FigureEight', 'SpiralUp', 'Dive', 'Wave', 'GlideHigh', 'BigCircle', 'DashAndStop', 'FallingLeaf', 'TaskbarPatrol'
         $st = State
@@ -621,6 +666,7 @@ public static class Mouse {
         mouse_event(right ? 0x0010u : 0x0004u, 0, 0, 0, UIntPtr.Zero);
     }
     public static void DoubleClick(int x, int y) { Click(x, y, false); System.Threading.Thread.Sleep(120); Click(x, y, false); }
+    public static void Move(int x, int y) { SetCursorPos(x, y); }
 }
 '@
 
@@ -829,6 +875,8 @@ function Stage-Menu {
     Step 'when it ends she shows it and a poke dismisses it' {
         Send '{"type":"cmd","name":"timer","args":{"seconds":"3"}}' | Out-Null
         Wait-State { param($st) $st.expression -eq 'timer-done' } 6000 'timer-done face' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Attention' } 2500 'her attention move' | Out-Null
+        Start-Sleep -Seconds 4
         if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running after it ended' }
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $false)
