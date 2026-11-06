@@ -1,18 +1,13 @@
 namespace Sahar.Core.Life;
 
 /// <summary>
-/// Are you typing? Recent input while the mouse stays still is the keyboard; it counts as typing until
-/// three seconds after the last key. Works in apps without a system caret (browsers, Electron).
+/// Are you typing? From the time of the last real key press (the engine gets it from Raw Input, timestamps
+/// only, never which key). It counts as typing until three seconds after the last key. Mouse clicks and
+/// stops never count, so poking, hovering over and dropping her are never mistaken for typing.
 /// </summary>
 public sealed class TypingDetector
 {
-    public static readonly TimeSpan RecentInput = TimeSpan.FromSeconds(1.5);
     public static readonly TimeSpan Hold = TimeSpan.FromSeconds(3);
-    private DateTimeOffset? _lastKey;
 
-    public bool Update(DateTimeOffset now, TimeSpan sinceInput, bool cursorMoved)
-    {
-        if (sinceInput <= RecentInput && !cursorMoved) _lastKey = now - sinceInput;
-        return _lastKey is { } k && now - k <= Hold;
-    }
+    public bool Update(DateTimeOffset now, TimeSpan sinceKeyboard) => sinceKeyboard <= Hold;
 }

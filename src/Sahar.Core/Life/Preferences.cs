@@ -21,6 +21,12 @@ public sealed class Preferences
         foreach (var a in _weights.Keys.ToList()) _weights[a] += (1f - _weights[a]) * DecayShare;
     }
 
+    /// <summary>Catches up on days she was not running (at most 120, after which every weight is within 0.5 % of 1).</summary>
+    public void DecayDays(int days)
+    {
+        for (int i = 0; i < Math.Clamp(days, 0, 120); i++) Decay();
+    }
+
     private void Set(LifeAction a, float w) => _weights[a] = Math.Clamp(w, Min, Max);
 
     public Dictionary<string, float> ToState() => _weights.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value);

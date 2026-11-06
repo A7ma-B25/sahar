@@ -4,7 +4,8 @@ using System.Text.Json.Serialization;
 namespace Sahar.Core.Life;
 
 /// <summary>What she has learned: action weights and the 24-hour profile. Nothing about your apps (spec §14).</summary>
-public sealed record LifeState(int Version, Dictionary<string, float> Weights, float[] Hours)
+/// <param name="LastDecay">The local day ("yyyy-MM-dd") her preferences last faded a step toward 1.</param>
+public sealed record LifeState(int Version, Dictionary<string, float> Weights, float[] Hours, string? LastDecay = null)
 {
     public static LifeState Empty => new(1, [], new float[24]);
 }
@@ -31,7 +32,7 @@ public static class LifeStore
             var s = JsonSerializer.Deserialize(text, LifeJson.Default.LifeState);
             if (s is null) return LifeState.Empty;
             var hours = s.Hours is { Length: 24 } ? s.Hours : new float[24];
-            return new LifeState(1, s.Weights ?? [], hours);
+            return new LifeState(1, s.Weights ?? [], hours, s.LastDecay);
         }
         catch (JsonException)
         {

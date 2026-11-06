@@ -184,6 +184,10 @@ public static class Shell {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     public static void TaskbarCreated() { PostMessage((IntPtr)0xFFFF, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero); }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+    /// Tells Sahar's tray window that Windows is shutting down (WM_ENDSESSION, wParam TRUE).
+    public static bool EndSession() { var h = FindWindow("Sahar.Engine", "Sahar tray"); return h != IntPtr.Zero && PostMessage(h, 0x16, (IntPtr)1, IntPtr.Zero); }
 }
 "@
 
@@ -637,6 +641,52 @@ function Stage-Life {
             if (-not $far) { throw "still $([int]$d) px from the typing spot" }
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'she stays put when you poke, hover over or drop her (no-caret app in front)' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'maximized'
+        try {
+            Send '{"type":"cmd","name":"pose","args":{"x":"300","y":"250"}}' | Out-Null
+            function Centre { $st = State; [pscustomobject]@{ x = $st.x + $st.width / 2; y = $st.y + $st.height / 2; motion = $st.motion } }
+            function Assert-Still($before, [string]$what) {
+                for ($i = 0; $i -lt 10; $i++) {
+                    Start-Sleep -Milliseconds 500
+                    $c = Centre
+                    if ([math]::Abs($c.x - $before.x) -gt 4 -or [math]::Abs($c.y - $before.y) -gt 4 -or $c.motion -eq 'Wander') {
+                        throw "$what: she moved from ($([int]$before.x),$([int]$before.y)) to ($([int]$c.x),$([int]$c.y)), motion $($c.motion)"
+                    }
+                }
+            }
+            $c = Centre
+            & agent-desktop --headed mouse-click --xy ('{0},{1}' -f [int]$c.x, [int]$c.y) | Out-Null
+            Assert-Still $c 'after a poke'
+            & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]$c.x, [int]($c.y - 10)) | Out-Null
+            Assert-Still $c 'with the cursor resting on her'
+            & agent-desktop --headed drag --from-xy ('{0},{1}' -f [int]$c.x, [int]$c.y) --to-xy ('{0},{1}' -f [int]($c.x + 150), [int]($c.y + 40)) --duration 600 --drop-delay 300 --timeout-ms 8000 | Out-Null
+            Start-Sleep -Milliseconds 800
+            Assert-Still (Centre) 'after being dropped'
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'she leaves a window edge when that window is maximized' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'typing'
+        try {
+            $r = Send '{"type":"cmd","name":"motion","args":{"kind":"PerchWindow"}}'
+            Start-Sleep -Milliseconds 2000
+            if ((State).motion -ne 'PerchWindow') { throw "she did not perch ($((State).motion))" }
+            $script:win.Refresh()
+            [Shell]::ShowWindow($script:win.MainWindowHandle, 3) | Out-Null   # SW_MAXIMIZE
+            Wait-State { param($st) $st.motion -ne 'PerchWindow' } 2500 'leaving the maximized window' | Out-Null
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'what she learned is saved when Windows shuts down' {
+        Remove-Item $lifePath -ErrorAction SilentlyContinue
+        if (-not [Shell]::EndSession()) { throw 'tray window not found' }
+        $deadline = (Get-Date).AddSeconds(3)
+        while (-not (Test-Path $lifePath) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
+        if (-not (Test-Path $lifePath)) { throw 'life.json not written on WM_ENDSESSION' }
     }
     Step 'activity level is saved and survives a restart' {
         $r = Send '{"type":"cmd","name":"set-activity","args":{"level":"Lively"}}'

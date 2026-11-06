@@ -116,39 +116,38 @@ public class TypingAndMediaTests
     private static readonly DateTimeOffset T0 = new(2026, 11, 6, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Typing_KeyboardWithoutCursor_IsTyping() =>
-        Assert.True(new TypingDetector().Update(T0, TimeSpan.FromMilliseconds(300), cursorMoved: false));
+    public void Typing_RecentKey_IsTyping() =>
+        Assert.True(new TypingDetector().Update(T0, sinceKeyboard: TimeSpan.FromMilliseconds(300)));
 
     [Fact]
-    public void Typing_MouseMovement_IsNotTyping() =>
-        Assert.False(new TypingDetector().Update(T0, TimeSpan.FromMilliseconds(300), cursorMoved: true));
-
-    [Fact]
-    public void Typing_HoldsThreeSeconds()
+    public void Typing_StopsThreeSecondsAfterLastKey()
     {
         var d = new TypingDetector();
-        Assert.True(d.Update(T0, TimeSpan.FromMilliseconds(100), false));
-        Assert.True(d.Update(T0.AddSeconds(2.5), TimeSpan.FromSeconds(2.5), false));
-        Assert.False(d.Update(T0.AddSeconds(3.5), TimeSpan.FromSeconds(3.5), false));
+        Assert.True(d.Update(T0, TimeSpan.FromSeconds(2.9)));
+        Assert.False(d.Update(T0, TimeSpan.FromSeconds(3.1)));
     }
+
+    [Fact]
+    public void Typing_NoKeyEver_IsNotTyping() =>
+        Assert.False(new TypingDetector().Update(T0, TimeSpan.MaxValue));
 
     [Fact]
     public void Media_MusicStartStop_Edges()
     {
         var m = new MediaEdges();
-        Assert.Equal([EventKind.Music], m.Update(playing: true, isVideo: false));
-        Assert.Empty(m.Update(true, false));
-        Assert.Equal([EventKind.MusicStop], m.Update(false, false));
-        Assert.Empty(m.Update(false, false));
+        Assert.Equal([EventKind.Music], m.Update(playing: true, isVideo: false, fromBrowser: false, browserInFront: false));
+        Assert.Empty(m.Update(true, false, false, false));
+        Assert.Equal([EventKind.MusicStop], m.Update(false, false, false, false));
+        Assert.Empty(m.Update(false, false, false, false));
     }
 
     [Fact]
     public void Media_Video_NoMusicEvents_SetsVideo()
     {
         var m = new MediaEdges();
-        Assert.Empty(m.Update(true, isVideo: true));
+        Assert.Empty(m.Update(true, isVideo: true, false, false));
         Assert.True(m.VideoPlaying);
-        Assert.Empty(m.Update(false, true));
+        Assert.Empty(m.Update(false, true, false, false));
         Assert.False(m.VideoPlaying);
     }
 
@@ -156,9 +155,63 @@ public class TypingAndMediaTests
     public void Media_MusicToVideo_StopsMusic()
     {
         var m = new MediaEdges();
-        m.Update(true, false);
-        Assert.Equal([EventKind.MusicStop], m.Update(true, true));
+        m.Update(true, false, false, false);
+        Assert.Equal([EventKind.MusicStop], m.Update(true, true, false, false));
         Assert.True(m.VideoPlaying);
+    }
+}
+
+public class BrowserMediaTests
+{
+    [Theory]
+    [InlineData("Chrome", true)]
+    [InlineData("MSEdge", true)]
+    [InlineData("308046B0AF4A39CB", true)]           // Firefox's media session id
+    [InlineData("firefox.exe", true)]
+    [InlineData("Spotify.exe", false)]
+    [InlineData("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", false)]
+    [InlineData("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic", false)]
+    public void Media_IsBrowser(string appId, bool browser) => Assert.Equal(browser, MediaEdges.IsBrowser(appId));
+
+    [Fact]
+    public void Media_BrowserPlaying_InFront_IsVideo_NotMusic()
+    {
+        // Chromium reports every tab as "music", even YouTube: never trust it for the music face.
+        var m = new MediaEdges();
+        Assert.Empty(m.Update(playing: true, isVideo: false, fromBrowser: true, browserInFront: true));
+        Assert.True(m.VideoPlaying);
+    }
+
+    [Fact]
+    public void Media_BrowserPlaying_Behind_NeitherVideoNorMusic()
+    {
+        var m = new MediaEdges();
+        Assert.Empty(m.Update(true, false, fromBrowser: true, browserInFront: false));
+        Assert.False(m.VideoPlaying);
+    }
+}
+
+public class ActionMemoryTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 6, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void ActionMemory_LearnsOncePerAction()
+    {
+        var m = new ActionMemory();
+        m.Started(LifeAction.Wander, T0);
+        Assert.Equal(LifeAction.Wander, m.TakeForFeedback(T0.AddSeconds(3)));
+        Assert.Null(m.TakeForFeedback(T0.AddSeconds(5)));   // five pokes are still one like
+        m.Started(LifeAction.PeekTaskbar, T0.AddMinutes(2));
+        Assert.Equal(LifeAction.PeekTaskbar, m.TakeForFeedback(T0.AddMinutes(2).AddSeconds(1)));
+    }
+
+    [Fact]
+    public void ActionMemory_AfterWindow_Nothing()
+    {
+        var m = new ActionMemory();
+        m.Started(LifeAction.Wander, T0);
+        Assert.Null(m.TakeForFeedback(T0.AddSeconds(16)));
     }
 }
 
@@ -187,6 +240,27 @@ public class LifeStoreTests : IDisposable
         Assert.Equal(p.Weight(LifeAction.Wander), p2.Weight(LifeAction.Wander));
         Assert.Equal(p.Weight(LifeAction.PerchWindow), p2.Weight(LifeAction.PerchWindow));
         Assert.Equal(r.BusyFactor(10), r2.BusyFactor(10));
+    }
+
+    [Fact]
+    public void LifeStore_RemembersLastDecayDay()
+    {
+        LifeStore.Save(PathIn, new LifeState(1, [], new float[24], "2026-11-01"));
+        Assert.Equal("2026-11-01", LifeStore.Load(PathIn).LastDecay);
+    }
+
+    [Fact]
+    public void Preferences_DecayDays_CatchesUpMissedDays()
+    {
+        var a = new Preferences(); var b = new Preferences();
+        for (int i = 0; i < 10; i++) { a.Liked(LifeAction.Wander); b.Liked(LifeAction.Wander); }
+        a.DecayDays(3);
+        b.Decay(); b.Decay(); b.Decay();
+        Assert.Equal(b.Weight(LifeAction.Wander), a.Weight(LifeAction.Wander), 0.0001f);
+        var c = new Preferences();
+        for (int i = 0; i < 10; i++) c.Liked(LifeAction.Wander);
+        c.DecayDays(100000);   // capped, never hangs
+        Assert.InRange(c.Weight(LifeAction.Wander), 1f, 1.01f);
     }
 
     [Fact]
