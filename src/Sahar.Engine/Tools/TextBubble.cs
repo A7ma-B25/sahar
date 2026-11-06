@@ -33,6 +33,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
     public bool IsOpen => _hwnd != 0;
     /// <summary>The lines shown under the edit box (for the UI tests).</summary>
     public IReadOnlyList<string> Lines { get; private set; } = [];
+    public string Title { get; private set; } = "";
     public nint EditHwnd => _edit;
 
     /// <summary>Screen rectangle of the edit box (px), for the UI tests.</summary>
@@ -64,6 +65,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
         _onEnter = onEnter;
         _closing = false;
         Lines = below;
+        Title = title;
         _hwnd = Win.Create(this, Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW, Native.WS_POPUP,
             new RECT { Left = (int)x, Top = (int)y, Right = (int)x + w, Bottom = (int)y + h }, "Sahar bubble");
         s_owner = _hwnd;

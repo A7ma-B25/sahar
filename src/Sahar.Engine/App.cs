@@ -127,11 +127,13 @@ internal sealed unsafe class App
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
         Director? dismissDirector = null;
         Action<bool>? stopShow = null;
+        Func<bool> dismissSpeech = () => false;
         Func<bool> showRunning = () => false;
         _ = new InputController(input, motion, () =>
         {
             // A click during her show stops it.
             if (showRunning()) { stopShow?.Invoke(false); return; }
+            if (dismissSpeech()) return;   // a click on her closes her comment (and she'll comment less)
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
             Express("poked", true);
@@ -234,9 +236,63 @@ internal sealed unsafe class App
             Express("copied", true);
         };
         tray.ClipboardChanged += () => Safe(clipboard.Changed);
+        // Downloads, screenshot keys, a busy CPU (spec §8.1).
+        using var downloads = new Downloads(ui, director.Post, _options.DownloadsDir);
+        var screenshotKeys = new ScreenshotKeys();
+        tray.KeyChanged += (vk, down) => Safe(() =>
+        {
+            if (!screenshotKeys.Update(vk, down)) return;
+            Log.Write("screenshot: keys pressed");
+            director.Post(EventKind.Screenshot);
+        });
+        var cpu = new CpuSense(ui, director.Post);
+        var cameraMic = new CameraMic(ui);
+        cameraMic.Changed += on => Safe(() => director.SetCameraMic(on));
         menu.TimerRunning = () => timerTool.Running;
         menu.DndOn = () => dndTool.On;
         lifeDirector.DndOn = () => dndTool.On;
+        lifeDirector.CameraMicOn = () => cameraMic.InUse;
+        // The app in front, and her gentle comments about it (spec §8.1, §8.2).
+        using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
+        var apps = new AppWatch(ui,
+            allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
+            away: () => director.CurrentKey == "sleep",
+            say: line => speech.Say(line));
+        speech.Ended += timedOut => { if (timedOut) apps.Limiter.Accepted(); else apps.Limiter.Dismissed(DateTimeOffset.Now); };
+        dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
+        // Rain coming (opt-in): the tray item asks for your city.
+        using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
+            settings.WeatherEnabled ? settings.WeatherLatitude : null, settings.WeatherEnabled ? settings.WeatherLongitude : null);
+        tray.WeatherCity = weather.On ? settings.WeatherCity : null;
+        void SaveSettings()
+        {
+            try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
+            catch (Exception e) { Log.Write($"settings not saved: {e.Message}"); }
+        }
+        void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
+        void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
+        {
+            var (place, error) = t.IsCompletedSuccessfully ? t.Result : (null, "ما في نت هلق، جرّب بعدين");
+            ui.TryEnqueue(() => Safe(() =>
+            {
+                if (place is null) { AskCity($"{error} — جرّب مدينة تانية"); return; }
+                settings = settings with { WeatherEnabled = true, WeatherCity = place.Name ?? city.Trim(), WeatherLatitude = place.Latitude, WeatherLongitude = place.Longitude };
+                SaveSettings();
+                tray.WeatherCity = settings.WeatherCity;
+                weather.Use(place);
+            }));
+        });
+        tray.WeatherClicked += () => Safe(() =>
+        {
+            if (weather.On)
+            {
+                weather.TurnOff();
+                settings = settings with { WeatherEnabled = false };
+                SaveSettings();
+                tray.WeatherCity = null;
+            }
+            else AskCity("شو مدينتك؟ (للمطر بس)");
+        });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
         using var show = new ShowcasePlayer(ui, motion, sahar, key => Express(key, false), () => Express("", false));
@@ -406,6 +462,19 @@ internal sealed unsafe class App
             });
             pipe.Register("clipboard-pick", r => new PipeReply(clipboardTool.Pick((int)Arg(r, "index"))));
             pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true); });
+            pipe.Register("debug-cameramic", r =>
+            {
+                cameraMic.Simulate(r.Args?.TryGetValue("on", out var on) == true && on == "true");
+                return new PipeReply(true, lifeDirector.Describe());
+            });
+            pipe.Register("weather-open", _ => { if (!weather.On) AskCity("شو مدينتك؟ (للمطر بس)"); return new PipeReply(true); });
+            pipe.Register("debug-weather", _ => new PipeReply(true, $"on={(weather.On ? "true" : "false")}"));
+            pipe.Register("debug-apptime", _ => new PipeReply(true, apps.Describe()));
+            pipe.Register("apptime-skip", r => { apps.Skip(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, apps.Describe()); });
+            pipe.Register("comment-now", _ => new PipeReply(apps.Consider(), apps.Describe()));
+            pipe.Register("debug-comment", _ => new PipeReply(true,
+                $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));
+            pipe.Register("debug-cpu", r => { cpu.Simulate(Arg(r, "percent"), (int)Arg(r, "count")); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines}"));
             pipe.Register("list-close", _ => { listBubble.Close(); return new PipeReply(true); });
             pipe.Register("showcase", r =>
@@ -421,7 +490,7 @@ internal sealed unsafe class App
             {
                 var e = bubble.EditRect;
                 return new PipeReply(true, bubble.IsOpen
-                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd} " +
+                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd} title64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(bubble.Title))} " +
                       $"lines64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', bubble.Lines)))}"
                     : "open=false");
             });

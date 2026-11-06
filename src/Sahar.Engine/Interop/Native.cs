@@ -331,6 +331,10 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial uint GetDoubleClickTime();
 
+    // ---- raw input key codes, CPU times (Plan 4) ----
+    [LibraryImport("user32.dll")] public static partial uint GetRawInputData(nint rawInput, uint command, void* data, uint* size, uint headerSize);
+    [LibraryImport("kernel32.dll")] public static partial int GetSystemTimes(long* idle, long* kernel, long* user);
+
     // ---- clipboard (Plan 4) ----
     [LibraryImport("user32.dll")] public static partial int AddClipboardFormatListener(nint hwnd);
     [LibraryImport("user32.dll")] public static partial int OpenClipboard(nint hwnd);

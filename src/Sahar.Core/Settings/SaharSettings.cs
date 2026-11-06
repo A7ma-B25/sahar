@@ -25,6 +25,10 @@ public sealed record SaharSettings
     public bool AwarenessEnabled { get; init; } = true;
     public IReadOnlyList<string> BlockedApps { get; init; } = [];
     public bool WeatherEnabled { get; init; }
+    /// <summary>The city you typed for the weather, and where Open-Meteo put it.</summary>
+    public string? WeatherCity { get; init; }
+    public double? WeatherLatitude { get; init; }
+    public double? WeatherLongitude { get; init; }
     public bool UpdateCheckEnabled { get; init; } = true;
     public SeasonalIcon Seasonal { get; init; } = SeasonalIcon.Auto;
 }

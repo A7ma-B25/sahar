@@ -105,6 +105,8 @@ internal sealed unsafe class LifeDirector : IDisposable
 
     /// <summary>"Do not disturb" is on: only small things (like a video in front).</summary>
     public Func<bool> DndOn { get; set; } = () => false;
+    /// <summary>The camera or microphone is in use: only small things too.</summary>
+    public Func<bool> CameraMicOn { get; set; } = () => false;
 
     /// <summary>Her menu is open (or a show is running): no own actions.</summary>
     public bool Paused { get; set; }
@@ -149,7 +151,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
             new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
-        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn()))
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn() || CameraMicOn()))
         {
             Log.Write("life: the music stopped (or a video is in front), dance ends");
             _motion.Play(MotionKind.Hover);
@@ -186,7 +188,7 @@ internal sealed unsafe class LifeDirector : IDisposable
 
         var forced = _forceNext;
         _forceNext = null;
-        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
+        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn() || CameraMicOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
             now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
@@ -349,7 +351,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             .Select(a => string.Create(CultureInfo.InvariantCulture, $"{a}:{_prefs.Weight(a):0.00}")));
         return string.Create(CultureInfo.InvariantCulture,
             $"level={_level} enabled={(Enabled ? "true" : "false")} next={next:0.0} last={_lastAction} " +
-            $"typing={(Typing ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
+            $"typing={(Typing ? "true" : "false")} quiet={(_director.Quiet ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
     }
 
     private static string SpotText()

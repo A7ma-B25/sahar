@@ -1246,6 +1246,68 @@ function Stage-Senses {
         Send '{"type":"cmd","name":"debug-cameramic","args":{"on":"false"}}' | Out-Null
         if ((Life).quiet -ne 'false') { throw 'still quiet after the camera went off' }
     }
+    Step 'no comment while you type' {
+        $w = Start-TestWindow 'typing'
+        try {
+            Send '{"type":"cmd","name":"apptime-skip","args":{"minutes":"125"}}' | Out-Null
+            $end = (Get-Date).AddSeconds(2)
+            while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('abc '); Start-Sleep -Milliseconds 150 }
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if ($r.ok) { throw 'she commented while you typed' }
+            Start-Sleep -Seconds 4   # typing ends
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if (-not $r.ok) { throw "no comment after a long session: $($r.error)" }
+            $c = Kv 'debug-comment'
+            $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.text64))
+            Write-Host "    comment: $text"
+            if ($c.showing -ne 'true' -or $text -notmatch 'ساعتين|صباح') { throw "comment: showing=$($c.showing) '$text'" }
+            Start-Sleep -Milliseconds 500
+            Screenshot 'comment.png' | Out-Null
+            $b = Body-Centre
+            [Mouse]::Click($b[0], $b[1], $false)
+            Start-Sleep -Milliseconds 400
+            $c = Kv 'debug-comment'
+            if ($c.showing -ne 'false') { throw 'a click did not close her comment' }
+            if ([int]$c.gapMinutes -le 45) { throw "the next comment waits only $($c.gapMinutes) min after being clicked away" }
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if ($r.ok) { throw 'a second comment came right away' }
+        }
+        finally { $w.Kill() }
+    }
+    Step 'weather: a city with rain coming shows the rain face' {
+        Stop-Engine
+        $script:wx = Join-Path $env:TEMP 'sahar-weather'
+        Remove-Item $script:wx -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:wx | Out-Null
+        '{"results":[{"name":"Damascus","latitude":33.51,"longitude":36.29}]}' | Set-Content (Join-Path $script:wx 'geocode.json')
+        '{"hourly":{"time":["2026-11-06T20:00","2026-11-06T21:00"],"weather_code":[61,63],"precipitation_probability":[80,90]}}' | Set-Content (Join-Path $script:wx 'forecast.json')
+        Start-Engine @('--weather-stub', $script:wx)
+        Send '{"type":"cmd","name":"weather-open"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'Damascus' -Enter
+        Wait-State { param($st) $st.expression -eq 'rain' } 5000 'rain face' | Out-Null
+        if ((Kv 'debug-weather').on -ne 'true') { throw 'weather is not on' }
+        $json = Get-Content (Join-Path $env:APPDATA 'Sahar\settings.json') -Raw
+        if ($json -notmatch '"weatherEnabled"\s*:\s*true') { throw "settings.json: $json" }
+    }
+    Step 'weather: no network keeps it off and says so' {
+        Stop-Engine
+        $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+        Remove-Item $settings -ErrorAction SilentlyContinue
+        $empty = Join-Path $env:TEMP 'sahar-weather-empty'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        Start-Engine @('--weather-stub', $empty)
+        Send '{"type":"cmd","name":"weather-open"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'Damascus' -Enter
+        Start-Sleep -Seconds 2
+        $b = Kv 'debug-bubble'
+        $title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b.title64))
+        if ($b.open -ne 'true' -or $title -notmatch 'نت') { throw "bubble: open=$($b.open) '$title'" }
+        if ((Kv 'debug-weather').on -ne 'false') { throw 'weather turned on without a city' }
+        $edit = [IntPtr][long]$b.edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+    }
     Step 'clear all empties it' {
         Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
         if ((Clip-Count) -ne 0) { throw 'not cleared' }
