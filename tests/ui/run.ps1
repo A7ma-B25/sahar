@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -198,6 +198,20 @@ function Wait-Overlay([string]$visible, [int]$ms, [string]$what) {
         Start-Sleep -Milliseconds 100
     } while ((Get-Date) -lt $deadline)
     throw $what
+}
+
+# Test-mode life diagnostics: "level=… next=… last=… typing=… video=… actions=N weights=Wander:1.00,…".
+function Life {
+    $r = Send '{"type":"cmd","name":"debug-life"}'
+    if (-not $r.ok) { throw "debug-life not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+
+function Weight($life, [string]$action) {
+    foreach ($w in ($life.weights -split ',')) { $n, $v = $w -split ':'; if ($n -eq $action) { return [double]$v } }
+    1.0
 }
 
 function Save-Log {
@@ -537,6 +551,63 @@ function Stage-Perf {
     Stop-Engine
 }
 
+function Stage-Life {
+    $settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
+    $lifePath = Join-Path $env:APPDATA 'Sahar\life.json'
+    Remove-Item $settingsPath, $lifePath -ErrorAction SilentlyContinue
+    Step 'start engine' { Start-Engine }
+    Step 'she acts on her own (10 actions in 90 s, gap 2 s)' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"life","args":{"gap":"2"}}'
+        if (-not $r.ok) { throw "life not ok: $($r.error)" }
+        $start = [int](Life).actions
+        $seen = @{}
+        $deadline = (Get-Date).AddSeconds(90)
+        do {
+            Start-Sleep -Milliseconds 500
+            $m = (State).motion
+            $seen[$m] = 1 + [int]$seen[$m]
+            $done = [int](Life).actions - $start
+        } while ($done -lt 10 -and (Get-Date) -lt $deadline)
+        Write-Host "    own actions: $done; motions seen: $(($seen.Keys | Sort-Object) -join ', ')"
+        Screenshot 'life-acting.png' | Out-Null
+        if ($done -lt 10) { throw "only $done own actions in 90 s" }
+        Assert-TopLeftInWork (State) 'after her own actions'
+    }
+    Step 'grabbing her mid-action teaches her and pauses her' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"30"}}' | Out-Null
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"300","y":"250"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"life","args":{"now":"Wander"}}'
+        if (-not $r.ok) { throw "life now not ok: $($r.error)" }
+        Wait-State { param($st) $st.motion -eq 'Wander' } 3000 'her own Wander' | Out-Null
+        $before = (Life)
+        $st = State
+        $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 120), [int]($st.y + $st.height / 2 + 60)
+        & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 600 --drop-delay 200 --timeout-ms 8000 | Out-Null
+        Start-Sleep -Milliseconds 2000
+        $after = (Life)
+        $w = Weight $after 'Wander'
+        Write-Host "    Wander weight $(Weight $before 'Wander') -> $w; actions $($before.actions) -> $($after.actions)"
+        if ($w -ge 1.0) { throw "Wander weight did not drop ($w)" }
+        if ([int]$after.actions -ne [int]$before.actions) { throw 'she started another own action right after being grabbed' }
+    }
+    Step 'activity level is saved and survives a restart' {
+        $r = Send '{"type":"cmd","name":"set-activity","args":{"level":"Lively"}}'
+        if (-not $r.ok) { throw "set-activity not ok: $($r.error)" }
+        if (-not (Test-Path $settingsPath)) { throw 'settings.json not written' }
+        $json = Get-Content $settingsPath -Raw
+        if ($json -notmatch '"activity"\s*:\s*"lively"') { throw "settings.json: $json" }
+        Stop-Engine
+        if (-not (Test-Path $lifePath)) { throw 'life.json not written on quit' }
+        Start-Engine
+        $level = (Life).level
+        if ($level -ne 'Lively') { throw "level after restart is '$level'" }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -547,6 +618,7 @@ try {
             'motion' { Stage-Motion }
             'events' { Stage-Events }
             'perf' { Stage-Perf }
+            'life' { Stage-Life }
         }
     }
 }
