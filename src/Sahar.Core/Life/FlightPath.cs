@@ -34,6 +34,12 @@ public static class FlightPath
     /// anything in <paramref name="avoid"/> (the pointer, where you type).</summary>
     public static Vector2? Plan(FlightPattern p, Geometry.RectF body, Geometry.RectF work, float dpiScale, IReadOnlyList<Geometry.RectF> avoid)
     {
+        // Seated on the taskbar, peeking or perched she pokes out of the work area; a flight starts from inside it.
+        body = body with
+        {
+            X = Math.Clamp(body.X, work.X, Math.Max(work.X, work.Right - body.Width)),
+            Y = Math.Clamp(body.Y, work.Y, Math.Max(work.Y, work.Bottom - body.Height)),
+        };
         float toward = body.X + body.Width / 2 > work.X + work.Width / 2 ? -1 : 1;
         foreach (var dir in new Vector2[] { new(toward, 1), new(toward, -1), new(-toward, 1), new(-toward, -1) })
             if (Fits(p, body, work, dpiScale, avoid, dir)) return dir;
