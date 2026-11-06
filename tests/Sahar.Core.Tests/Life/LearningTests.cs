@@ -174,19 +174,19 @@ public class BrowserMediaTests
     public void Media_IsBrowser(string appId, bool browser) => Assert.Equal(browser, MediaEdges.IsBrowser(appId));
 
     [Fact]
-    public void Media_BrowserPlaying_InFront_IsVideo_NotMusic()
+    public void Media_BrowserPlaying_IsMusic_AndStillWhileInFront()
     {
-        // Chromium reports every tab as "music", even YouTube: never trust it for the music face.
+        // A YouTube song shows (headphones); since it may be a video, no big moves while the browser is in front.
         var m = new MediaEdges();
-        Assert.Empty(m.Update(playing: true, isVideo: false, fromBrowser: true, browserInFront: true));
+        Assert.Equal([EventKind.Music], m.Update(playing: true, isVideo: false, fromBrowser: true, browserInFront: true));
         Assert.True(m.VideoPlaying);
     }
 
     [Fact]
-    public void Media_BrowserPlaying_Behind_NeitherVideoNorMusic()
+    public void Media_BrowserPlaying_Behind_MusicNotVideo()
     {
         var m = new MediaEdges();
-        Assert.Empty(m.Update(true, false, fromBrowser: true, browserInFront: false));
+        Assert.Equal([EventKind.Music], m.Update(true, false, fromBrowser: true, browserInFront: false));
         Assert.False(m.VideoPlaying);
     }
 }

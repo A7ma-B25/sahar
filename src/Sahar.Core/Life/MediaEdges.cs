@@ -4,8 +4,8 @@ namespace Sahar.Core.Life;
 
 /// <summary>
 /// Turns "something is playing" readings into the brain's music start/stop events and a "video" flag.
-/// Browsers report every tab as music (Chromium hard-codes it), so browser playback never shows the music face;
-/// while the browser is in front it counts as video (she keeps still).
+/// Browsers report every tab as music (Chromium hard-codes it): browser playback shows as music (headphones),
+/// and while the browser is in front it also counts as video, so she makes no big moves over it.
 /// </summary>
 public sealed class MediaEdges
 {
@@ -23,7 +23,7 @@ public sealed class MediaEdges
 
     public IReadOnlyList<EventKind> Update(bool playing, bool isVideo, bool fromBrowser, bool browserInFront)
     {
-        bool music = playing && !isVideo && !fromBrowser;
+        bool music = playing && !isVideo;
         VideoPlaying = playing && (isVideo || (fromBrowser && browserInFront));
         if (music == _music) return [];
         _music = music;

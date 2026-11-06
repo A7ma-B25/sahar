@@ -64,7 +64,7 @@ internal sealed class Media
             : video ? _edges.Update(true, true, false, false)
             : _edges.Update(browser, false, browser, BrowserInFront());
         foreach (var e in events) _post(e);
-        MusicPlaying = music;
+        MusicPlaying = music || browser;
     }
 
     /// <summary>Chromium-based browsers (and Electron apps) or Firefox in front.</summary>
