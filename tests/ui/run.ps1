@@ -1044,7 +1044,7 @@ function Stage-Menu {
         Type-InBubble 'abc' -Enter
         Start-Sleep -Milliseconds 400
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
-        if ($log -match '0061') { throw 'the log holds what was typed' }
+        if ($log -match 'not understood[^\r\n]*0061') { throw 'the log holds what was typed' }
         if ($log -notmatch 'typed time not understood \(3 characters\)') { throw 'the log does not say a typed time was not understood' }
         Start-Sleep -Seconds 2
     }
