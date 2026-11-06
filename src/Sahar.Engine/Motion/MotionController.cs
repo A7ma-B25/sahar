@@ -42,6 +42,11 @@ internal sealed class MotionController
     private Vector2 _lastDragVelocity;
 
     public MotionKind Current { get; private set; } = MotionKind.Hover;
+    /// <summary>More places to keep away from when she wanders (e.g. where you are typing).</summary>
+    public Func<IReadOnlyList<RectF>>? ExtraAvoid { get; set; }
+    /// <summary>Her body in screen pixels.</summary>
+    public RectF Body => new(TopLeft.X, TopLeft.Y, BodySize.X, BodySize.Y);
+    public float DpiScale => _v.DpiScale;
     /// <summary>Raised when FullscreenHide has shrunk her away (the overlay can then be hidden).</summary>
     public event Action? HiddenAway;
     /// <summary>The user grabbed her (mouse or pipe).</summary>
@@ -216,7 +221,7 @@ internal sealed class MotionController
     {
         var m = Monitor;
         var cursor = Native.CursorPos();
-        var avoid = new[] { new RectF(cursor.X - 80, cursor.Y - 80, 160, 160) };
+        RectF[] avoid = [new RectF(cursor.X - 80, cursor.Y - 80, 160, 160), .. ExtraAvoid?.Invoke() ?? []];
         var target = _wander.NextTarget(m.WorkF, BodySize, avoid);
         float dist = Vector2.Distance(target, TopLeft);
         float secs = Math.Clamp(dist / (90 * m.DpiScale), 4, 8);

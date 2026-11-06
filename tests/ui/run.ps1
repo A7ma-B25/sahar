@@ -607,10 +607,8 @@ function Stage-Life {
             if (-not $spot -or $spot -eq 'none') { throw "no typing spot ($spot)" }
             $sx, $sy = ($spot -split ',') | ForEach-Object { [double]$_ }
             $st = State
-            $ox = $st.x - (Send '{"type":"cmd","name":"state"}').state.x   # 0, keeps $st fresh
             # Put her body centre 40 px right of the typing spot (canvas top-left = body centre - offset).
             $bodyCx = $st.x + $st.width / 2; $bodyCy = $st.y + $st.height / 2
-            $pose = Send '{"type":"cmd","name":"state"}'
             $canvasDx = $bodyCx - [double](Info).canvasX; $canvasDy = $bodyCy - [double](Info).canvasY
             $px = [int]($sx + 40 - $canvasDx); $py = [int]($sy - $canvasDy)
             Send ('{"type":"cmd","name":"pose","args":{"x":"' + $px + '","y":"' + $py + '"}}') | Out-Null

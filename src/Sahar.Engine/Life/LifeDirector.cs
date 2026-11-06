@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Numerics;
 using Sahar.Core.Brain;
+using Sahar.Core.Geometry;
 using Sahar.Core.Life;
 using Sahar.Core.Motion;
 using Sahar.Core.Settings;
@@ -66,6 +68,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         _cursor = Native.CursorPos();
         Schedule(DateTimeOffset.Now);
         motion.DragStarted += OnDragStarted;
+        motion.ExtraAvoid = () => Typing ? TypingAvoid() : [];
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += (_, _) =>
@@ -108,6 +111,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         if (!Enabled) return;
+        if (Typing) { StepAwayFromTyping(); return; }   // no own actions while you type
 
         // Away: she naps in the corner and wakes when you are back.
         bool away = _director.CurrentKey == "sleep";
@@ -158,6 +162,38 @@ internal sealed unsafe class LifeDirector : IDisposable
         Schedule(now);
     }
 
+    public const float NearTypingDip = 120f, AvoidTypingDip = 150f;
+
+    /// <summary>Where you are typing: the caret, or the mouse pointer in apps without a system caret.</summary>
+    private static RectF TypingSpot(out RectI window)
+    {
+        var (hwnd, w, caret, _) = ForegroundInfo.Current();
+        window = w;
+        if (hwnd != 0 && caret is { } c) return new RectF(c.Left, c.Top, Math.Max(1, c.Right - c.Left), Math.Max(1, c.Bottom - c.Top));
+        var p = Native.CursorPos();
+        return new RectF(p.X, p.Y, 1, 20);
+    }
+
+    private IReadOnlyList<RectF> TypingAvoid()
+    {
+        var spot = TypingSpot(out var w);
+        float m = AvoidTypingDip * _motion.DpiScale;
+        var areas = new List<RectF> { new(spot.X - m, spot.Y - m, spot.Width + 2 * m, spot.Height + 2 * m) };
+        if (w.Right > w.Left) areas.Add(new RectF(w.Left, w.Top, w.Right - w.Left, (w.Bottom - w.Top) / 4f));   // title and toolbar
+        return areas;
+    }
+
+    /// <summary>If she is close to where you are typing, she drifts somewhere else (not counted as an own action).</summary>
+    private void StepAwayFromTyping()
+    {
+        if (_director.Hidden || !Resting) return;
+        var spot = TypingSpot(out _);
+        var body = _motion.Body;
+        var d = Vector2.Distance(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2),
+            new Vector2(spot.X + spot.Width / 2, spot.Y + spot.Height / 2));
+        if (d < NearTypingDip * _motion.DpiScale + body.Width / 2) _motion.Play(MotionKind.Wander);
+    }
+
     /// <summary>A poke shortly after one of her own actions: she learns you liked it.</summary>
     public void OnPoked()
     {
@@ -200,7 +236,13 @@ internal sealed unsafe class LifeDirector : IDisposable
             .Select(a => string.Create(CultureInfo.InvariantCulture, $"{a}:{_prefs.Weight(a):0.00}")));
         return string.Create(CultureInfo.InvariantCulture,
             $"level={_level} enabled={(Enabled ? "true" : "false")} next={next:0.0} last={_last?.Action.ToString() ?? "None"} " +
-            $"typing={(Typing ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights}");
+            $"typing={(Typing ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
+    }
+
+    private static string SpotText()
+    {
+        var s = TypingSpot(out _);
+        return string.Create(CultureInfo.InvariantCulture, $"{s.X + s.Width / 2:0},{s.Y + s.Height / 2:0}");
     }
 
     public void Dispose()
