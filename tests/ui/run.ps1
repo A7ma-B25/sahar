@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -71,6 +71,42 @@ function Assert-Body([string]$shot, [string]$baseline, $state) {
     }
     $diff = [math]::Abs($p.R - $b.R) + [math]::Abs($p.G - $b.G) + [math]::Abs($p.B - $b.B)
     if ($diff -lt 30) { throw "body pixel equals the wallpaper (diff $diff): Sahar is not drawn" }
+}
+
+# Expression keys 1–25 in catalog order (src/Sahar.Core/assets/expressions.json).
+$ExpressionKeys = @('music', 'claude-working', 'claude-permission', 'claude-done', 'timer-done', 'celebrate', 'rain',
+    'battery-low', 'charging', 'download', 'sleep', 'back', 'notification', 'dnd', 'offline', 'online', 'screenshot',
+    'copied', 'reminder', 'error', 'hot', 'poked', 'dragged', 'break', 'late-night')
+
+function Crop([string]$path, [int]$cx, [int]$cy, [int]$size, [string]$to) {
+    $src = [System.Drawing.Bitmap]::new($path)
+    try {
+        $dst = [System.Drawing.Bitmap]::new($size, $size)
+        $g = [System.Drawing.Graphics]::FromImage($dst)
+        $g.DrawImage($src, [System.Drawing.Rectangle]::new(0, 0, $size, $size),
+            [System.Drawing.Rectangle]::new($cx - $size / 2, $cy - $size / 2, $size, $size), [System.Drawing.GraphicsUnit]::Pixel)
+        $g.Dispose()
+        $dst.Save($to, [System.Drawing.Imaging.ImageFormat]::Png)
+        $dst.Dispose()
+    }
+    finally { $src.Dispose() }
+}
+
+function Contact-Sheet([string[]]$tiles, [int]$columns, [int]$size, [string]$to) {
+    $rows = [math]::Ceiling($tiles.Count / $columns)
+    $sheet = [System.Drawing.Bitmap]::new($columns * $size, $rows * $size)
+    $g = [System.Drawing.Graphics]::FromImage($sheet)
+    $font = [System.Drawing.Font]::new('Segoe UI', 11)
+    for ($i = 0; $i -lt $tiles.Count; $i++) {
+        $img = [System.Drawing.Image]::FromFile($tiles[$i])
+        $x = ($i % $columns) * $size; $y = [math]::Floor($i / $columns) * $size
+        $g.DrawImage($img, $x, $y, $size, $size)
+        $g.DrawString([System.IO.Path]::GetFileNameWithoutExtension($tiles[$i]), $font, [System.Drawing.Brushes]::White, $x + 6, $y + 4)
+        $img.Dispose()
+    }
+    $g.Dispose()
+    $sheet.Save($to, [System.Drawing.Imaging.ImageFormat]::Png)
+    $sheet.Dispose()
 }
 
 function Save-Log {
@@ -145,12 +181,46 @@ function Stage-Idle {
     Stop-Engine
 }
 
+function Stage-Gallery {
+    $dir = Join-Path $Out 'gallery'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $script:tiles = @()
+    Step 'start engine' { Start-Engine }
+    Step 'pose at (400,250)' {
+        $r = Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}'
+        if (-not $r.ok) { throw "pose not ok: $($r.error)" }
+    }
+    for ($i = 0; $i -lt $ExpressionKeys.Count; $i++) {
+        $key = $ExpressionKeys[$i]
+        $n = '{0:D2}-{1}' -f ($i + 1), $key
+        Step "expression $n" {
+            $r = Send ('{"type":"cmd","name":"expression","args":{"key":"' + $key + '"}}')
+            if (-not $r.ok) { throw "expression $key not ok: $($r.error)" }
+            Start-Sleep -Milliseconds 700
+            $st = (Send '{"type":"cmd","name":"state"}').state
+            if ($st.expression -ne $key) { throw "state.expression is '$($st.expression)', expected '$key'" }
+            $shot = Screenshot "gallery-full.png"
+            $tile = Join-Path $dir "$n.png"
+            Crop $shot ([int]($st.x + $st.width / 2)) ([int]($st.y + $st.height / 2 - 20)) 260 $tile
+            $script:tiles += $tile
+        }
+    }
+    Step 'unknown expression is rejected' {
+        $r = Send '{"type":"cmd","name":"expression","args":{"key":"no-such-face"}}'
+        if ($r.ok) { throw 'unknown expression answered ok' }
+        if ($r.error -ne 'unknown expression') { throw "error was '$($r.error)'" }
+    }
+    Step 'contact sheet' { Contact-Sheet $script:tiles 5 260 (Join-Path $Out 'gallery.png') }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
         switch ($s) {
             'smoke' { Stage-Smoke }
             'idle' { Stage-Idle }
+            'gallery' { Stage-Gallery }
         }
     }
 }
