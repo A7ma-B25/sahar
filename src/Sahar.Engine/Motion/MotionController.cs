@@ -44,6 +44,8 @@ internal sealed class MotionController
     public MotionKind Current { get; private set; } = MotionKind.Hover;
     /// <summary>Raised when FullscreenHide has shrunk her away (the overlay can then be hidden).</summary>
     public event Action? HiddenAway;
+    /// <summary>The user grabbed her (mouse or pipe).</summary>
+    public event Action? DragStarted;
     private bool _throwNext;
     private Vector2? _home;
     /// <summary>Sitting or sleeping: no idle bob.</summary>
@@ -306,6 +308,7 @@ internal sealed class MotionController
     /// <summary>Starts hanging from the leaf under the cursor.</summary>
     public void BeginDrag()
     {
+        DragStarted?.Invoke();
         Reset(MotionKind.Drag);
         HoldStill();
         Still = false;

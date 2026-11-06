@@ -10,6 +10,8 @@ using Sahar.Core.Brain;
 using Sahar.Core.Motion;
 using Sahar.Engine.Host;
 using Sahar.Engine.Input;
+using Sahar.Engine.Life;
+using Sahar.Core.Life;
 using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
 using Sahar.Engine.Render;
@@ -104,7 +106,8 @@ internal sealed unsafe class App
         }
         var motion = new MotionController(sahar, player, ticker, MoveTo, Express);
         _state.MotionName = () => motion.Current.ToString();
-        _ = new InputController(input, motion, () => Express("poked", true));
+        LifeDirector? life = null;
+        _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); });
         // Senses → brain → what she shows. Hidden means gone: she shrinks away, then the overlay is hidden
         // (no dot over a fullscreen app); she comes back where she was.
         void SetHidden(bool hidden)
@@ -129,6 +132,7 @@ internal sealed unsafe class App
         {
             settings = settings with { Activity = level };
             tray.Activity = level;
+            if (life != null) life.Level = level;
             try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
             catch (Exception e) { Log.Write($"settings not saved: {e.Message}"); }
         }
@@ -153,6 +157,12 @@ internal sealed unsafe class App
         if (!_options.TestMode) idleTimer.Start();
         _ = new Network(ui, director.Post);
         var media = new Media(ui, director.Post);
+        // Her daily life. In test mode it waits for the pipe's "life" command, so it never disturbs other tests.
+        using var lifeDirector = new LifeDirector(ui, motion, director, media, settings.Activity, LifeStore.DefaultPath)
+        {
+            Enabled = !_options.TestMode,
+        };
+        life = lifeDirector;
         Foreground.Start();
 
         void OnDisplayChanged()
@@ -212,6 +222,22 @@ internal sealed unsafe class App
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("show", _ => { director.HideFor(TimeSpan.Zero); return new PipeReply(true, State: _state.Snapshot()); });
+            pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
+            pipe.Register("life", r =>
+            {
+                lifeDirector.Enabled = true;
+                if (r.Args?.TryGetValue("gap", out _) == true) lifeDirector.GapOverride = TimeSpan.FromSeconds(Arg(r, "gap"));
+                if (r.Args?.TryGetValue("now", out var a) == true)
+                    lifeDirector.ActNow(Enum.TryParse<LifeAction>(a, out var act) && Enum.IsDefined(act) ? act : null);
+                return new PipeReply(true, lifeDirector.Describe());
+            });
+            pipe.Register("set-activity", r =>
+            {
+                if (r.Args is null || !r.Args.TryGetValue("level", out var name) || !Enum.TryParse<ActivityLevel>(name, out var level) || !Enum.IsDefined(level))
+                    return new PipeReply(false, "set-activity needs level Calm, Medium or Lively");
+                SetActivity(level);
+                return new PipeReply(true, lifeDirector.Describe());
+            });
             pipe.Register("debug-foreground", _ => new PipeReply(false, FullscreenWatcher.Describe()));
             pipe.Register("debug-tray", _ => tray.IconRect() is { } r
                 ? new PipeReply(true, State: _state.Snapshot() with { X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top })
