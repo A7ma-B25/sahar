@@ -5,7 +5,10 @@ using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
 using Sahar.Core.Protocol;
 using Sahar.Engine.Diagnostics;
+using Sahar.Core.Motion;
 using Sahar.Engine.Host;
+using Sahar.Engine.Input;
+using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
 using Sahar.Engine.Render;
 
@@ -45,8 +48,12 @@ internal sealed unsafe class App
             player.Reapply();
         };
 
-        var input = new InputWindow(_options.Capturable, sahar.BodyRect);
-        _state.Bounds = () => (input.Rect.Left, input.Rect.Top, input.Rect.Right - input.Rect.Left, input.Rect.Bottom - input.Rect.Top);
+        var input = new InputWindow(_options.Capturable, sahar.HitRect);
+        _state.Bounds = () =>
+        {
+            var b = sahar.BodyRect;
+            return (b.Left, b.Top, b.Right - b.Left, b.Bottom - b.Top);
+        };
 
         void MoveTo(Vector2 position)
         {
@@ -54,8 +61,31 @@ internal sealed unsafe class App
             var body = sahar.BodyRect;
             var (_, _, d) = Native.MonitorAt(new POINT { X = (body.Left + body.Right) / 2, Y = (body.Top + body.Bottom) / 2 });
             sahar.SetSize(sahar.BodyDip, d / 96f);
-            input.MoveTo(sahar.BodyRect);
+            input.MoveTo(sahar.HitRect);
         }
+
+        using var ticker = new Ticker();
+        void Express(string key)
+        {
+            player.Play(ExpressionCatalog.Get(key));
+            _state.Expression = key;
+        }
+        var motion = new MotionController(sahar, player, ticker, MoveTo, Express);
+        _state.MotionName = () => motion.Current.ToString();
+
+        // A click pokes her; she goes back to what she was showing after 1.6 s.
+        var pokeTimer = ui.CreateTimer();
+        pokeTimer.Interval = TimeSpan.FromMilliseconds(1600);
+        pokeTimer.IsRepeating = false;
+        string beforePoke = "idle";
+        pokeTimer.Tick += (_, _) => { if (_state.Expression == "poked") Express(beforePoke); };
+        _ = new InputController(input, motion, () =>
+        {
+            if (_state.Expression != "poked") beforePoke = _state.Expression;
+            Express("poked");
+            pokeTimer.Stop();
+            pokeTimer.Start();
+        });
         overlay.DisplayChanged += () =>
         {
             sahar.Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top);
@@ -67,6 +97,7 @@ internal sealed unsafe class App
         pipe.Register("quit", _ => new PipeReply(true), afterReply: () => Native.PostQuitMessage(0));
         pipe.Register("pose", r =>
         {
+            motion.Play(MotionKind.Hover);
             MoveTo(new Vector2(Arg(r, "x"), Arg(r, "y")));
             return new PipeReply(true, State: _state.Snapshot());
         });
@@ -77,6 +108,15 @@ internal sealed unsafe class App
             if (preset is null) return new PipeReply(false, "unknown expression");
             player.Play(preset);
             _state.Expression = preset.Key;
+            return new PipeReply(true, State: _state.Snapshot());
+        });
+        pipe.Register("motion", r =>
+        {
+            if (r.Args is null || !r.Args.TryGetValue("kind", out var name)) return new PipeReply(false, "motion needs 'kind'");
+            if (!Enum.TryParse<MotionKind>(name, ignoreCase: false, out var kind) || !Enum.IsDefined(kind))
+                return new PipeReply(false, "unknown motion");
+            Vector2? velocity = r.Args.ContainsKey("vx") ? new Vector2(Arg(r, "vx"), Arg(r, "vy")) : null;
+            if (!motion.Play(kind, velocity)) return new PipeReply(false, $"motion '{kind}' is not available yet");
             return new PipeReply(true, State: _state.Snapshot());
         });
         if (_options.TestMode)
@@ -90,16 +130,29 @@ internal sealed unsafe class App
         pipe.Start();
         Log.Write($"engine running (test mode {_options.TestMode}, capturable {_options.Capturable})");
 
-        MSG msg;
-        while (Native.GetMessage(&msg, 0, 0, 0) > 0)
-        {
-            Native.TranslateMessage(&msg);
-            Native.DispatchMessage(&msg);
-        }
+        int code = Loop(ticker);
         Log.Write("message loop ended");
         Native.DestroyWindow(input.Hwnd);
         Native.DestroyWindow(overlay.Hwnd);
-        return (int)msg.WParam;
+        return code;
+    }
+
+    /// <summary>Pumps messages and, while something is moving, the motion timer. Sleeps when idle.</summary>
+    private static int Loop(Ticker ticker)
+    {
+        nint timer = ticker.Handle;
+        MSG msg;
+        while (true)
+        {
+            uint r = Native.MsgWaitForMultipleObjectsEx(1, &timer, Native.INFINITE, Native.QS_ALLINPUT, Native.MWMO_INPUTAVAILABLE);
+            if (r == Native.WAIT_OBJECT_0) ticker.Fire();
+            while (Native.PeekMessage(&msg, 0, 0, 0, Native.PM_REMOVE) != 0)
+            {
+                if (msg.Message == Native.WM_QUIT) return (int)msg.WParam;
+                Native.TranslateMessage(&msg);
+                Native.DispatchMessage(&msg);
+            }
+        }
     }
 
     /// <summary>Her canvas position so her body sits at the bottom-right of the work area.</summary>

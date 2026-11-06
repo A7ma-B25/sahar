@@ -150,6 +150,12 @@ internal sealed class SaharVisual
         (int)MathF.Round(_position.X + (BodyUnits.X + BodyUnits.Width) * Scale),
         (int)MathF.Round(_position.Y + (BodyUnits.Y + BodyUnits.Height) * Scale));
 
+    /// <summary>What the mouse can grab: body plus leaf, in screen pixels.</summary>
+    public RectI HitRect => new(
+        (int)MathF.Round(_position.X + BodyUnits.X * Scale), (int)MathF.Round(_position.Y + 30 * Scale),
+        (int)MathF.Round(_position.X + (BodyUnits.X + BodyUnits.Width) * Scale),
+        (int)MathF.Round(_position.Y + (BodyUnits.Y + BodyUnits.Height) * Scale));
+
     public float DpiScale => _dpiScale;
 
     public void SetMood(Mood m, TimeSpan fade)

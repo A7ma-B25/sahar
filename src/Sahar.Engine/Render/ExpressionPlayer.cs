@@ -21,6 +21,8 @@ internal sealed class ExpressionPlayer
     private SpriteVisual? _orbSprite;
 
     public ExpressionPreset Current { get; private set; } = ExpressionCatalog.Get("idle");
+    /// <summary>True while a motion keeps her still (sitting, sleeping, dragged): no idle bob.</summary>
+    public Func<bool>? Still { get; set; }
 
     public ExpressionPlayer(SaharVisual v)
     {
@@ -94,7 +96,7 @@ internal sealed class ExpressionPlayer
             ch.StopAnimation("Offset.Y");
             Animate(ch, "Offset.Y", GroundedDip * dip, fade: true);
         }
-        else IdleAnimations.StartBob(_v);
+        else if (Still?.Invoke() != true) IdleAnimations.StartBob(_v);
 
         if (x.HasFlag(ExtrasFlags.Squish))
             ch.StartAnimation("Scale", IdleAnimations.Loop3(c, 2.4,

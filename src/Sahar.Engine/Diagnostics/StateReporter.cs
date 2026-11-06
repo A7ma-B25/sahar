@@ -6,7 +6,7 @@ namespace Sahar.Engine.Diagnostics;
 internal sealed class StateReporter
 {
     public string Expression { get; set; } = "idle";
-    public string Motion { get; set; } = "none";
+    public Func<string> MotionName { get; set; } = () => "Hover";
     public bool MenuOpen { get; set; }
     public bool Hidden { get; set; }
     public bool Quiet { get; set; }
@@ -16,6 +16,6 @@ internal sealed class StateReporter
     public EngineState Snapshot()
     {
         var (x, y, w, h) = Bounds();
-        return new EngineState(Expression, Motion, MenuOpen, Hidden, Quiet, x, y, w, h, Native.WorkingSetBytes());
+        return new EngineState(Expression, MotionName(), MenuOpen, Hidden, Quiet, x, y, w, h, Native.WorkingSetBytes());
     }
 }

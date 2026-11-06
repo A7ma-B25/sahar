@@ -296,15 +296,20 @@ function Stage-Motion {
             param($from, $to)
             & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 1600 --drop-delay 200 --timeout-ms 8000
         } -ArgumentList $from, $to
-        Start-Sleep -Milliseconds 1400
-        $during = State
-        Screenshot 'motion-dragging.png' | Out-Null
-        Wait-Job $drag -Timeout 10 | Out-Null
+        $seen = @()
+        $shot = $false
+        while ($drag.State -eq 'Running') {
+            Start-Sleep -Milliseconds 150
+            $m = (State).motion
+            if ($seen.Count -eq 0 -or $seen[-1] -ne $m) { $seen += $m }
+            if ($m -eq 'Drag' -and -not $shot) { Screenshot 'motion-dragging.png' | Out-Null; $shot = $true }
+        }
         Write-Host "    drag: $(Receive-Job $drag)"
         Remove-Job $drag -Force
         Start-Sleep -Milliseconds 1500
         $after = State
-        Write-Host "    during: $($during.motion), after: $($after.motion)"
+        Write-Host "    motions seen while dragging: $($seen -join ' > '); after: $($after.motion)"
+        $during = [pscustomobject]@{ motion = $(if ($seen -contains 'Drag') { 'Drag' } else { $seen -join ',' }) }
         if ($during.motion -ne 'Drag') { throw "motion while dragging is '$($during.motion)'" }
         if ($after.motion -eq 'Drag') { throw 'still dragging after release' }
         Assert-BodyInWork $after 'after drag'

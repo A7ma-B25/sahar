@@ -65,6 +65,26 @@ internal struct PROCESS_MEMORY_COUNTERS_EX
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct APPBARDATA
+{
+    public uint CbSize;
+    public nint HWnd;
+    public uint CallbackMessage;
+    public uint Edge;
+    public RECT Rc;
+    public nint LParam;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct TRACKMOUSEEVENT
+{
+    public uint CbSize;
+    public uint Flags;
+    public nint HwndTrack;
+    public uint HoverTime;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct DispatcherQueueOptions
 {
     public int DwSize;
@@ -81,6 +101,19 @@ internal static unsafe partial class Native
     public const uint WM_DPICHANGED = 0x02E0;
     public const uint WM_SETTINGCHANGE = 0x001A;
     public const nint MA_NOACTIVATE = 3;
+    public const uint WM_MOUSEMOVE = 0x0200;
+    public const uint WM_LBUTTONDOWN = 0x0201;
+    public const uint WM_LBUTTONUP = 0x0202;
+    public const uint WM_CAPTURECHANGED = 0x0215;
+    public const uint WM_MOUSEHOVER = 0x02A1;
+    public const uint WM_MOUSELEAVE = 0x02A3;
+    public const uint TME_HOVER = 0x1, TME_LEAVE = 0x2;
+    public const uint PM_REMOVE = 0x0001;
+    public const uint WM_QUIT = 0x0012;
+    public const uint QS_ALLINPUT = 0x04FF;
+    public const uint MWMO_INPUTAVAILABLE = 0x0004;
+    public const uint WAIT_OBJECT_0 = 0;
+    public const uint INFINITE = 0xFFFFFFFF;
 
     // Styles
     public const uint WS_POPUP = 0x80000000;
@@ -198,6 +231,80 @@ internal static unsafe partial class Native
 
     [LibraryImport("d2d1.dll")]
     public static partial int D2D1CreateDevice(nint dxgiDevice, nint creationProperties, nint* d2dDevice);
+
+    [LibraryImport("user32.dll", EntryPoint = "PeekMessageW")]
+    public static partial int PeekMessage(MSG* msg, nint hwnd, uint min, uint max, uint remove);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint MsgWaitForMultipleObjectsEx(uint count, nint* handles, uint ms, uint wakeMask, uint flags);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateWaitableTimerExW")]
+    public static partial nint CreateWaitableTimerEx(nint attributes, char* name, uint flags, uint access);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int SetWaitableTimer(nint timer, long* dueTime, int periodMs, nint completion, nint arg, int resume);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int CancelWaitableTimer(nint timer);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int CloseHandle(nint handle);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetCursorPos(POINT* pt);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetCapture(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial int ReleaseCapture();
+
+    [LibraryImport("user32.dll")]
+    public static partial int TrackMouseEvent(TRACKMOUSEEVENT* tme);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetShellWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial int IsWindowVisible(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial int IsIconic(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial int IsZoomed(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
+    public static partial int GetClassName(nint hwnd, char* name, int max);
+
+    [LibraryImport("user32.dll", EntryPoint = "FindWindowExW")]
+    public static partial nint FindWindowEx(nint parent, nint after, char* className, char* windowName);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint MonitorFromRect(RECT* rect, uint flags);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint MonitorFromWindow(nint hwnd, uint flags);
+
+    [LibraryImport("shell32.dll")]
+    public static partial nuint SHAppBarMessage(uint message, APPBARDATA* data);
+
+    public static POINT CursorPos()
+    {
+        POINT p;
+        GetCursorPos(&p);
+        return p;
+    }
+
+    public static string ClassName(nint hwnd)
+    {
+        char* buf = stackalloc char[128];
+        int n = GetClassName(hwnd, buf, 128);
+        return new string(buf, 0, n);
+    }
 
     /// <summary>The bounding box of all monitors, in physical pixels.</summary>
     public static RECT VirtualScreen()
