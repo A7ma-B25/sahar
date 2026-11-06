@@ -419,6 +419,9 @@ internal static unsafe partial class Native
     [LibraryImport("gdi32.dll")]
     public static partial int DeleteObject(nint obj);
 
+    [LibraryImport("user32.dll")]
+    public static partial int EnumDisplayMonitors(nint hdc, nint clip, delegate* unmanaged<nint, nint, RECT*, nint, int> proc, nint data);
+
     public static POINT CursorPos()
     {
         POINT p;

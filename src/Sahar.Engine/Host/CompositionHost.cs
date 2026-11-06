@@ -26,12 +26,16 @@ internal sealed unsafe class CompositionHost : IDisposable
 
     private readonly DesktopWindowTarget _target;
     private nint _d2dDevice;
+    private nint _d3dDevice;
+    private bool _simulateRemoved;
 
     public Compositor Compositor { get; }
     public ContainerVisual Root { get; }
     public CompositionGraphicsDevice GraphicsDevice { get; }
     /// <summary>"hardware" or "warp" (software, e.g. CI runners without a GPU).</summary>
     public string Driver { get; private set; } = "";
+    /// <summary>Counts device (re)creations; 1 after start-up.</summary>
+    public int Generation { get; private set; }
 
     /// <summary>The rendering device was replaced; every drawing surface must be redrawn.</summary>
     public event Action? DeviceLost;
@@ -45,8 +49,9 @@ internal sealed unsafe class CompositionHost : IDisposable
         Root.RelativeSizeAdjustment = System.Numerics.Vector2.One;
         _target.Root = Root;
 
-        _d2dDevice = CreateD2DDevice(out var driver);
+        _d2dDevice = CreateD2DDevice(out var driver, out _d3dDevice);
         Driver = driver;
+        Generation = 1;
         GraphicsDevice = CreateGraphicsDevice(Compositor, _d2dDevice);
         var ui = DispatcherQueue.GetForCurrentThread();
         GraphicsDevice.RenderingDeviceReplaced += (_, _) =>
@@ -85,24 +90,57 @@ internal sealed unsafe class CompositionHost : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Asks the GPU whether it is still there (ID3D11Device::GetDeviceRemovedReason). Nothing draws while she
+    /// rests, so a driver update, TDR or adapter switch would otherwise go unnoticed. Returns true if recreated.
+    /// </summary>
+    public bool CheckDevice()
+    {
+        int reason = _d3dDevice == 0 ? 0 : ((delegate* unmanaged[Stdcall]<nint, int>)Com.Slot(_d3dDevice, 39))(_d3dDevice);
+        if (_simulateRemoved) { reason = DXGI_ERROR_DEVICE_REMOVED; _simulateRemoved = false; }
+        if (reason >= 0) return false;
+        Log.Write($"GPU device removed (0x{reason:X8}), recreating");
+        RecreateDevice();
+        return true;
+    }
+
+    /// <summary>Test mode: the next <see cref="CheckDevice"/> reports the device as removed.</summary>
+    public void SimulateRemoved() => _simulateRemoved = true;
+
     /// <summary>Creates a fresh D2D device and hands it to the graphics device (raises <see cref="DeviceLost"/>).</summary>
     public void RecreateDevice()
     {
-        var fresh = CreateD2DDevice(out var driver);
-        nint interop = Com.QueryInterface(Com.Unknown(GraphicsDevice), IID_ICompositionGraphicsDeviceInterop);
+        nint fresh = 0, freshD3d = 0;
         try
         {
-            // ICompositionGraphicsDeviceInterop::SetRenderingDevice(IUnknown*)
-            var set = (delegate* unmanaged[Stdcall]<nint, nint, int>)Com.Slot(interop, 4);
-            Marshal.ThrowExceptionForHR(set(interop, fresh));
+            fresh = CreateD2DDevice(out var driver, out freshD3d);
+            nint interop = Com.QueryInterface(Com.Unknown(GraphicsDevice), IID_ICompositionGraphicsDeviceInterop);
+            try
+            {
+                // ICompositionGraphicsDeviceInterop::SetRenderingDevice(IUnknown*)
+                var set = (delegate* unmanaged[Stdcall]<nint, nint, int>)Com.Slot(interop, 4);
+                Marshal.ThrowExceptionForHR(set(interop, fresh));
+            }
+            finally
+            {
+                Marshal.Release(interop);
+            }
+            Com.Release(ref _d2dDevice);
+            Com.Release(ref _d3dDevice);
+            (_d2dDevice, _d3dDevice) = (fresh, freshD3d);
+            fresh = freshD3d = 0;
+            Driver = driver;
+            Generation++;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"device recreation failed: {e.Message}");
         }
         finally
         {
-            Marshal.Release(interop);
+            Com.Release(ref fresh);
+            Com.Release(ref freshD3d);
         }
-        Com.Release(ref _d2dDevice);
-        _d2dDevice = fresh;
-        Driver = driver;
     }
 
     private static DesktopWindowTarget CreateTarget(Compositor compositor, nint hwnd)
@@ -140,8 +178,8 @@ internal sealed unsafe class CompositionHost : IDisposable
         }
     }
 
-    /// <summary>D3D11 (hardware, else WARP) → IDXGIDevice → ID2D1Device. The caller owns the result.</summary>
-    private static nint CreateD2DDevice(out string driver)
+    /// <summary>D3D11 (hardware, else WARP) → IDXGIDevice → ID2D1Device. The caller owns both results.</summary>
+    private static nint CreateD2DDevice(out string driver, out nint d3dDevice)
     {
         const int D3D_DRIVER_TYPE_HARDWARE = 1, D3D_DRIVER_TYPE_WARP = 5;
         const uint D3D11_CREATE_DEVICE_BGRA_SUPPORT = 0x20, D3D11_SDK_VERSION = 7;
@@ -163,6 +201,8 @@ internal sealed unsafe class CompositionHost : IDisposable
             dxgi = Com.QueryInterface(d3d, IID_IDXGIDevice);
             nint d2d;
             Marshal.ThrowExceptionForHR(Native.D2D1CreateDevice(dxgi, 0, &d2d));
+            d3dDevice = d3d;     // kept to ask whether the GPU is still there
+            d3d = 0;
             return d2d;
         }
         finally
@@ -179,5 +219,6 @@ internal sealed unsafe class CompositionHost : IDisposable
         GraphicsDevice.Dispose();
         Compositor.Dispose();
         Com.Release(ref _d2dDevice);
+        Com.Release(ref _d3dDevice);
     }
 }

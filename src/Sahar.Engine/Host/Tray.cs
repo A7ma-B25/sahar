@@ -12,7 +12,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public const string Tip = "سَحَر · Sahar";
     private const uint CallbackMessage = 0x8001;          // WM_APP + 1
     private const uint WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1;
-    private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205;
+    private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205, NIN_SELECT = 0x0400, WM_LBUTTONUP = 0x0202;
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
@@ -24,6 +24,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    public event Action? ShowNow;
     public event Action? Quit;
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
@@ -75,6 +76,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             case CallbackMessage:
                 uint ev = (uint)(lParam & 0xFFFF);
                 if (ev is WM_CONTEXTMENU or WM_RBUTTONUP) ShowMenu();
+                else if (ev is NIN_SELECT or WM_LBUTTONUP) ShowNow?.Invoke();   // a click on the icon brings her back
                 return 0;
             case WM_POWERBROADCAST:
                 PowerChanged?.Invoke();

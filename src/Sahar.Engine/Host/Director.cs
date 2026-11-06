@@ -12,6 +12,7 @@ namespace Sahar.Engine.Host;
 internal sealed class Director
 {
     private readonly BrainCore _brain = new();
+    private readonly FullscreenDebounce _debounce = new();
     private readonly Action<string> _express;
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
@@ -26,12 +27,20 @@ internal sealed class Director
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.IsRepeating = true;
-        _timer.Tick += (_, _) => { CheckFullscreen(); Tick(); };
+        _timer.Tick += (_, _) => Safe(() => { CheckFullscreen(); Tick(); });
         _timer.Start();
-        Foreground.Changed += () => { CheckFullscreen(); Tick(); };
+        Foreground.Changed += () => Safe(() => { CheckFullscreen(); Tick(); });
     }
 
     public bool Hidden => _hidden;
+    /// <summary>The expression the brain wants right now (what transient expressions return to).</summary>
+    public string CurrentKey => _lastKey;
+
+    private static void Safe(Action a)
+    {
+        try { a(); }
+        catch (Exception e) { Diagnostics.Log.Write($"director error: {e}"); }
+    }
 
     public void Post(EventKind k)
     {
@@ -39,7 +48,7 @@ internal sealed class Director
         Tick();
     }
 
-    /// <summary>"Hide 1 h" from the tray.</summary>
+    /// <summary>"Hide 1 h" from the tray; <see cref="TimeSpan.Zero"/> shows her again (tray click).</summary>
     public void HideFor(TimeSpan span)
     {
         _hiddenUntil = DateTimeOffset.UtcNow + span;
@@ -48,7 +57,7 @@ internal sealed class Director
 
     private void CheckFullscreen()
     {
-        bool fs = FullscreenWatcher.Check();
+        bool fs = _debounce.Update(FullscreenWatcher.Check(), DateTimeOffset.UtcNow);
         if (fs == _fullscreen) return;
         _fullscreen = fs;
         _brain.SetQuiet(fs ? QuietReason.Fullscreen : QuietReason.None);

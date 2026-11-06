@@ -25,7 +25,7 @@ internal sealed class MotionController
     private readonly ExpressionPlayer _player;
     private readonly Ticker _ticker;
     private readonly Action<Vector2> _moveCanvasTo;
-    private readonly Action<string> _express;
+    private readonly Action<string, bool> _express;   // key, transient (returns to the brain's face after a moment)
     private readonly Wander _wander = new(Environment.TickCount);
     private readonly Random _rng = new();
 
@@ -42,10 +42,14 @@ internal sealed class MotionController
     private Vector2 _lastDragVelocity;
 
     public MotionKind Current { get; private set; } = MotionKind.Hover;
+    /// <summary>Raised when FullscreenHide has shrunk her away (the overlay can then be hidden).</summary>
+    public event Action? HiddenAway;
+    private bool _throwNext;
+    private Vector2? _home;
     /// <summary>Sitting or sleeping: no idle bob.</summary>
     public bool Still { get; private set; }
 
-    public MotionController(SaharVisual v, ExpressionPlayer player, Ticker ticker, Action<Vector2> moveCanvasTo, Action<string> express)
+    public MotionController(SaharVisual v, ExpressionPlayer player, Ticker ticker, Action<Vector2> moveCanvasTo, Action<string, bool> express)
     {
         _v = v;
         _player = player;
@@ -75,6 +79,7 @@ internal sealed class MotionController
 
     public bool Play(MotionKind k, Vector2? velocity = null)
     {
+        if (k is not (MotionKind.Wake or MotionKind.FullscreenHide)) _home = null;
         switch (k)
         {
             case MotionKind.Hover: Reset(k); break;
@@ -134,6 +139,12 @@ internal sealed class MotionController
 
     private void OnTick(float dt)
     {
+        if (_throwNext)
+        {
+            _throwNext = false;
+            UpdateTicker();
+            throw new InvalidOperationException("test: exception in a motion tick");
+        }
         var s = _step;
         if (s != null && !s(dt) && _step == s) _step = null;
         if (_eyes) FollowEyes(dt);
@@ -152,9 +163,33 @@ internal sealed class MotionController
             frame?.Invoke(t);
             if (t < 1) return true;
             _step = null;
+            if (Current != MotionKind.FullscreenHide) Reclamp();
             done?.Invoke();
             return _step != null;
         };
+    }
+
+    /// <summary>Puts her body back inside a real work area (monitor unplugged, resolution or taskbar changed).</summary>
+    public void Reclamp()
+    {
+        var size = BodySize;
+        var areas = Monitors.All().Select(m => m.WorkF).ToList();
+        var r = Sahar.Core.Geometry.Placement.Reclamp(new RectF(TopLeft.X, TopLeft.Y, size.X, size.Y), areas);
+        if (r.X != TopLeft.X || r.Y != TopLeft.Y) TopLeft = new Vector2(r.X, r.Y);
+    }
+
+    /// <summary>The display layout changed: stop any trip planned on the old layout and get back on screen.</summary>
+    public void DisplayChanged()
+    {
+        if (_step != null && Current is not (MotionKind.Drag or MotionKind.Throw)) Play(MotionKind.Hover);
+        if (Current != MotionKind.FullscreenHide) Reclamp();
+    }
+
+    /// <summary>Test mode: the next tick throws, to prove the loop survives it.</summary>
+    public void ArmThrow()
+    {
+        _throwNext = true;
+        _ticker.Start(16);
     }
 
     private static float Smooth(float t) => t * t * (3 - 2 * t);
@@ -274,18 +309,19 @@ internal sealed class MotionController
         HoldStill();
         Still = false;
         var root = _v.Root;
-        root.CenterPoint = PivotLeaf;
         root.Scale = new Vector3(0.92f, 1.1f, 1);
         _samples.Clear();
         _dragClock = 0;
         var prevVelocity = Vector2.Zero;
-        var leaf = new Vector2(PivotLeaf.X, PivotLeaf.Y);
+        _express("dragged", false);
         _step = dt =>
         {
             _dragClock += dt;
             var c = Native.CursorPos();
             var cursor = new Vector2(c.X, c.Y);
-            _moveCanvasTo(cursor - leaf);
+            // Pivot from the current scale: crossing onto a monitor with another DPI rescales her mid-drag.
+            root.CenterPoint = PivotLeaf;
+            _moveCanvasTo(cursor - new Vector2(PivotLeaf.X, PivotLeaf.Y));
             _samples.Add((_dragClock, cursor));
             _samples.RemoveAll(s => _dragClock - s.T > 0.1);
             var velocity = Velocity();
@@ -311,6 +347,7 @@ internal sealed class MotionController
     public void EndDrag()
     {
         if (Current != MotionKind.Drag) return;
+        _express("", true);   // back to the brain's face
         var v = _lastDragVelocity;
         var root = _v.Root;
         root.Scale = Vector3.One;
@@ -404,6 +441,7 @@ internal sealed class MotionController
 
     private void StartCorner(bool sleep)
     {
+        if (!sleep) _home ??= TopLeft;
         HoldStill();
         var target = PerchTopLeft(1f);
         _step = Travel(target, sleep ? 2f : 0.5f, Smooth, done: () =>
@@ -414,8 +452,11 @@ internal sealed class MotionController
             var shrink = c.CreateVector3KeyFrameAnimation();
             shrink.InsertKeyFrame(1f, new Vector3(k, k, 1));
             shrink.Duration = TimeSpan.FromMilliseconds(sleep ? 600 : 350);
+            var batch = c.CreateScopedBatch(CompositionBatchTypes.Animation);
             _v.Root.StartAnimation("Scale", shrink);
-            if (sleep) _express("sleep");
+            batch.End();
+            if (!sleep) batch.Completed += (_, _) => { if (Current == MotionKind.FullscreenHide) HiddenAway?.Invoke(); };
+            if (sleep) _express("sleep", false);
         });
     }
 
@@ -425,6 +466,13 @@ internal sealed class MotionController
     {
         var from = _v.Root.Scale;
         Reset(MotionKind.Wake);
+        if (_home is { } home)
+        {
+            // Back where she was before hiding.
+            TopLeft = home;
+            _home = null;
+            Reclamp();
+        }
         var c = _v.Root.Compositor;
         _v.Root.CenterPoint = PivotBottom;
         _v.Root.Scale = from;
@@ -434,7 +482,16 @@ internal sealed class MotionController
         stretch.InsertKeyFrame(1f, Vector3.One);
         stretch.Duration = TimeSpan.FromMilliseconds(700);
         _v.Root.StartAnimation("Scale", stretch);
-        _express("back");
+        _express("back", true);
+        float t = 0;
+        _step = dt =>
+        {
+            t += dt;
+            if (t < 0.75f) return true;
+            _step = null;
+            Current = MotionKind.Hover;   // awake: hovering again (lean works)
+            return false;
+        };
     }
 
     // ---------- 11 PerchWindow ----------

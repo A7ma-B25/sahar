@@ -19,6 +19,19 @@
 - اتركها 5 دقايق بلا ماوس ولا كيبورد: بتنام، ولما ترجع بتصحى.
 - قفل الجهاز (Win+L) وافتحه: نفس الشي.
 - لقطة شاشة: سَحَر ما بتطلع بلقطات الشاشة، وهاد مقصود.
+- ملاحظة: بهالنسخة ما بتتحرك لحالها بعد (ما بتطير بالشاشة من نفسها). بتتحرك لما تسحبها أو ترميها، وبتتفاعل مع اللي بيصير بالجهاز.
+
+فحوصات يدوية مهمة (ما بتنجرّب على GitHub)
+-----------------------------------------
+- شاشتين بتكبير مختلف (مثلاً اللابتوب 150% والشاشة 100%): اسحبها من وحدة للتانية. لازم يضل حجمها نفسه، تكون واضحة مش مغبّشة، وما ترجف عالحدود.
+- حطها عالشاشة الخارجية وافصلها (أو غيّر الدقة): لازم ترجع لحالها عالشاشة الباقية.
+- التاسك بار عاليسار أو فوق، أو مخفي تلقائياً: "تقعد" و"تطل" لازم يستعملوا حافته الحقيقية.
+- Win+Tab و Alt+Tab: ما لازم تختفي.
+- لعبة أو فيديو بكامل الشاشة: بتختفي كلياً (ولا حتى نقطة)، وبترجع لمكانها لما تطلع.
+- نيّم الجهاز وصحّيه، وحدّث تعريف كرت الشاشة وهي شغالة، وادخل بـ Remote Desktop واطلع: لازم تضل مرسومة.
+- سكّر Explorer وافتحه (من مدير المهام): أيقونتها لازم ترجع جنب الساعة. كبسة عالأيقونة بترجّعها إذا كانت مخبّاية.
+- لقطة شاشة عادية: ما لازم تطلع فيها.
+- إشعارات ويندوز لازم تضل تطلع وسَحَر شغالة.
 
 بهالنسخة لسا ما في: القائمة الدائرية، الأصوات، الإعدادات، والتنبيهات. هدول بالخطط الجاية.
 
@@ -50,6 +63,19 @@ What to try
 - Turn the network off and on, unplug and replug the charger (laptop): her face should change.
 - Leave the computer alone for 5 minutes: she falls asleep and wakes when you return. Same with Win+L and unlock.
 - Screenshots: she does not appear in them, on purpose.
+- Note: in this build she does not wander on her own yet; she moves when you drag or throw her, and reacts to what happens on the computer.
+
+Manual checks (GitHub cannot test these)
+-----------------------------------------
+- Two monitors with different scaling (e.g. laptop 150 %, monitor 100 %): drag her across. Same size, crisp, no flicker at the border.
+- Put her on the external monitor, then unplug it (or change resolution): she must come back onto the remaining screen.
+- Taskbar on the left or top, or auto-hidden: sitting and peeking use its real edge.
+- Win+Tab and Alt+Tab must not hide her.
+- Fullscreen game or video: she disappears completely (not even a dot) and returns to the same spot after.
+- Sleep/resume, a graphics-driver update while she runs, Remote Desktop in and out: she stays drawn.
+- Restart Explorer (Task Manager): her tray icon comes back. Clicking the icon brings her back if hidden.
+- Ordinary screenshots must not show her.
+- Windows notifications must still appear while she runs.
 
 Not in this build yet: the radial menu, sounds, settings and notifications (later plans).
 

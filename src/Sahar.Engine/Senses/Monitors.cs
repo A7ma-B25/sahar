@@ -31,4 +31,23 @@ internal static unsafe class Monitors
     }
 
     public static RectI ToRect(RECT r) => new(r.Left, r.Top, r.Right, r.Bottom);
+
+    private static List<MonitorInfo>? _collect;
+
+    /// <summary>Every monitor, in system order.</summary>
+    public static List<MonitorInfo> All()
+    {
+        _collect = [];
+        Native.EnumDisplayMonitors(0, 0, &Collect, 0);
+        var all = _collect;
+        _collect = null;
+        return all.Count > 0 ? all : [Primary];
+    }
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    private static int Collect(nint monitor, nint hdc, RECT* rect, nint data)
+    {
+        _collect?.Add(Describe(monitor));
+        return 1;
+    }
 }
