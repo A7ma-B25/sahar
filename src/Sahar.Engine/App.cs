@@ -32,12 +32,18 @@ internal sealed unsafe class App
             Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top),
         };
         sahar.Position = StartPosition(sahar, work);
-        var idle = ExpressionCatalog.Get("idle");
-        sahar.SetMood(idle.Mood, TimeSpan.Zero);
-        sahar.SetFace(idle.Eyes, idle.Mouth, TimeSpan.Zero);
         IdleAnimations.Start(sahar);
-        sahar.Rescaled += () => IdleAnimations.Start(sahar);
-        host.DeviceLost += sahar.Redraw;
+        var player = new ExpressionPlayer(sahar);
+        sahar.Rescaled += () =>
+        {
+            IdleAnimations.Start(sahar);
+            player.Reapply();
+        };
+        host.DeviceLost += () =>
+        {
+            sahar.Redraw();
+            player.Reapply();
+        };
 
         var input = new InputWindow(_options.Capturable, sahar.BodyRect);
         _state.Bounds = () => (input.Rect.Left, input.Rect.Top, input.Rect.Right - input.Rect.Left, input.Rect.Bottom - input.Rect.Top);
@@ -62,6 +68,15 @@ internal sealed unsafe class App
         pipe.Register("pose", r =>
         {
             MoveTo(new Vector2(Arg(r, "x"), Arg(r, "y")));
+            return new PipeReply(true, State: _state.Snapshot());
+        });
+        pipe.Register("expression", r =>
+        {
+            if (r.Args is null || !r.Args.TryGetValue("key", out var key)) return new PipeReply(false, "expression needs 'key'");
+            var preset = ExpressionCatalog.All.FirstOrDefault(e => e.Key == key);
+            if (preset is null) return new PipeReply(false, "unknown expression");
+            player.Play(preset);
+            _state.Expression = preset.Key;
             return new PipeReply(true, State: _state.Snapshot());
         });
         if (_options.TestMode)

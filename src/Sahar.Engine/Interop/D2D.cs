@@ -274,6 +274,21 @@ internal sealed unsafe class D2DContext : IDisposable
         ((delegate* unmanaged[Stdcall]<nint, D2DEllipse*, nint, float, nint, void>)Com.Slot(_dc, DrawEllipseSlot))(_dc, &e, brush, width, strokeStyle);
     }
 
+    /// <summary>
+    /// Draws text centred in <paramref name="box"/> (design units, before the transform). Colour fonts
+    /// (Segoe UI Emoji) draw in their own colours; other text uses <paramref name="brush"/>.
+    /// </summary>
+    public void Text(string text, string family, float size, int weight, D2DRect box, nint brush)
+    {
+        nint format = DWrite.TextFormat(family, size, weight);
+        Own(format);
+        // ID2D1RenderTarget::DrawText(WCHAR*, UINT32, IDWriteTextFormat*, D2D1_RECT_F*, ID2D1Brush*, options, measuring)
+        const int D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT = 4;
+        fixed (char* t = text)
+            ((delegate* unmanaged[Stdcall]<nint, char*, uint, nint, D2DRect*, nint, int, int, void>)Com.Slot(_dc, 27))(
+                _dc, t, (uint)text.Length, format, &box, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, 0);
+    }
+
     private nint Own(nint p) { _owned.Add(p); return p; }
 
     private static void Check(int hr, string call)
@@ -295,4 +310,46 @@ internal sealed unsafe class D2DContext : IDisposable
     }
 
     public void Dispose() => End();
+}
+
+/// <summary>The shared DirectWrite factory and text formats (centred both ways).</summary>
+internal static unsafe partial class DWrite
+{
+    private static readonly Guid IID_IDWriteFactory = new("B859EE5A-D838-4B5B-A2E8-1ADC7D93DB48");
+    private static nint _factory;
+
+    [LibraryImport("dwrite.dll")]
+    private static partial int DWriteCreateFactory(int type, Guid* iid, nint* factory);
+
+    private static nint Factory
+    {
+        get
+        {
+            if (_factory != 0) return _factory;
+            var iid = IID_IDWriteFactory;
+            nint f;
+            int hr = DWriteCreateFactory(0 /* shared */, &iid, &f);
+            if (hr < 0) throw new D2DException(hr, "DWriteCreateFactory");
+            _factory = f;
+            return f;
+        }
+    }
+
+    /// <summary>A new IDWriteTextFormat (caller releases). Weight 400 normal, 600 semibold.</summary>
+    public static nint TextFormat(string family, float size, int weight)
+    {
+        nint format;
+        fixed (char* fam = family)
+        fixed (char* locale = "")
+        {
+            // IDWriteFactory::CreateTextFormat(family, collection, weight, style, stretch, size, locale, out)
+            int hr = ((delegate* unmanaged[Stdcall]<nint, char*, nint, int, int, int, float, char*, nint*, int>)Com.Slot(Factory, 15))(
+                Factory, fam, 0, weight, 0 /* normal */, 5 /* normal */, size, locale, &format);
+            if (hr < 0) throw new D2DException(hr, "CreateTextFormat");
+        }
+        // SetTextAlignment(CENTER), SetParagraphAlignment(CENTER)
+        ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 3))(format, 2);
+        ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 4))(format, 2);
+        return format;
+    }
 }

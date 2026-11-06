@@ -48,6 +48,9 @@ internal sealed class SaharVisual
     public FadeLayer BudGlow { get; }
     public FadeLayer Headphones { get; }
     public SpriteVisual[] StarVisuals { get; } = new SpriteVisual[StarSpots.Length];
+    /// <summary>Drives the moon: "t" (orbit phase 0–1) and "moon" (1 shown, 0 hidden while the orb is out).</summary>
+    public CompositionPropertySet MoonProps { get; }
+    public CompositionHost Host => _host;
 
     /// <summary>Body width in DIPs (Small 48, Medium 80, Large 120).</summary>
     public float BodyDip { get; private set; }
@@ -118,6 +121,9 @@ internal sealed class SaharVisual
         Root.Children.InsertAtTop(Extras);
 
         foreach (var m in new[] { MoonBack, MoonFront }) m.Container.AnchorPoint = new Vector2(0.5f);
+        MoonProps = _c.CreatePropertySet();
+        MoonProps.InsertScalar("t", 0f);
+        MoonProps.InsertScalar("moon", 1f);
         Layout();
         DrawStatic();
         DrawMood(TimeSpan.Zero);
@@ -200,6 +206,9 @@ internal sealed class SaharVisual
             StarVisuals[i].CenterPoint = new Vector3(starPx.Width / 2f, starPx.Height / 2f, 0);
         }
         Character.Size = canvas;
+        Character.CenterPoint = new Vector3(150 * Scale, (BodyUnits.Y + BodyUnits.Height) * Scale, 0);  // bottom-centre
+        Orb.Size = canvas;
+        Extras.Size = canvas;
         Leaf.Size = canvas;
         Leaf.CenterPoint = new Vector3((120 + _rig.OffsetX) * Scale, (60 + _rig.OffsetY) * Scale, 0);   // stem base
         Face.Container.CenterPoint = new Vector3(150 * Scale, (124 + _rig.OffsetY) * Scale, 0);         // eye line
@@ -246,7 +255,7 @@ internal sealed class SaharVisual
 
     private SwapSurface Small(float units) => Track(new SwapSurface(_host, SmallPx(units)));
 
-    private SizeI SmallPx(float units)
+    public SizeI SmallPx(float units)
     {
         int px = (int)MathF.Ceiling(units * Scale);
         return new SizeI(px, px);

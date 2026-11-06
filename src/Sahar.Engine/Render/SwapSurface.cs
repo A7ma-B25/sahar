@@ -11,7 +11,7 @@ namespace Sahar.Engine.Render;
 /// Two drawing surfaces for one layer: new content is drawn into the spare one, then layers cross-fade to it.
 /// Remembers how its current content was drawn so it can redraw after the GPU device is lost.
 /// </summary>
-internal sealed class SwapSurface
+internal sealed class SwapSurface : IDisposable
 {
     private readonly CompositionHost _host;
     private readonly CompositionDrawingSurface[] _surfaces = new CompositionDrawingSurface[2];
@@ -63,6 +63,12 @@ internal sealed class SwapSurface
         Size = size;
         foreach (var s in _surfaces) s.Resize(new SizeInt32 { Width = size.Width, Height = size.Height });
         Redraw();
+    }
+
+    public void Dispose()
+    {
+        foreach (var b in Brushes) b.Dispose();
+        foreach (var s in _surfaces) s.Dispose();
     }
 
     private void Render(int index)

@@ -19,10 +19,7 @@ internal static class IdleAnimations
         var c = v.Root.Compositor;
         float s = v.Scale;
 
-        // Bob: the character floats up 10 units and back over 3.6 s; the shadow shrinks and fades in step.
-        v.Character.StartAnimation("Offset.Y", Loop(c, 3.6, (0f, 0f), (0.5f, -BobUnits * s), (1f, 0f)));
-        v.ShadowVisual.StartAnimation("Scale", Loop3(c, 3.6, (0f, Vector3.One), (0.5f, new Vector3(50f / 62f, 1, 1)), (1f, Vector3.One)));
-        v.ShadowVisual.StartAnimation("Opacity", Loop(c, 3.6, (0f, 1f), (0.5f, 0.5f), (1f, 1f)));
+        StartBob(v);
 
         // Hem flutter: the second body frame fades in and out over 2.2 s on top of the first.
         v.BodyB.Container.StartAnimation("Opacity", Loop(c, 2.2, (0f, 0f), (0.5f, 1f), (1f, 0f)));
@@ -51,14 +48,22 @@ internal static class IdleAnimations
         StartOrbit(v, c, s);
     }
 
+    /// <summary>Bob: the character floats up 10 units and back over 3.6 s; the shadow shrinks and fades in step.</summary>
+    public static void StartBob(SaharVisual v)
+    {
+        var c = v.Root.Compositor;
+        v.Character.StartAnimation("Offset.Y", Loop(c, 3.6, (0f, 0f), (0.5f, -BobUnits * v.Scale), (1f, 0f)));
+        v.ShadowVisual.StartAnimation("Scale", Loop3(c, 3.6, (0f, Vector3.One), (0.5f, new Vector3(50f / 62f, 1, 1)), (1f, Vector3.One)));
+        v.ShadowVisual.StartAnimation("Opacity", Loop(c, 3.6, (0f, 1f), (0.5f, 0.5f), (1f, 1f)));
+    }
+
     /// <summary>
     /// The moon travels a tilted ellipse every 9 s, starting at the right and passing in front of her on the
     /// lower half (the front copy is visible for the first half of the cycle, the back copy for the second).
     /// </summary>
     private static void StartOrbit(SaharVisual v, Compositor c, float s)
     {
-        var props = c.CreatePropertySet();
-        props.InsertScalar("t", 0f);
+        var props = v.MoonProps;
         var t = c.CreateScalarKeyFrameAnimation();
         t.InsertKeyFrame(0f, 0f);
         t.InsertKeyFrame(1f, 1f, c.CreateLinearEasingFunction());
@@ -77,9 +82,9 @@ internal static class IdleAnimations
         offset.SetScalarParameter("ct", MathF.Cos(tilt));
         offset.SetScalarParameter("st", MathF.Sin(tilt));
 
-        var front = c.CreateExpressionAnimation("p.t < 0.5 ? 1 : 0");
+        var front = c.CreateExpressionAnimation("p.t < 0.5 ? p.moon : 0");
         front.SetReferenceParameter("p", props);
-        var back = c.CreateExpressionAnimation("p.t < 0.5 ? 0 : 1");
+        var back = c.CreateExpressionAnimation("p.t < 0.5 ? 0 : p.moon");
         back.SetReferenceParameter("p", props);
 
         v.MoonFront.Container.StartAnimation("Offset", offset);
@@ -89,7 +94,7 @@ internal static class IdleAnimations
         props.StartAnimation("t", t);
     }
 
-    private static ScalarKeyFrameAnimation Loop(Compositor c, double seconds, params (float At, float Value)[] frames)
+    internal static ScalarKeyFrameAnimation Loop(Compositor c, double seconds, params (float At, float Value)[] frames)
     {
         var a = c.CreateScalarKeyFrameAnimation();
         foreach (var (at, value) in frames) a.InsertKeyFrame(at, value);
@@ -98,7 +103,7 @@ internal static class IdleAnimations
         return a;
     }
 
-    private static Vector3KeyFrameAnimation Loop3(Compositor c, double seconds, params (float At, Vector3 Value)[] frames)
+    internal static Vector3KeyFrameAnimation Loop3(Compositor c, double seconds, params (float At, Vector3 Value)[] frames)
     {
         var a = c.CreateVector3KeyFrameAnimation();
         foreach (var (at, value) in frames) a.InsertKeyFrame(at, value);
