@@ -94,6 +94,9 @@ internal sealed unsafe class LifeDirector : IDisposable
         _timer.Start();
     }
 
+    /// <summary>Her menu is open (or a show is running): no own actions.</summary>
+    public bool Paused { get; set; }
+
     public ActivityLevel Level
     {
         get => _level;
@@ -122,7 +125,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
-        if (!Enabled) return;
+        if (!Enabled || Paused) return;
         var cursor = Native.CursorPos();
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),

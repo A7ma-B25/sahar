@@ -181,6 +181,8 @@ internal static unsafe partial class Native
     public const uint WM_LBUTTONDOWN = 0x0201;
     public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_CAPTURECHANGED = 0x0215;
+    public const uint WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205, WM_KEYDOWN = 0x0100, WM_ACTIVATE = 0x0006;
+    public const int VK_ESCAPE = 0x1B, SW_SHOW = 5;
     public const uint WM_MOUSEHOVER = 0x02A1;
     public const uint WM_MOUSELEAVE = 0x02A3;
     public const uint TME_HOVER = 0x1, TME_LEAVE = 0x2;
@@ -325,6 +327,12 @@ internal static unsafe partial class Native
 
     [LibraryImport("kernel32.dll")]
     public static partial int CloseHandle(nint handle);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDoubleClickTime();
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetFocus(nint hwnd);
 
     public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 

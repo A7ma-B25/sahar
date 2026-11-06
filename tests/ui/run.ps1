@@ -710,7 +710,7 @@ function Stage-Menu {
     }
     Step 'from every corner every button is on screen' {
         $n = 0
-        foreach ($corner in @(@($Work.Left, $Work.Top), @($Work.Right - 80, $Work.Top), @($Work.Left, $Work.Bottom - 80), @($Work.Right - 80, $Work.Bottom - 80))) {
+        foreach ($corner in @(@($Work.Left, $Work.Top), @(($Work.Right - 80), $Work.Top), @($Work.Left, ($Work.Bottom - 80)), @(($Work.Right - 80), ($Work.Bottom - 80)))) {
             $n++
             Pose-Body $corner[0] $corner[1] | Out-Null
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null

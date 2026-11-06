@@ -8,6 +8,7 @@ namespace Sahar.Engine.Input;
 /// <summary>
 /// Mouse on Sahar (through the input window): click pokes her, press-and-move drags her by the leaf,
 /// a fast release throws her, and resting the cursor on her for 400 ms makes her lean toward it.
+/// A right-click or a double-click opens her menu (spec §7).
 /// </summary>
 internal sealed unsafe class InputController
 {
@@ -17,14 +18,17 @@ internal sealed unsafe class InputController
     private readonly InputWindow _window;
     private readonly MotionController _motion;
     private readonly Action _poke;
+    private readonly Action _menu;
     private bool _down, _dragging, _tracking;
-    private Vector2 _downAt;
+    private Vector2 _downAt, _lastClickAt;
+    private long _lastClickTick = long.MinValue / 2;
 
-    public InputController(InputWindow window, MotionController motion, Action poke)
+    public InputController(InputWindow window, MotionController motion, Action poke, Action menu)
     {
         _window = window;
         _motion = motion;
         _poke = poke;
+        _menu = menu;
         window.Handler = OnMessage;
     }
 
@@ -60,8 +64,22 @@ internal sealed unsafe class InputController
                 bool wasDragging = _dragging;
                 _down = _dragging = false;
                 Native.ReleaseCapture();
-                if (wasDragging) _motion.EndDrag();
-                else _poke();
+                if (wasDragging) { _motion.EndDrag(); return 0; }
+                var at = Cursor();
+                long tick = Environment.TickCount64;
+                if (tick - _lastClickTick <= Native.GetDoubleClickTime() && Vector2.Distance(at, _lastClickAt) <= DragThresholdPx)
+                {
+                    _lastClickTick = long.MinValue / 2;   // a third click starts over
+                    _menu();
+                    return 0;
+                }
+                _lastClickTick = tick;
+                _lastClickAt = at;
+                _poke();
+                return 0;
+
+            case Native.WM_RBUTTONUP:
+                _menu();
                 return 0;
 
             case Native.WM_CAPTURECHANGED:

@@ -11,6 +11,7 @@ using Sahar.Core.Motion;
 using Sahar.Engine.Host;
 using Sahar.Engine.Input;
 using Sahar.Engine.Life;
+using Sahar.Engine.Menu;
 using Sahar.Core.Life;
 using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
@@ -120,12 +121,18 @@ internal sealed unsafe class App
         var motion = new MotionController(sahar, player, ticker, MoveTo, Express, Face);
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
-        _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); });
+        using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
+        _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); }, () =>
+        {
+            if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
+            menu.Toggle();
+        });
         // Senses → brain → what she shows. Hidden means gone: she shrinks away, then the overlay is hidden
         // (no dot over a fullscreen app); she comes back where she was.
         void SetHidden(bool hidden)
         {
             _state.Hidden = hidden;
+            if (hidden) menu.Close();
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
@@ -178,11 +185,38 @@ internal sealed unsafe class App
             Enabled = !_options.TestMode,
         };
         life = lifeDirector;
+        // Her menu: life pauses and she hovers while it is open.
+        menu.Level = () => settings.Activity;
+        menu.OpenChanged += open =>
+        {
+            _state.MenuOpen = open;
+            lifeDirector.Paused = open;
+            if (open) motion.Play(MotionKind.Hover);
+        };
+        var playRng = new Random();
+        menu.Pressed += id => Safe(() =>
+        {
+            switch (id)
+            {
+                case "activity-calm": SetActivity(ActivityLevel.Calm); break;
+                case "activity-medium": SetActivity(ActivityLevel.Medium); break;
+                case "activity-lively": SetActivity(ActivityLevel.Lively); break;
+                case "hide": director.HideFor(TimeSpan.FromHours(1)); break;
+                case "play":
+                    MotionKind[] picks = [MotionKind.Wander, MotionKind.CelebrateLoop, MotionKind.PlayWithMoon, MotionKind.Curious, MotionKind.OrbitCursor];
+                    int pick = playRng.Next(picks.Length + 1);
+                    if (pick == picks.Length)
+                        motion.PlayFlight(Enum.GetValues<FlightPattern>()[playRng.Next(Enum.GetValues<FlightPattern>().Length)], force: true);
+                    else motion.Play(picks[pick]);
+                    break;
+            }
+        });
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         Foreground.Start();
 
         void OnDisplayChanged()
         {
+            menu.Close();
             monitors = Monitors.All();
             monitorIndex = -1;
             sahar.Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top);
@@ -257,6 +291,20 @@ internal sealed unsafe class App
                 for (int i = 0, n = (int)(Arg(r, "kb") * 1024 / 120); i < n; i++) Log.Write($"fill {i} {filler}");
                 return new PipeReply(true);
             });
+            pipe.Register("menu-open", _ =>
+            {
+                if (!_state.Hidden) menu.Open();
+                return new PipeReply(true, menu.Describe(), _state.Snapshot());
+            });
+            pipe.Register("menu-close", _ => { menu.Close(); return new PipeReply(true, menu.Describe(), _state.Snapshot()); });
+            pipe.Register("menu-press", r =>
+            {
+                if (r.Args is null || !r.Args.TryGetValue("id", out var id)) return new PipeReply(false, "menu-press needs 'id'");
+                if (!menu.IsOpen) return new PipeReply(false, "menu is closed");
+                menu.Press(id);
+                return new PipeReply(true, menu.Describe(), _state.Snapshot());
+            });
+            pipe.Register("debug-menu", _ => new PipeReply(true, menu.Describe()));
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {
