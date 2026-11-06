@@ -156,6 +156,7 @@ internal sealed unsafe class App
         var timerTool = new TimerTool(ui, sahar, director);
         var dndTool = new DndTool(ui, director);
         var bubble = new TextBubble(_options.Capturable);
+        var notes = new NoteTool(bubble, new NotesStore(NotesStore.DefaultPath), () => motion.Body, Express);
         sahar.Rescaled += () => Safe(timerTool.Redraw);
         host.DeviceLost += () => Safe(() => { timerTool.Redraw(); menu.DeviceLost(); });
         // Settings: a bad or locked file never stops her (defaults).
@@ -227,11 +228,16 @@ internal sealed unsafe class App
                 case "timer-25": timerTool.Start(TimeSpan.FromMinutes(25)); break;
                 case "timer-45": timerTool.Start(TimeSpan.FromMinutes(45)); break;
                 case "timer-cancel": timerTool.Cancel(); break;
+                case "note": notes.Open(); break;
                 case "timer-custom":
                     bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
                     {
                         if (TimerInput.ParseMinutes(text) is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
-                        else Express("error", true);
+                        else
+                        {
+                            Log.Write($"timer: typed time not understood ({text.Length} characters: {string.Join(' ', text.Select(ch => ((int)ch).ToString("X4")))})");
+                            Express("error", true);
+                        }
                     }));
                     break;
                 case "dnd-30": dndTool.TurnOn(TimeSpan.FromMinutes(30)); break;
@@ -310,7 +316,8 @@ internal sealed unsafe class App
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
-                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth}"));
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth}" +
+                FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
@@ -349,7 +356,8 @@ internal sealed unsafe class App
             {
                 var e = bubble.EditRect;
                 return new PipeReply(true, bubble.IsOpen
-                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd}"
+                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd} " +
+                      $"lines64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', bubble.Lines)))}"
                     : "open=false");
             });
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));

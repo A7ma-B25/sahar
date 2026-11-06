@@ -935,7 +935,8 @@ function Stage-Menu {
         [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
     }
     Step 'the menu costs nothing at rest' {
-        Write-Host ("    working set before opening: {0:N1} MB" -f ((State).workingSetBytes / 1MB))
+        $i = Info
+        Write-Host ("    working set before opening: {0:N1} MB (managed heap {1} MB)" -f ((State).workingSetBytes / 1MB), $i.gcHeapMB)
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Start-Sleep -Seconds 10

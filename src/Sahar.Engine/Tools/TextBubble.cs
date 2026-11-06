@@ -17,7 +17,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
     private const uint WM_APP_ENTER = 0x8001, WM_APP_ESC = 0x8002, WM_CTLCOLOREDIT = 0x0133, WM_CTLCOLORSTATIC = 0x0138,
         WM_ERASEBKGND = 0x0014, WM_SETFONT = 0x0030, EM_LIMITTEXT = 0x00C5, WM_CHAR = 0x0102;
     private const uint WS_CHILD = 0x40000000, WS_VISIBLE = 0x10000000, WS_BORDER = 0x00800000, ES_RIGHT = 0x2,
-        ES_AUTOHSCROLL = 0x80, SS_RIGHT = 0x2, WS_EX_RTLREADING = 0x2000;
+        ES_AUTOHSCROLL = 0x80, SS_RIGHT = 0x2, SS_ENDELLIPSIS = 0x4000, WS_EX_RTLREADING = 0x2000;
     private const int GWLP_WNDPROC = -4, VK_RETURN = 0x0D;
 
     private static nint s_oldEditProc, s_owner;
@@ -31,6 +31,8 @@ internal sealed unsafe class TextBubble : IWindowHandler
     public TextBubble(bool capturable) => _capturable = capturable;
 
     public bool IsOpen => _hwnd != 0;
+    /// <summary>The lines shown under the edit box (for the UI tests).</summary>
+    public IReadOnlyList<string> Lines { get; private set; } = [];
     public nint EditHwnd => _edit;
 
     /// <summary>Screen rectangle of the edit box (px), for the UI tests.</summary>
@@ -61,6 +63,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
 
         _onEnter = onEnter;
         _closing = false;
+        Lines = below;
         _hwnd = Win.Create(this, Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW, Native.WS_POPUP,
             new RECT { Left = (int)x, Top = (int)y, Right = (int)x + w, Bottom = (int)y + h }, "Sahar bubble");
         s_owner = _hwnd;
@@ -76,7 +79,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
         top += editH + (int)(8 * dpi);
         foreach (var line in below)
         {
-            _lines.Add(Child("STATIC", line, WS_CHILD | WS_VISIBLE | SS_RIGHT, WS_EX_RTLREADING, pad, top, inner, lineH));
+            _lines.Add(Child("STATIC", line, WS_CHILD | WS_VISIBLE | SS_RIGHT | SS_ENDELLIPSIS, WS_EX_RTLREADING, pad, top, inner, lineH));
             top += lineH;
         }
         s_oldEditProc = Native.SetWindowLongPtr(_edit, GWLP_WNDPROC, (nint)(delegate* unmanaged<nint, uint, nuint, nint, nint>)&EditProc);
@@ -106,6 +109,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
         if (_font != 0) Native.DeleteObject(_font);
         _hwnd = _edit = _title = _font = 0;
         _lines.Clear();
+        Lines = [];
         s_owner = 0;
         s_oldEditProc = 0;
         _onEnter = null;
