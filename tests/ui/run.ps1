@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -109,6 +109,28 @@ function Contact-Sheet([string[]]$tiles, [int]$columns, [int]$size, [string]$to)
     $sheet.Dispose()
 }
 
+Add-Type -AssemblyName System.Windows.Forms
+$Work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+
+$MotionKinds = @('Wander', 'Hover', 'PeekTaskbar', 'EyesFollow', 'Drag', 'Throw', 'LandAndSit', 'SleepInCorner',
+    'Wake', 'FullscreenHide', 'PerchWindow', 'CelebrateLoop')
+
+function State { (Send '{"type":"cmd","name":"state"}').state }
+
+function Assert-TopLeftInWork($st, [string]$what) {
+    if ($st.x -lt $Work.Left -or $st.y -lt $Work.Top -or $st.x -gt $Work.Right -or $st.y -gt $Work.Bottom) {
+        throw "$what at ($($st.x),$($st.y)) is outside the work area $Work"
+    }
+}
+
+function Assert-BodyInWork($st, [string]$what) {
+    $t = 2
+    if ($st.x -lt $Work.Left - $t -or $st.y -lt $Work.Top - $t -or
+        $st.x + $st.width -gt $Work.Right + $t -or $st.y + $st.height -gt $Work.Bottom + $t) {
+        throw "$what body ($($st.x),$($st.y) $($st.width)x$($st.height)) is not inside the work area $Work"
+    }
+}
+
 function Save-Log {
     $log = Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'
     if (Test-Path $log) { Copy-Item $log (Join-Path $Out 'engine.log') -Force }
@@ -214,6 +236,78 @@ function Stage-Gallery {
     Stop-Engine
 }
 
+function Stage-Motion {
+    $dir = Join-Path $Out 'motion'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Step 'start engine' { Start-Engine }
+    Step 'pose at (400,250)' {
+        $r = Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}'
+        if (-not $r.ok) { throw "pose not ok: $($r.error)" }
+    }
+    for ($i = 0; $i -lt $MotionKinds.Count; $i++) {
+        $kind = $MotionKinds[$i]
+        $n = '{0:D2}-{1}' -f ($i + 1), $kind
+        Step "motion $n" {
+            $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}')
+            if (-not $r.ok) { throw "motion $kind not ok: $($r.error)" }
+            if ($r.state.motion -ne $kind) { throw "state.motion is '$($r.state.motion)', expected '$kind'" }
+            $frames = Join-Path $dir $n
+            New-Item -ItemType Directory -Force -Path $frames | Out-Null
+            for ($f = 1; $f -le 6; $f++) {
+                Start-Sleep -Milliseconds 250
+                $st = State
+                Assert-TopLeftInWork $st "$kind frame $f"
+                $shot = Screenshot 'motion-full.png'
+                Copy-Item $shot (Join-Path $frames "$f.png") -Force
+            }
+        }
+    }
+    Step 'unknown motion is rejected' {
+        $r = Send '{"type":"cmd","name":"motion","args":{"kind":"Moonwalk"}}'
+        if ($r.ok) { throw 'unknown motion answered ok' }
+    }
+    Step 'throw comes to rest inside the work area' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"300","y":"200"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"motion","args":{"kind":"Throw","vx":"1600","vy":"-600"}}'
+        if (-not $r.ok) { throw "throw not ok: $($r.error)" }
+        $deadline = (Get-Date).AddSeconds(8)
+        do { Start-Sleep -Milliseconds 200; $st = State } while ($st.motion -eq 'Throw' -and (Get-Date) -lt $deadline)
+        if ($st.motion -eq 'Throw') { throw 'still flying after 8 s' }
+        Screenshot 'motion-throw-rest.png' | Out-Null
+        Assert-BodyInWork $st 'after throw'
+    }
+    Step 'click pokes her' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        $st = State
+        $xy = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        & agent-desktop --headed mouse-click --xy $xy | Out-Null
+        Start-Sleep -Milliseconds 300
+        $st = State
+        if ($st.expression -ne 'poked') { throw "expression after click is '$($st.expression)'" }
+    }
+    Step 'dragging her' {
+        Start-Sleep -Milliseconds 1800
+        $st = State
+        $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 200), [int]($st.y + $st.height / 2 - 60)
+        $drag = Start-Process -FilePath 'agent-desktop' -ArgumentList '--headed', 'drag', '--from-xy', $from, '--to-xy', $to,
+            '--duration', '1600', '--drop-delay', '200', '--timeout-ms', '8000' -PassThru -NoNewWindow
+        Start-Sleep -Milliseconds 900
+        $during = State
+        Screenshot 'motion-dragging.png' | Out-Null
+        $drag.WaitForExit(10000) | Out-Null
+        Start-Sleep -Milliseconds 1500
+        $after = State
+        Write-Host "    during: $($during.motion), after: $($after.motion)"
+        if ($during.motion -ne 'Drag') { throw "motion while dragging is '$($during.motion)'" }
+        if ($after.motion -eq 'Drag') { throw 'still dragging after release' }
+        Assert-BodyInWork $after 'after drag'
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -221,6 +315,7 @@ try {
             'smoke' { Stage-Smoke }
             'idle' { Stage-Idle }
             'gallery' { Stage-Gallery }
+            'motion' { Stage-Motion }
         }
     }
 }
