@@ -887,7 +887,8 @@ function Stage-Menu {
         Type-InBubble $text -Enter
         Wait-State { param($st) $st.expression -eq 'notification' } 2000 'the note face' | Out-Null
         if (-not (Test-Path $notes)) { throw 'notes.json not written' }
-        if ((Get-Content $notes -Raw -Encoding UTF8) -notmatch [regex]::Escape($text)) { throw "notes.json: $(Get-Content $notes -Raw)" }
+        $saved = @((Get-Content $notes -Raw -Encoding UTF8) | ConvertFrom-Json)
+        if ($saved.Count -ne 1 -or $saved[0].text -ne $text) { throw "notes.json: $(Get-Content $notes -Raw)" }
         Start-Sleep -Seconds 2
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
