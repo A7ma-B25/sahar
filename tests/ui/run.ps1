@@ -651,12 +651,18 @@ function Stage-Life {
         if (-not $r.ok) { throw "debug-media not ok: $($r.error)" }
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Wait-State { param($st) $st.expression -eq 'music' } 4000 'music face' | Out-Null
-        $end = (Get-Date).AddSeconds(10)
+        $small = @{}
+        $end = (Get-Date).AddSeconds(12)
         while ((Get-Date) -lt $end) {
             Start-Sleep -Milliseconds 400
             $m = (State).motion
             if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' while a browser plays in front" }
+            $small[(Life).last] = 1
         }
+        Write-Host "    small things seen: $(($small.Keys | Sort-Object) -join ', ')"
+        if (-not $small.ContainsKey('Moment')) { throw 'no face moment while the browser plays in front: she just sits there' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'media: .*browser') { throw 'the log does not say what is playing' }
     }
     Step 'she stops dancing when the music stops' {
         Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
@@ -668,11 +674,24 @@ function Stage-Life {
     Step 'a face moment never covers an event face' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Post 'claude.permission' | Out-Null
-        $before = [int](Life).actions
+        Start-Sleep -Milliseconds 500
+        $face = (Info).face
+        if (-not $face) { throw 'debug-info does not report her face' }
         Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Moment"}}' | Out-Null
         Start-Sleep -Milliseconds 2500
         if ((State).expression -ne 'claude-permission') { throw "expression is '$((State).expression)'" }
-        if ([int](Life).actions -ne $before) { throw 'a moment played over the permission face' }
+        if ((Life).last -eq 'Moment') { throw 'a moment played over the permission face' }
+        if ((Info).face -ne $face) { throw "her face changed from $face to $((Info).face) over the permission face" }
+    }
+    Step 'her own moves never change an event face' {
+        $face = (Info).face
+        if (-not $face) { throw 'debug-info does not report her face' }
+        foreach ($kind in 'Breathe', 'Curious', 'PlayWithMoon') {
+            Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}') | Out-Null
+            Start-Sleep -Milliseconds 1500
+            if ((Info).face -ne $face) { throw "$kind changed her face from $face to $((Info).face) over the permission face" }
+        }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
     }
     Step 'grabbing her mid-action teaches her and pauses her' {
         Send '{"type":"cmd","name":"life","args":{"gap":"30"}}' | Out-Null
@@ -785,6 +804,7 @@ function Stage-Life {
         if (-not (Test-Path $settingsPath)) { throw 'settings.json not written' }
         $json = Get-Content $settingsPath -Raw
         if ($json -notmatch '"activity"\s*:\s*"lively"') { throw "settings.json: $json" }
+        if ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw) -notmatch 'activity: Lively') { throw 'the log does not say the activity level changed' }
         Stop-Engine
         if (-not (Test-Path $lifePath)) { throw 'life.json not written on quit' }
         Start-Engine
