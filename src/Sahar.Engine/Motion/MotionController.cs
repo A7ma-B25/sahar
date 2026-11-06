@@ -219,6 +219,9 @@ internal sealed class MotionController
     private Vector2 Clamp(Vector2 topLeft) =>
         Physics.Clamp(new Body2D(topLeft, Vector2.Zero), Monitor.WorkF, BodySize).Position;
 
+    /// <summary>A quick giggle squish.</summary>
+    public void Squish() => Squash(horizontal: false);
+
     private void Squash(bool horizontal)
     {
         var c = _v.Root.Compositor;

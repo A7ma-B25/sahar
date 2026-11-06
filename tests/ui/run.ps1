@@ -397,7 +397,8 @@ function Stage-Motion {
     Step 'every flight stays on screen, from every corner' {
         $patterns = 'Zigzag', 'FigureEight', 'SpiralUp', 'Dive', 'Wave', 'GlideHigh', 'BigCircle', 'DashAndStop', 'FallingLeaf', 'TaskbarPatrol'
         $st = State
-        $corners = @(@($Work.Left, $Work.Top), @($Work.Right - $st.width, $Work.Top), @($Work.Left, $Work.Bottom - $st.height), @($Work.Right - $st.width, $Work.Bottom - $st.height))
+        $right = $Work.Right - $st.width; $bottom = $Work.Bottom - $st.height
+        $corners = @(@($Work.Left, $Work.Top), @($right, $Work.Top), @($Work.Left, $bottom), @($right, $bottom))
         foreach ($p in $patterns) {
             $c = $corners[[array]::IndexOf($patterns, $p) % 4]
             Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null

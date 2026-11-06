@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using Sahar.Core.Brain;
+using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
 using Sahar.Core.Life;
 using Sahar.Core.Motion;
@@ -35,6 +36,9 @@ internal sealed unsafe class LifeDirector : IDisposable
     private DateTimeOffset _due;
     private readonly ActionMemory _memory = new();
     private readonly Func<TimeSpan> _sinceKeyboard;
+    private readonly Action<Eyes, Mouth, float> _face;
+    private readonly Func<string> _expressionKey;
+    private readonly Action _poke;
     private LifeAction _lastAction = LifeAction.None;
     private LifeAction? _forceNext;
     private bool _sleepingForAway, _ownSleep;
@@ -56,9 +60,12 @@ internal sealed unsafe class LifeDirector : IDisposable
     public event Action<bool>? TypingChanged;
 
     public LifeDirector(DispatcherQueue ui, MotionController motion, Director director, Media media, ActivityLevel level, string path,
-        Func<TimeSpan> sinceKeyboard)
+        Func<TimeSpan> sinceKeyboard, Action<Eyes, Mouth, float> face, Func<string> expressionKey, Action squish)
     {
         _sinceKeyboard = sinceKeyboard;
+        _face = face;
+        _expressionKey = expressionKey;
+        _poke = squish;
         _motion = motion;
         _director = director;
         _media = media;
@@ -151,19 +158,46 @@ internal sealed unsafe class LifeDirector : IDisposable
             : LifeChooser.Choose(context, _prefs.Weight, _rng);
         if (action == LifeAction.None) return;   // not now: try again next second, same gap
 
-        _motion.Play(action switch
+        switch (action)
         {
-            LifeAction.Wander => MotionKind.Wander,
-            LifeAction.PeekTaskbar => MotionKind.PeekTaskbar,
-            LifeAction.PerchWindow => MotionKind.PerchWindow,
-            LifeAction.CelebrateLoop => MotionKind.CelebrateLoop,
-            _ => MotionKind.SleepInCorner,
-        });
+            case LifeAction.Flight:
+                _motion.PlayFlight(Enum.GetValues<FlightPattern>()[_rng.Next(Enum.GetValues<FlightPattern>().Length)]);
+                break;
+            case LifeAction.Moment:
+                if (!PlayMoment()) return;   // an event face is showing: not now
+                break;
+            default:
+                _motion.Play(action switch
+                {
+                    LifeAction.Wander => MotionKind.Wander,
+                    LifeAction.PeekTaskbar => MotionKind.PeekTaskbar,
+                    LifeAction.PerchWindow => MotionKind.PerchWindow,
+                    LifeAction.CelebrateLoop => MotionKind.CelebrateLoop,
+                    LifeAction.PlayWithMoon => MotionKind.PlayWithMoon,
+                    LifeAction.Curious => MotionKind.Curious,
+                    LifeAction.Dance => MotionKind.Dance,
+                    LifeAction.Breathe => MotionKind.Breathe,
+                    LifeAction.OrbitCursor => MotionKind.OrbitCursor,
+                    _ => MotionKind.SleepInCorner,
+                });
+                break;
+        }
         _ownSleep = action == LifeAction.SleepInCorner;
         _memory.Started(action, now);
         _lastAction = action;
         Actions++;
         Schedule(now);
+    }
+
+    /// <summary>A small face moment; only while her face is her own (never over an event's face).</summary>
+    private bool PlayMoment()
+    {
+        if (_director.CurrentKey != "idle" || _expressionKey() != "idle") return false;
+        var kind = Enum.GetValues<MomentKind>()[_rng.Next(Enum.GetValues<MomentKind>().Length)];
+        var (eyes, mouth, seconds) = Moments.Face(kind);
+        _face(eyes, mouth, seconds);
+        if (kind == MomentKind.Giggle) _poke();
+        return true;
     }
 
     public const float NearTypingDip = 120f, AvoidTypingDip = 150f;
