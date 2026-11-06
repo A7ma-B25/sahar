@@ -21,6 +21,11 @@ public sealed class MediaEdges
         return false;
     }
 
+    /// <summary>Is this executable a web browser? (Electron apps share Chromium's window class, so the class can't tell.)</summary>
+    public static bool IsBrowserProcess(string exePath) =>
+        Path.GetFileNameWithoutExtension(exePath[(exePath.LastIndexOfAny(['\\', '/']) + 1)..]).ToLowerInvariant() is "chrome" or "msedge" or "firefox" or "brave" or "opera" or "vivaldi"
+            or "arc" or "chromium" or "thorium" or "zen" or "librewolf" or "waterfox" or "floorp" or "yandex";
+
     public IReadOnlyList<EventKind> Update(bool playing, bool isVideo, bool fromBrowser, bool browserInFront)
     {
         bool music = playing && !isVideo;

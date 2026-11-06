@@ -595,13 +595,21 @@ internal sealed class MotionController
 
     // ---------- flights (motion 1 variations from the boards) ----------
 
-    /// <summary>Flies one of the board patterns from where she is, mirrored toward the side with more room.</summary>
-    public void PlayFlight(FlightPattern pattern)
+    /// <summary>
+    /// Flies one of the board patterns from where she is, mirrored (sideways and/or up-down) so the whole path fits
+    /// on screen and she doesn't end under the pointer or where you type. False if it doesn't fit (unless forced:
+    /// then the board's shape toward the side with more room, clamped).
+    /// </summary>
+    public bool PlayFlight(FlightPattern pattern, bool force = false)
     {
+        var work = Monitor.WorkF;
+        var cursor = Native.CursorPos();
+        RectF[] avoid = [new RectF(cursor.X - 80, cursor.Y - 80, 160, 160), .. ExtraAvoid?.Invoke() ?? []];
+        var plan = FlightPath.Plan(pattern, Body, work, Monitor.DpiScale, avoid);
+        if (plan is null && !force) return false;
+        var dir = plan ?? new Vector2(Centre.X > work.X + work.Width / 2 ? -1 : 1, 1);
         Reset(MotionKind.Wander);
         var start = TopLeft;
-        var work = Monitor.WorkF;
-        float dir = Centre.X > work.X + work.Width / 2 ? -1 : 1;
         float dip = Monitor.DpiScale, secs = FlightPath.Seconds(pattern), t = 0, tilt = 0;
         var last = start;
         _v.Root.CenterPoint = PivotBodyCentre;
@@ -609,7 +617,7 @@ internal sealed class MotionController
         {
             t = MathF.Min(1, t + dt / secs);
             var o = FlightPath.Offset(pattern, t, BodySize.X / dip) * dip;
-            var next = Clamp(start + new Vector2(o.X * dir, o.Y));
+            var next = Clamp(start + o * dir);
             float vx = (next.X - last.X) / MathF.Max(dt, 1e-3f);
             last = next;
             TopLeft = next;
@@ -621,6 +629,7 @@ internal sealed class MotionController
             return _step != null;
         };
         UpdateTicker();
+        return true;
     }
 
     // ---------- 15 PlayWithMoon, 16 Curious, 21 Dance, 22 Breathe, 24 OrbitCursor ----------

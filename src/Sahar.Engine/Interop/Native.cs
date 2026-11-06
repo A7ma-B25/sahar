@@ -326,6 +326,30 @@ internal static unsafe partial class Native
     [LibraryImport("kernel32.dll")]
     public static partial int CloseHandle(nint handle);
 
+    public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+    [LibraryImport("kernel32.dll")]
+    public static partial nint OpenProcess(uint access, int inherit, uint processId);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW")]
+    public static partial int QueryFullProcessImageName(nint process, uint flags, char* name, uint* size);
+
+    /// <summary>The executable path of the process that owns a window ("" if unknown).</summary>
+    public static string WindowProcessPath(nint hwnd)
+    {
+        uint pid = 0;
+        if (hwnd == 0 || GetWindowThreadProcessId(hwnd, &pid) == 0 || pid == 0) return "";
+        nint h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if (h == 0) return "";
+        try
+        {
+            char* buffer = stackalloc char[1024];
+            uint size = 1024;
+            return QueryFullProcessImageName(h, 0, buffer, &size) != 0 ? new string(buffer, 0, (int)size) : "";
+        }
+        finally { CloseHandle(h); }
+    }
+
     [LibraryImport("user32.dll")]
     public static partial int GetCursorPos(POINT* pt);
 

@@ -108,8 +108,10 @@ internal sealed unsafe class App
         var faceTimer = ui.CreateTimer();
         faceTimer.IsRepeating = false;
         faceTimer.Tick += (_, _) => Safe(() => sahar.SetFace(player.Current.Eyes, player.Current.Mouth, ExpressionPlayer.Fade));
+        // Only over her own face (idle, or music's headphones): never over an event's face (permission, error…).
         void Face(Eyes eyes, Mouth mouth, float seconds)
         {
+            if (_state.Expression is not ("idle" or "music")) return;
             sahar.SetFace(eyes, mouth, ExpressionPlayer.Fade);
             faceTimer.Stop();
             faceTimer.Interval = TimeSpan.FromSeconds(seconds);
@@ -141,6 +143,7 @@ internal sealed unsafe class App
         using var tray = new Tray { Activity = settings.Activity };
         void SetActivity(ActivityLevel level)
         {
+            Log.Write($"activity: {level}");
             settings = settings with { Activity = level };
             tray.Activity = level;
             if (life != null) life.Level = level;
@@ -224,7 +227,7 @@ internal sealed unsafe class App
             if (kind == MotionKind.Wander && r.Args.TryGetValue("flight", out var f))
             {
                 if (!Enum.TryParse<FlightPattern>(f, out var pattern) || !Enum.IsDefined(pattern)) return new PipeReply(false, "unknown flight");
-                motion.PlayFlight(pattern);
+                motion.PlayFlight(pattern, force: true);
                 return new PipeReply(true, State: _state.Snapshot());
             }
             Vector2? velocity = r.Args.ContainsKey("vx") ? new Vector2(Arg(r, "vx"), Arg(r, "vy")) : null;
@@ -235,7 +238,8 @@ internal sealed unsafe class App
         {
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
-                FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}")));
+                FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });

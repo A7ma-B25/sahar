@@ -131,3 +131,66 @@ public class CursorRestTests
         Assert.True(c.Update(T0.AddSeconds(2), new(1101, 500), Her, 1f));
     }
 }
+
+public class FlightPlanTests
+{
+    private static readonly Sahar.Core.Geometry.RectF Work = new(0, 0, 1920, 1040);
+    private static Sahar.Core.Geometry.RectF Body(float x, float y) => new(x, y, 100, 100);
+
+    [Fact]
+    public void Plan_WithRoom_KeepsTheBoardsShape_TowardMoreRoom()
+    {
+        Assert.Equal(new Vector2(1, 1), FlightPath.Plan(FlightPattern.Dive, Body(600, 300), Work, 1f, []));
+        Assert.Equal(new Vector2(-1, 1), FlightPath.Plan(FlightPattern.Dive, Body(1500, 300), Work, 1f, []));
+    }
+
+    [Theory]
+    [InlineData(FlightPattern.Dive)]
+    [InlineData(FlightPattern.FallingLeaf)]
+    public void Plan_AtTheBottom_FliesUpInstead(FlightPattern p) =>
+        Assert.Equal(-1, FlightPath.Plan(p, Body(1500, 900), Work, 1f, [])!.Value.Y);
+
+    [Fact]
+    public void Plan_AtTheTop_TheCircleIsMirroredDownward() =>
+        Assert.Equal(-1, FlightPath.Plan(FlightPattern.BigCircle, Body(900, 20), Work, 1f, [])!.Value.Y);
+
+    [Fact]
+    public void Plan_NeverEndsUnderThePointer()
+    {
+        // A dash to the right would end at x 850..950: the pointer is there.
+        var plan = FlightPath.Plan(FlightPattern.DashAndStop, Body(600, 300), Work, 1f, [new(860, 320, 60, 60)]);
+        Assert.Equal(-1, plan!.Value.X);
+    }
+
+    [Fact]
+    public void Plan_LoopsEndWhereTheyStarted_SoAPointerThereIsFine() =>
+        Assert.NotNull(FlightPath.Plan(FlightPattern.FigureEight, Body(900, 400), Work, 1f, [new(920, 420, 40, 40)]));
+
+    [Fact]
+    public void Plan_NoRoom_IsNull_ScaledByDpi()
+    {
+        Assert.Null(FlightPath.Plan(FlightPattern.BigCircle, Body(100, 100), new(0, 0, 300, 300), 1f, []));
+        Assert.NotNull(FlightPath.Plan(FlightPattern.GlideHigh, Body(0, 200), new(0, 0, 400, 300), 1f, []));
+        Assert.Null(FlightPath.Plan(FlightPattern.GlideHigh, Body(0, 200), new(0, 0, 400, 300), 1.5f, []));
+    }
+}
+
+public class BrowserProcessTests
+{
+    [Theory]
+    [InlineData(@"C:\Program Files\Google\Chrome\Application\chrome.exe")]
+    [InlineData(@"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")]
+    [InlineData(@"C:\Program Files\Mozilla Firefox\firefox.exe")]
+    [InlineData(@"C:\Users\a\AppData\Local\BraveSoftware\Brave-Browser\Application\BRAVE.EXE")]
+    [InlineData(@"C:\Users\a\AppData\Local\Programs\Opera\opera.exe")]
+    [InlineData(@"C:\Users\a\AppData\Local\Vivaldi\Application\vivaldi.exe")]
+    public void Browsers_AreBrowsers(string path) => Assert.True(MediaEdges.IsBrowserProcess(path));
+
+    [Theory]
+    [InlineData(@"C:\Users\a\AppData\Local\Programs\Microsoft VS Code\Code.exe")]
+    [InlineData(@"C:\Users\a\AppData\Local\Discord\app-1.0\Discord.exe")]
+    [InlineData(@"C:\Users\a\AppData\Local\AnthropicClaude\claude.exe")]
+    [InlineData(@"C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop\WhatsApp.exe")]
+    [InlineData("")]
+    public void ElectronApps_AreNotBrowsers(string path) => Assert.False(MediaEdges.IsBrowserProcess(path));
+}

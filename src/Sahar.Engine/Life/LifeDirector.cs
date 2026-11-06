@@ -178,18 +178,24 @@ internal sealed unsafe class LifeDirector : IDisposable
         switch (action)
         {
             case LifeAction.Flight:
-                var pattern = Enum.GetValues<FlightPattern>()[_rng.Next(Enum.GetValues<FlightPattern>().Length)];
-                Log.Write($"life: Flight {pattern}{Why(context)}");
-                _motion.PlayFlight(pattern);
+                // A pattern that fits where she is (and doesn't end under the pointer); none fits: a wander.
+                FlightPattern? flown = null;
+                foreach (var p in Enum.GetValues<FlightPattern>().OrderBy(_ => _rng.Next()))
+                    if (_motion.PlayFlight(p)) { flown = p; break; }
+                if (flown is { } fp) Log.Write($"life: Flight {fp}{Why(context)}");
+                else
+                {
+                    Log.Write($"life: no flight fits here, Wander instead{Why(context)}");
+                    action = LifeAction.Wander;
+                    _motion.Play(MotionKind.Wander);
+                }
                 break;
             case LifeAction.Moment:
-                if (PlayMoment() is not { } moment)   // an event face is showing: let this turn pass
-                {
-                    Log.Write($"life: no Moment over the '{_director.CurrentKey}' face");
-                    Schedule(now);
-                    return;
-                }
-                Log.Write($"life: Moment {moment}{Why(context)}");
+                if (PlayMoment() is { } moment) { Log.Write($"life: Moment {moment}{Why(context)}"); break; }
+                // An event face is showing: her face stays; a slow breath instead of nothing.
+                Log.Write($"life: no Moment over the '{_expressionKey()}' face, Breathe instead");
+                action = LifeAction.Breathe;
+                _motion.Play(MotionKind.Breathe);
                 break;
             default:
                 Log.Write($"life: {action}{Why(context)}");
@@ -219,7 +225,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     /// <summary>A small face moment; only while her face is her own (never over an event's face).</summary>
     private MomentKind? PlayMoment()
     {
-        if (_director.CurrentKey != "idle" || _expressionKey() != "idle") return null;
+        // Her own face is idle, or music's headphones (sticky while something plays); never an event's face.
+        if (_director.CurrentKey is not ("idle" or "music") || _expressionKey() is not ("idle" or "music")) return null;
         var kind = Enum.GetValues<MomentKind>()[_rng.Next(Enum.GetValues<MomentKind>().Length)];
         var (eyes, mouth, seconds) = Moments.Face(kind);
         _face(eyes, mouth, seconds);
