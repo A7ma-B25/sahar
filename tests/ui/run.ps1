@@ -389,8 +389,12 @@ function Stage-Events {
     Step 'a borderless window covering the screen hides her' {
         $script:win = Start-TestWindow 'borderless'
         try {
-            Wait-State { param($st) $st.hidden } 1000 'hidden' | Out-Null
-            Screenshot 'events-fullscreen.png' | Out-Null
+            try { Wait-State { param($st) $st.hidden } 1000 'hidden' | Out-Null }
+            catch {
+                Write-Host "    foreground: $((Send '{"type":"cmd","name":"debug-foreground"}').error)"
+                throw
+            }
+            finally { Screenshot 'events-fullscreen.png' | Out-Null }
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
         Wait-State { param($st) -not $st.hidden } 2000 'shown again' | Out-Null

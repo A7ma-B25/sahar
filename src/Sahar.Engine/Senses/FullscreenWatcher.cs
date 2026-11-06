@@ -14,6 +14,20 @@ internal static unsafe class FullscreenWatcher
     private const long WS_CAPTION = 0x00C00000;
     private const int QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4;
 
+    /// <summary>What the check sees, for test diagnostics.</summary>
+    public static string Describe()
+    {
+        int state = -1;
+        Native.SHQueryUserNotificationState(&state);
+        nint fg = Native.GetForegroundWindow();
+        RECT r = default;
+        Native.GetWindowRect(fg, &r);
+        var m = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
+        bool caption = (Native.GetWindowLongPtr(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
+        return $"fg 0x{fg:X} class '{Native.ClassName(fg)}' rect {r.Left},{r.Top},{r.Right},{r.Bottom} " +
+               $"monitor {m.Bounds} caption {caption} own {Win.Own.Contains(fg)} quns {state} => {Check()}";
+    }
+
     public static bool Check()
     {
         int state = 0;
