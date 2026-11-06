@@ -1,0 +1,812 @@
+{
+ "canvas": 300,
+ "offsetX": 30,
+ "offsetY": 30,
+ "bodyWidth": 160,
+ "leafGradient": [
+  "#C4ECC2",
+  "#6FB683"
+ ],
+ "parts": {
+  "body": [
+   {
+    "kind": "path",
+    "d": "M40 176 C 34 112, 72 58, 120 58 C 168 58, 206 112, 200 176 C 200 196, 184 206, 170 196 C 158 210, 136 212, 120 200 C 104 212, 82 210, 70 196 C 56 206, 40 196, 40 176 Z",
+    "fill": "$body",
+    "opacity": 1.0
+   }
+  ],
+  "bodyHem2": [
+   {
+    "kind": "path",
+    "d": "M40 176 C 34 112, 72 58, 120 58 C 168 58, 206 112, 200 176 C 200 192, 186 210, 170 200 C 156 206, 136 214, 120 202 C 104 208, 84 214, 70 200 C 56 210, 40 192, 40 176 Z",
+    "fill": "$body",
+    "opacity": 1.0
+   }
+  ],
+  "pleats": [
+   {
+    "kind": "path",
+    "d": "M120 62 q-9 3 -16 10",
+    "stroke": "$bottom",
+    "strokeWidth": 1.8,
+    "lineCap": "round",
+    "opacity": 0.4
+   },
+   {
+    "kind": "path",
+    "d": "M120 62 q9 3 16 10",
+    "stroke": "$bottom",
+    "strokeWidth": 1.8,
+    "lineCap": "round",
+    "opacity": 0.4
+   }
+  ],
+  "highlight": [
+   {
+    "kind": "path",
+    "d": "M58 104 C 70 78, 92 66, 112 64",
+    "stroke": "#FFFFFF",
+    "strokeWidth": 7.0,
+    "lineCap": "round",
+    "opacity": 0.75
+   }
+  ],
+  "blushL": [
+   {
+    "kind": "ellipse",
+    "cx": 78,
+    "cy": 142,
+    "rx": 12,
+    "ry": 6.5,
+    "fill": "$blush",
+    "opacity": 0.55
+   }
+  ],
+  "blushR": [
+   {
+    "kind": "ellipse",
+    "cx": 162,
+    "cy": 142,
+    "rx": 12,
+    "ry": 6.5,
+    "fill": "$blush",
+    "opacity": 0.55
+   }
+  ],
+  "leafStem": [
+   {
+    "kind": "path",
+    "d": "M120 60 C 120 48, 121 38, 124 28",
+    "stroke": "#5E9E70",
+    "strokeWidth": 4.0,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "leafA": [
+   {
+    "kind": "path",
+    "d": "M123 38 C 106 40, 94 30, 92 16 C 108 14, 120 24, 123 38 Z",
+    "fill": "$leaf",
+    "opacity": 1.0
+   }
+  ],
+  "leafVein": [
+   {
+    "kind": "path",
+    "d": "M123 38 C 112 34, 102 26, 96 18",
+    "stroke": "#8CC795",
+    "strokeWidth": 1.2,
+    "lineCap": "butt",
+    "opacity": 1.0
+   }
+  ],
+  "leafB": [
+   {
+    "kind": "path",
+    "d": "M124 32 C 138 30, 150 20, 152 8 C 136 8, 126 18, 124 32 Z",
+    "fill": "$leaf",
+    "opacity": 1.0
+   }
+  ],
+  "bud": [
+   {
+    "kind": "circle",
+    "cx": 124,
+    "cy": 27,
+    "r": 4,
+    "fill": "$bud",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 123,
+    "cy": 26,
+    "r": 1.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ],
+  "headphones": [
+   {
+    "kind": "path",
+    "d": "M50 128 C 48 74, 192 74, 190 128",
+    "stroke": "#2F3363",
+    "strokeWidth": 7.0,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M36 123 a9 9 0 0 1 9 -9 h2 a9 9 0 0 1 9 9 v16 a9 9 0 0 1 -9 9 h-2 a9 9 0 0 1 -9 -9 Z",
+    "fill": "#2F3363",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M184 123 a9 9 0 0 1 9 -9 h2 a9 9 0 0 1 9 9 v16 a9 9 0 0 1 -9 9 h-2 a9 9 0 0 1 -9 -9 Z",
+    "fill": "#2F3363",
+    "opacity": 1.0
+   }
+  ]
+ },
+ "eyes": {
+  "Open": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 103.0,
+    "cy": 119.0,
+    "r": 3.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 143.0,
+    "cy": 119.0,
+    "r": 3.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 97.0,
+    "cy": 129.0,
+    "r": 1.6,
+    "fill": "#FFFFFF",
+    "opacity": 0.8
+   },
+   {
+    "kind": "circle",
+    "cx": 137.0,
+    "cy": 129.0,
+    "r": 1.6,
+    "fill": "#FFFFFF",
+    "opacity": 0.8
+   }
+  ],
+  "Happy": [
+   {
+    "kind": "path",
+    "d": "M91 127 q9 -10 18 0 M131 127 q9 -10 18 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 4.2,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Closed": [
+   {
+    "kind": "path",
+    "d": "M91 125 q9 6 18 0 M131 125 q9 6 18 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 3.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Focus": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 126.0,
+    "rx": 8.0,
+    "ry": 8.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 126.0,
+    "rx": 8.0,
+    "ry": 8.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 103.0,
+    "cy": 123.0,
+    "r": 2.6,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 143.0,
+    "cy": 123.0,
+    "r": 2.6,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M90 111 l17 3 M150 111 l-17 3",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Sparkle": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 10.0,
+    "ry": 12.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 10.0,
+    "ry": 12.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M103 113 l1.6 4 l4 1.6 l-4 1.6 l-1.6 4 l-1.6 -4 l-4 -1.6 l4 -1.6Z M143 113 l1.6 4 l4 1.6 l-4 1.6 l-1.6 4 l-1.6 -4 l-4 -1.6 l4 -1.6Z",
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ],
+  "Mystic": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#1A1240",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#1A1240",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 100.0,
+    "cy": 124.0,
+    "r": 4.0,
+    "fill": "#E9DFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 140.0,
+    "cy": 124.0,
+    "r": 4.0,
+    "fill": "#E9DFFF",
+    "opacity": 1.0
+   }
+  ],
+  "Worried": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 126.0,
+    "rx": 8.5,
+    "ry": 10.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 126.0,
+    "rx": 8.5,
+    "ry": 10.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 103.0,
+    "cy": 122.0,
+    "r": 3.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 143.0,
+    "cy": 122.0,
+    "r": 3.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M90 110 l16 -5 M150 110 l-16 -5",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Wide": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 10.5,
+    "ry": 13.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 10.5,
+    "ry": 13.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 104.0,
+    "cy": 118.0,
+    "r": 4.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 144.0,
+    "cy": 118.0,
+    "r": 4.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ],
+  "Look": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 103.0,
+    "cy": 119.0,
+    "r": 3.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 143.0,
+    "cy": 119.0,
+    "r": 3.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ],
+  "Up": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 104.0,
+    "cy": 116.0,
+    "r": 3.6,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 144.0,
+    "cy": 116.0,
+    "r": 3.6,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ],
+  "Wink": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 9.0,
+    "ry": 11.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 103.0,
+    "cy": 119.0,
+    "r": 3.4,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M131 127 q9 -10 18 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 4.2,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Half": [
+   {
+    "kind": "path",
+    "d": "M91 122 h18 M131 122 h18",
+    "stroke": "#2A2350",
+    "strokeWidth": 3.0,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M92 123 a8 6 0 0 0 16 0 Z M132 123 a8 6 0 0 0 16 0 Z",
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "Dizzy": [
+   {
+    "kind": "path",
+    "d": "M100 124 m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M140 124 m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Heart": [
+   {
+    "kind": "path",
+    "d": "M100 132 c-7 -6 -14 -12 -9 -18 c3 -4 8 -3 9 1 c1 -4 6 -5 9 -1 c5 6 -2 12 -9 18 Z",
+    "fill": "#E5486D",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M140 132 c-7 -6 -14 -12 -9 -18 c3 -4 8 -3 9 1 c1 -4 6 -5 9 -1 c5 6 -2 12 -9 18 Z",
+    "fill": "#E5486D",
+    "opacity": 1.0
+   }
+  ],
+  "Sad": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 127.0,
+    "rx": 8.5,
+    "ry": 9.5,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 127.0,
+    "rx": 8.5,
+    "ry": 9.5,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 102.0,
+    "cy": 123.0,
+    "r": 3.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 142.0,
+    "cy": 123.0,
+    "r": 3.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M89 114 l17 -6 M151 114 l-17 -6",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.4,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M92 138 q-3 6 0 9 q3 -3 0 -9",
+    "fill": "#8CC8F2",
+    "opacity": 1.0
+   }
+  ],
+  "Scan": [
+   {
+    "kind": "ellipse",
+    "cx": 100.0,
+    "cy": 124.0,
+    "rx": 10.0,
+    "ry": 12.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "ellipse",
+    "cx": 140.0,
+    "cy": 124.0,
+    "rx": 10.0,
+    "ry": 12.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 100.0,
+    "cy": 124.0,
+    "r": 5.0,
+    "fill": "#7FE3D8",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 140.0,
+    "cy": 124.0,
+    "r": 5.0,
+    "fill": "#7FE3D8",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 102.0,
+    "cy": 120.0,
+    "r": 2.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 142.0,
+    "cy": 120.0,
+    "r": 2.0,
+    "fill": "#FFFFFF",
+    "opacity": 1.0
+   }
+  ]
+ },
+ "mouths": {
+  "Smile": [
+   {
+    "kind": "path",
+    "d": "M114 141 q6 4.5 12 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Grin": [
+   {
+    "kind": "path",
+    "d": "M111 139 q9 10 18 0 Z",
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "Flat": [
+   {
+    "kind": "path",
+    "d": "M115 142 h10",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "O": [
+   {
+    "kind": "ellipse",
+    "cx": 120.0,
+    "cy": 142.0,
+    "rx": 3.5,
+    "ry": 4.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "Sleepy": [
+   {
+    "kind": "path",
+    "d": "M116 143 q4 2 8 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.4,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Mystic": [
+   {
+    "kind": "path",
+    "d": "M114 141 q6 3 12 -1",
+    "stroke": "#1A1240",
+    "strokeWidth": 2.4,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Wobble": [
+   {
+    "kind": "path",
+    "d": "M112 143 q4 -3 8 0 q4 3 8 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.4,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "BigO": [
+   {
+    "kind": "ellipse",
+    "cx": 120.0,
+    "cy": 144.0,
+    "rx": 5.0,
+    "ry": 6.5,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "Frown": [
+   {
+    "kind": "path",
+    "d": "M114 145 q6 -5 12 0",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
+  "Tongue": [
+   {
+    "kind": "path",
+    "d": "M111 139 q9 9 18 0 Z",
+    "fill": "#2A2350",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M116 143 q4 6 8 0 Z",
+    "fill": "#FF8FA3",
+    "opacity": 1.0
+   }
+  ],
+  "Puff": [
+   {
+    "kind": "path",
+    "d": "M113 142 h14",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "circle",
+    "cx": 108.0,
+    "cy": 141.0,
+    "r": 3.0,
+    "stroke": "#2A2350",
+    "strokeWidth": 1.6,
+    "lineCap": "butt",
+    "opacity": 1.0
+   }
+  ],
+  "Sing": [
+   {
+    "kind": "ellipse",
+    "cx": 120.0,
+    "cy": 143.0,
+    "rx": 5.0,
+    "ry": 6.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "Yawn": [
+   {
+    "kind": "ellipse",
+    "cx": 120.0,
+    "cy": 145.0,
+    "rx": 7.0,
+    "ry": 9.0,
+    "fill": "#2A2350",
+    "opacity": 1.0
+   }
+  ],
+  "None": []
+ }
+}
