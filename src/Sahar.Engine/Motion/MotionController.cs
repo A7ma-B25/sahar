@@ -106,7 +106,8 @@ internal sealed class MotionController
     {
         Current = next;
         _step = null;
-        _eyes = false;
+        // Her eyes follow the mouse whenever she is resting (spec §6 motion 4).
+        _eyes = next is MotionKind.Hover or MotionKind.EyesFollow or MotionKind.LandAndSit or MotionKind.PerchWindow;
         Still = false;
         var root = _v.Root;
         root.StopAnimation("RotationAngleInDegrees");
@@ -490,6 +491,7 @@ internal sealed class MotionController
             if (t < 0.75f) return true;
             _step = null;
             Current = MotionKind.Hover;   // awake: hovering again (lean works)
+            _eyes = true;
             return false;
         };
     }
