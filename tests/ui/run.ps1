@@ -178,6 +178,15 @@ public static class Shell {
 }
 "@
 
+# Test-mode diagnostics: "generation=N overlayVisible=true|false".
+function Info {
+    $r = Send '{"type":"cmd","name":"debug-info"}'
+    if (-not $r.ok) { throw "debug-info not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+
 function Save-Log {
     $log = Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'
     if (Test-Path $log) { Copy-Item $log (Join-Path $Out 'engine.log') -Force }
@@ -213,6 +222,14 @@ function Stage-Smoke {
 
     Step 'screenshot' { Screenshot 'smoke.png' | Out-Null }
 
+    Step 'an exception in a motion tick does not end the engine' {
+        $r = Send '{"type":"cmd","name":"debug-throw-in-tick"}'
+        if (-not $r.ok) { throw "debug-throw-in-tick not ok: $($r.error)" }
+        Start-Sleep -Milliseconds 500
+        if ($script:engine.HasExited) { throw "engine exited with $($script:engine.ExitCode)" }
+        if (-not (Send '{"type":"cmd","name":"state"}').ok) { throw 'state not ok after the exception' }
+    }
+
     Step 'quit exits with code 0 within 3 s' {
         $r = Send '{"type":"cmd","name":"quit"}'
         if (-not $r.ok) { throw 'quit not ok' }
@@ -241,6 +258,22 @@ function Stage-Idle {
         if (-not $r.ok) { throw "debug-device-lost not ok: $($r.error)" }
         Start-Sleep -Milliseconds 1000
         Assert-Body (Screenshot 'idle-after-device-lost.png') $script:baseline $script:state
+    }
+    Step 'a GPU removed at rest is noticed and she is redrawn' {
+        $before = [int](Info).generation
+        $r = Send '{"type":"cmd","name":"debug-simulate-device-removed"}'
+        if (-not $r.ok) { throw "debug-simulate-device-removed not ok: $($r.error)" }
+        Start-Sleep -Milliseconds 2500
+        $after = [int](Info).generation
+        if ($after -le $before) { throw "device generation stayed $before: removal not detected without a draw" }
+        Assert-Body (Screenshot 'idle-after-device-removed.png') $script:baseline $script:state
+    }
+    Step 'after a display change she is back inside the work area' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"5000","y":"3000"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"debug-display-changed"}'
+        if (-not $r.ok) { throw "debug-display-changed not ok: $($r.error)" }
+        Start-Sleep -Milliseconds 300
+        Assert-BodyInWork (State) 'after display change'
     }
     Step 'memory under 60 MB' {
         $ws = (Send '{"type":"cmd","name":"state"}').state.workingSetBytes
@@ -339,6 +372,7 @@ function Stage-Motion {
         $st = State
         $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
         $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 200), [int]($st.y + $st.height / 2 - 60)
+        $script:dragExpr = $null
         $drag = Start-Job -ScriptBlock {
             param($from, $to)
             & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 1600 --drop-delay 200 --timeout-ms 8000
@@ -347,8 +381,10 @@ function Stage-Motion {
         $shot = $false
         while ($drag.State -eq 'Running') {
             Start-Sleep -Milliseconds 150
-            $m = (State).motion
+            $cur = State
+            $m = $cur.motion
             if ($seen.Count -eq 0 -or $seen[-1] -ne $m) { $seen += $m }
+            if ($m -eq 'Drag') { $script:dragExpr = $cur.expression }
             if ($m -eq 'Drag' -and -not $shot) { Screenshot 'motion-dragging.png' | Out-Null; $shot = $true }
         }
         Write-Host "    drag: $(Receive-Job $drag)"
@@ -359,6 +395,8 @@ function Stage-Motion {
         $during = [pscustomobject]@{ motion = $(if ($seen -contains 'Drag') { 'Drag' } else { $seen -join ',' }) }
         if ($during.motion -ne 'Drag') { throw "motion while dragging is '$($during.motion)'" }
         if ($after.motion -eq 'Drag') { throw 'still dragging after release' }
+        if ($script:dragExpr -ne 'dragged') { throw "expression while dragging was '$($script:dragExpr)'" }
+        if ($after.expression -eq 'dragged') { throw 'still showing dragged after release' }
         Assert-BodyInWork $after 'after drag'
     }
     Stop-Engine
@@ -388,18 +426,43 @@ function Stage-Events {
         if ($r.state.expression -ne 'screenshot') { throw "expression is '$($r.state.expression)'" }
         Post 'music.stop' | Out-Null
     }
-    Step 'a borderless window covering the screen hides her' {
+    Step 'a borderless window covering the screen hides her completely' {
+        $script:pre = State
         $script:win = Start-TestWindow 'borderless'
         try {
-            try { Wait-State { param($st) $st.hidden } 1000 'hidden' | Out-Null }
+            try { Wait-State { param($st) $st.hidden } 2000 'hidden' | Out-Null }
             catch {
                 Write-Host "    foreground: $((Send '{"type":"cmd","name":"debug-foreground"}').error)"
                 throw
             }
             finally { Screenshot 'events-fullscreen.png' | Out-Null }
+            Start-Sleep -Milliseconds 800
+            if ((Info).overlayVisible -ne 'false') { throw 'overlay still visible while hidden (a dot over the fullscreen app)' }
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
-        Wait-State { param($st) -not $st.hidden } 2000 'shown again' | Out-Null
+        $back = Wait-State { param($st) -not $st.hidden } 2000 'shown again'
+        if ((Info).overlayVisible -ne 'true') { throw 'overlay not shown again' }
+        Start-Sleep -Milliseconds 300
+        $back = State
+        if ([math]::Abs($back.x - $script:pre.x) -gt 2 -or [math]::Abs($back.y - $script:pre.y) -gt 2) {
+            throw "came back at ($($back.x),$($back.y)), was at ($($script:pre.x),$($script:pre.y))"
+        }
+    }
+    Step 'after coming back she returns to her own face and hovers' {
+        Start-Sleep -Milliseconds 3000
+        $st = State
+        if ($st.expression -eq 'back') { throw "still showing 'back'" }
+        if ($st.motion -ne 'Hover') { throw "motion is '$($st.motion)' after waking" }
+    }
+    Step 'hide for an hour, then show from the tray' {
+        $r = Send '{"type":"cmd","name":"hide","args":{"minutes":"60"}}'
+        if (-not $r.ok) { throw "hide not ok: $($r.error)" }
+        Wait-State { param($st) $st.hidden } 1000 'hidden by hide' | Out-Null
+        Start-Sleep -Milliseconds 800
+        if ((Info).overlayVisible -ne 'false') { throw 'overlay still visible after hide' }
+        $r = Send '{"type":"cmd","name":"show"}'
+        if (-not $r.ok) { throw "show not ok: $($r.error)" }
+        Wait-State { param($st) -not $st.hidden } 1000 'shown by show' | Out-Null
     }
     Step 'a maximized window does not hide her' {
         $script:win = Start-TestWindow 'maximized'
