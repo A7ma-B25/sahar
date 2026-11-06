@@ -13,7 +13,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint CallbackMessage = 0x8001;          // WM_APP + 1
     private const uint WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1;
     private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205;
-    private const uint NIM_ADD = 0, NIM_DELETE = 2, NIM_SETVERSION = 4;
+    private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
     private const int CmdHide = 1, CmdQuit = 2;
@@ -46,7 +46,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         var tip = new Span<char>(d.SzTip, 128);
         Tip.AsSpan().CopyTo(tip);
         tip[Tip.Length] = '\0';
-        _added = Native.ShellNotifyIcon(NIM_ADD, &d) != 0;
+        // After a real Explorer restart the icon is gone and NIM_ADD works; if it still exists, refresh it.
+        _added = Native.ShellNotifyIcon(NIM_ADD, &d) != 0 || Native.ShellNotifyIcon(NIM_MODIFY, &d) != 0;
         d.UVersion = 4;
         Native.ShellNotifyIcon(NIM_SETVERSION, &d);
         Log.Write(_added ? "tray icon added" : "tray icon not added (no taskbar yet?)");

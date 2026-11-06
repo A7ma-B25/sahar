@@ -107,7 +107,8 @@ internal sealed unsafe class App
         var idleTimer = ui.CreateTimer();
         idleTimer.Interval = TimeSpan.FromSeconds(5);
         idleTimer.Tick += (_, _) => idle.Check();
-        idleTimer.Start();
+        // Test machines have no human at the keyboard: away/back come only from the pipe there.
+        if (!_options.TestMode) idleTimer.Start();
         _ = new Network(ui, director.Post);
         Foreground.Start();
 

@@ -407,9 +407,13 @@ function Stage-Events {
         Start-Sleep -Milliseconds 1000
         $found = $false
         foreach ($surface in 'system-tray', 'system-tray-overflow') {
+            $open = (& agent-desktop --headed open-system-surface --surface $surface 2>&1) -join "`n"
+            Start-Sleep -Milliseconds 500
             $json = (& agent-desktop snapshot --surface $surface -i --compact 2>&1) -join "`n"
-            Set-Content -Path (Join-Path $Out "tray-$surface.json") -Value $json
-            if ($json -match 'Sahar') { $found = $true; Write-Host "    found in $surface" }
+            Set-Content -Path (Join-Path $Out "tray-$surface.json") -Value "$open`n$json"
+            if ("$open`n$json" -match 'Sahar') { $found = $true; Write-Host "    found in $surface" }
+            & agent-desktop --headed press escape 2>&1 | Out-Null
+            if ($found) { break }
         }
         if (-not $found) { throw 'no "Sahar" in the system tray or its overflow' }
     }
