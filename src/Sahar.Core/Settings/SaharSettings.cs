@@ -1,0 +1,30 @@
+namespace Sahar.Core.Settings;
+
+public enum UiLanguage { Auto, Arabic, English }
+
+/// <summary>Body width in DIPs (spec §4).</summary>
+public enum SaharSize { Small = 48, Medium = 80, Large = 120 }
+
+public enum ActivityLevel { Calm, Medium, Lively }
+
+public enum SoundLevel { Silent, Light, Full }
+
+public enum SeasonalIcon { Auto, On, Off }
+
+/// <summary>Everything the user can set. Stored in %AppData%\Sahar\settings.json.</summary>
+public sealed record SaharSettings
+{
+    public int Version { get; init; } = 1;
+    public UiLanguage Language { get; init; } = UiLanguage.Auto;
+    public SaharSize Size { get; init; } = SaharSize.Medium;
+    public ActivityLevel Activity { get; init; } = ActivityLevel.Medium;
+    public SoundLevel Sound { get; init; } = SoundLevel.Light;
+    public float Volume { get; init; } = 0.6f;
+    public TimeOnly? QuietFrom { get; init; }
+    public TimeOnly? QuietTo { get; init; }
+    public bool AwarenessEnabled { get; init; } = true;
+    public IReadOnlyList<string> BlockedApps { get; init; } = [];
+    public bool WeatherEnabled { get; init; }
+    public bool UpdateCheckEnabled { get; init; } = true;
+    public SeasonalIcon Seasonal { get; init; } = SeasonalIcon.Auto;
+}
