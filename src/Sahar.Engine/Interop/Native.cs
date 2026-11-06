@@ -331,6 +331,24 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial uint GetDoubleClickTime();
 
+    // ---- clipboard (Plan 4) ----
+    [LibraryImport("user32.dll")] public static partial int AddClipboardFormatListener(nint hwnd);
+    [LibraryImport("user32.dll")] public static partial int OpenClipboard(nint hwnd);
+    [LibraryImport("user32.dll")] public static partial int CloseClipboard();
+    [LibraryImport("user32.dll")] public static partial int EmptyClipboard();
+    [LibraryImport("user32.dll")] public static partial uint EnumClipboardFormats(uint format);
+    [LibraryImport("user32.dll", EntryPoint = "GetClipboardFormatNameW")] public static partial int GetClipboardFormatName(uint format, char* name, int max);
+    [LibraryImport("user32.dll")] public static partial nint GetClipboardData(uint format);
+    [LibraryImport("user32.dll")] public static partial nint SetClipboardData(uint format, nint mem);
+    [LibraryImport("user32.dll")] public static partial nint GetClipboardOwner();
+    [LibraryImport("user32.dll")] public static partial uint GetClipboardSequenceNumber();
+    [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW")] public static partial uint RegisterClipboardFormat(char* name);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalLock(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial int GlobalUnlock(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial nuint GlobalSize(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalAlloc(uint flags, nuint bytes);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalFree(nint mem);
+
     [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
     public static partial nint SendMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
 

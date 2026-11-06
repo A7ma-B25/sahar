@@ -14,6 +14,7 @@ using Sahar.Engine.Life;
 using Sahar.Engine.Menu;
 using Sahar.Engine.Tools;
 using Sahar.Core.Tools;
+using Sahar.Core.Senses;
 using Sahar.Core.Life;
 using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
@@ -162,6 +163,7 @@ internal sealed unsafe class App
         var dndTool = new DndTool(ui, director);
         var bubble = new TextBubble(_options.Capturable);
         var notes = new NoteTool(bubble, new NotesStore(NotesStore.DefaultPath), () => motion.Body, Express);
+        var listBubble = new ListBubble(_options.Capturable);
         sahar.Rescaled += () => Safe(timerTool.Redraw);
         host.DeviceLost += () => Safe(() => { timerTool.Redraw(); menu.DeviceLost(); });
         // Settings: a bad or locked file never stops her (defaults).
@@ -220,6 +222,18 @@ internal sealed unsafe class App
         life = lifeDirector;
         // Her menu: life pauses and she hovers while it is open.
         menu.Level = () => settings.Activity;
+        // What you copy (spec §7.2): kept by the rules, a short "copied" face at most every 30 s.
+        var clipboard = new ClipboardSense(tray.Hwnd, new ClipboardHistory(ClipboardHistory.DefaultFolder));
+        var clipboardTool = new ClipboardTool(listBubble, clipboard, () => motion.Body);
+        var lastCopiedFace = DateTimeOffset.MinValue;
+        clipboard.Kept += () =>
+        {
+            if (DateTimeOffset.Now - lastCopiedFace < TimeSpan.FromSeconds(30) || _state.Hidden) return;
+            lastCopiedFace = DateTimeOffset.Now;
+            Log.Write("clipboard: copied face");
+            Express("copied", true);
+        };
+        tray.ClipboardChanged += () => Safe(clipboard.Changed);
         menu.TimerRunning = () => timerTool.Running;
         menu.DndOn = () => dndTool.On;
         lifeDirector.DndOn = () => dndTool.On;
@@ -257,6 +271,7 @@ internal sealed unsafe class App
                 case "timer-45": timerTool.Start(TimeSpan.FromMinutes(45)); break;
                 case "timer-cancel": timerTool.Cancel(); break;
                 case "note": notes.Open(); break;
+                case "clipboard": clipboardTool.Open(); break;
                 case "timer-custom":
                     bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
                     {
@@ -383,6 +398,16 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-menu", _ => new PipeReply(true, menu.Describe()));
             pipe.Register("debug-timer", _ => new PipeReply(true, timerTool.Describe()));
+            pipe.Register("debug-clipboard", _ =>
+            {
+                var items = clipboard.History.Items;
+                var first = items.Count > 0 ? items[0].Text ?? "" : "";
+                return new PipeReply(true, $"count={items.Count} first={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(first))}");
+            });
+            pipe.Register("clipboard-pick", r => new PipeReply(clipboardTool.Pick((int)Arg(r, "index"))));
+            pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true); });
+            pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines}"));
+            pipe.Register("list-close", _ => { listBubble.Close(); return new PipeReply(true); });
             pipe.Register("showcase", r =>
             {
                 show.Start(r.Args?.ContainsKey("from") == true ? (int)Arg(r, "from") : 0);

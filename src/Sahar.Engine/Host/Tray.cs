@@ -26,6 +26,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    /// <summary>The clipboard changed (WM_CLIPBOARDUPDATE).</summary>
+    public event Action? ClipboardChanged;
     /// <summary>"فرجيني حركاتك" (start) or "وقّف العرض" (stop) was chosen.</summary>
     public event Action? ShowToggled;
     /// <summary>Her show is running (the menu item then stops it).</summary>
@@ -53,6 +55,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         if (Native.RegisterRawInputDevices(&keyboard, 1, (uint)sizeof(RAWINPUTDEVICE)) == 0) Log.Write("keyboard raw input not registered");
         _icon = MakeIcon();
         Add();
+        if (Native.AddClipboardFormatListener(Hwnd) == 0) Log.Write("clipboard listener not added");
     }
 
     private void Add()
@@ -94,6 +97,9 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 uint ev = (uint)(lParam & 0xFFFF);
                 if (ev is WM_CONTEXTMENU or WM_RBUTTONUP) ShowMenu();
                 else if (ev is NIN_SELECT or WM_LBUTTONUP) ShowNow?.Invoke();   // a click on the icon brings her back
+                return 0;
+            case 0x031D:   // WM_CLIPBOARDUPDATE
+                ClipboardChanged?.Invoke();
                 return 0;
             case WM_INPUT:
                 _lastKeyTick = Environment.TickCount64;
