@@ -378,6 +378,45 @@ function Stage-Motion {
             }
         }
     }
+    foreach ($kind in 'PlayWithMoon', 'Curious', 'Dance', 'Breathe', 'OrbitCursor') {
+        Step "motion $kind" {
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+            $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}')
+            if (-not $r.ok) { throw "motion $kind not ok: $($r.error)" }
+            if ($r.state.motion -ne $kind) { throw "state.motion is '$($r.state.motion)', expected '$kind'" }
+            $frames = Join-Path $dir "new-$kind"
+            New-Item -ItemType Directory -Force -Path $frames | Out-Null
+            for ($f = 1; $f -le 4; $f++) {
+                Start-Sleep -Milliseconds 400
+                Assert-BodyInWork (State) "$kind frame $f"
+                Copy-Item (Screenshot 'motion-full.png') (Join-Path $frames "$f.png") -Force
+            }
+        }
+    }
+    Step 'every flight stays on screen, from every corner' {
+        $patterns = 'Zigzag', 'FigureEight', 'SpiralUp', 'Dive', 'Wave', 'GlideHigh', 'BigCircle', 'DashAndStop', 'FallingLeaf', 'TaskbarPatrol'
+        $st = State
+        $corners = @(@($Work.Left, $Work.Top), @($Work.Right - $st.width, $Work.Top), @($Work.Left, $Work.Bottom - $st.height), @($Work.Right - $st.width, $Work.Bottom - $st.height))
+        foreach ($p in $patterns) {
+            $c = $corners[[array]::IndexOf($patterns, $p) % 4]
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            # pose takes the canvas top-left: shift by the body's offset inside the canvas.
+            $i = Info; $s0 = State
+            $dx = $s0.x - [double]$i.canvasX; $dy = $s0.y - [double]$i.canvasY
+            Send ('{"type":"cmd","name":"pose","args":{"x":"' + [int]($c[0] - $dx) + '","y":"' + [int]($c[1] - $dy) + '"}}') | Out-Null
+            $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"Wander","flight":"' + $p + '"}}')
+            if (-not $r.ok) { throw "flight $p not ok: $($r.error)" }
+            $end = (Get-Date).AddSeconds(8)
+            do {
+                Start-Sleep -Milliseconds 300
+                $st = State
+                Assert-BodyInWork $st "flight $p"
+            } while ($st.motion -ne 'Hover' -and (Get-Date) -lt $end)
+            if ($st.motion -ne 'Hover') { throw "flight $p did not end" }
+        }
+        Copy-Item (Screenshot 'motion-full.png') (Join-Path $dir 'flights-end.png') -Force
+    }
     Step 'unknown motion is rejected' {
         $r = Send '{"type":"cmd","name":"motion","args":{"kind":"Moonwalk"}}'
         if ($r.ok) { throw 'unknown motion answered ok' }
