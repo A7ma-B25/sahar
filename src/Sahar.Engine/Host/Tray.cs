@@ -1,3 +1,4 @@
+using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
 
 namespace Sahar.Engine.Host;
@@ -15,8 +16,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205, NIN_SELECT = 0x0400, WM_LBUTTONUP = 0x0202;
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
-    private const uint MF_STRING = 0, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2;
+    private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
+    private const int CmdHide = 1, CmdQuit = 2, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -25,6 +26,9 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public nint Hwnd { get; }
     public event Action? HideHour;
     public event Action? ShowNow;
+    public event Action<ActivityLevel>? ActivityChosen;
+    /// <summary>The level shown as checked in the menu.</summary>
+    public ActivityLevel Activity { get; set; } = ActivityLevel.Medium;
     public event Action? Quit;
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
@@ -92,9 +96,16 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private void ShowMenu()
     {
         nint menu = Native.CreatePopupMenu();
+        nint levels = Native.CreatePopupMenu();
+        foreach (var (level, text) in new[] { (ActivityLevel.Calm, "هادية / Calm"), (ActivityLevel.Medium, "متوسطة / Medium"), (ActivityLevel.Lively, "نشيطة / Lively") })
+            fixed (char* t = text)
+                Native.AppendMenu(levels, MF_STRING | (level == Activity ? MF_CHECKED : 0), (nuint)(CmdActivity + (int)level), t);
+        fixed (char* activity = "نشاطها / Activity")
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
         fixed (char* quit = "إغلاق / Quit")
         {
+            Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
+            Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
@@ -103,7 +114,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         Native.SetForegroundWindow(Hwnd);   // so the menu closes when clicking elsewhere
         int cmd = Native.TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, p.X, p.Y, 0, Hwnd, 0);
         Native.DestroyMenu(menu);
-        if (cmd == CmdHide) HideHour?.Invoke();
+        if (cmd is >= CmdActivity and <= CmdActivity + 2) ActivityChosen?.Invoke((ActivityLevel)(cmd - CmdActivity));
+        else if (cmd == CmdHide) HideHour?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 

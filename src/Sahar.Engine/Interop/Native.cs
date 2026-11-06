@@ -85,6 +85,15 @@ internal struct TRACKMOUSEEVENT
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct GUITHREADINFO
+{
+    public uint CbSize;
+    public uint Flags;
+    public nint HwndActive, HwndFocus, HwndCapture, HwndMenuOwner, HwndMoveSize, HwndCaret;
+    public RECT RcCaret;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct LASTINPUTINFO { public uint CbSize; public uint DwTime; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -421,6 +430,15 @@ internal static unsafe partial class Native
 
     [LibraryImport("user32.dll")]
     public static partial int EnumDisplayMonitors(nint hdc, nint clip, delegate* unmanaged<nint, nint, RECT*, nint, int> proc, nint data);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetGUIThreadInfo(uint threadId, GUITHREADINFO* info);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint hwnd, uint* processId);
+
+    [LibraryImport("user32.dll")]
+    public static partial int ClientToScreen(nint hwnd, POINT* point);
 
     public static POINT CursorPos()
     {

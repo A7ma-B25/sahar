@@ -4,6 +4,7 @@ using Sahar.Core.Art;
 using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
 using Sahar.Core.Protocol;
+using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
 using Sahar.Core.Brain;
 using Sahar.Core.Motion;
@@ -119,7 +120,19 @@ internal sealed unsafe class App
         }
         motion.HiddenAway += () => { if (_state.Hidden) Native.ShowWindow(overlay.Hwnd, Native.SW_HIDE); };
         director = new Director(ui, key => Express(key, false), SetHidden);
-        using var tray = new Tray();
+        // Settings: a bad or locked file never stops her (defaults).
+        var settings = new SaharSettings();
+        try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
+        catch (Exception e) { Log.Write($"settings not loaded: {e.Message}"); }
+        using var tray = new Tray { Activity = settings.Activity };
+        void SetActivity(ActivityLevel level)
+        {
+            settings = settings with { Activity = level };
+            tray.Activity = level;
+            try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
+            catch (Exception e) { Log.Write($"settings not saved: {e.Message}"); }
+        }
+        tray.ActivityChosen += level => Safe(() => SetActivity(level));
         tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
         tray.ShowNow += () => director.HideFor(TimeSpan.Zero);
         tray.Quit += () => Native.PostQuitMessage(0);
@@ -139,6 +152,7 @@ internal sealed unsafe class App
         // Test machines have no human at the keyboard: away/back come only from the pipe there.
         if (!_options.TestMode) idleTimer.Start();
         _ = new Network(ui, director.Post);
+        var media = new Media(ui, director.Post);
         Foreground.Start();
 
         void OnDisplayChanged()
