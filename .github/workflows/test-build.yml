@@ -11,7 +11,7 @@ on:
         type: boolean
         default: false
   push:
-    tags: ["v0.1.*-test"]
+    tags: ["v0.*-test"]
     # Until this workflow is on main (dispatch needs it there), packaging changes on v1 branches build the zip
     # as an artifact only; branch pushes never publish.
     branches: ["v1/**"]
@@ -53,21 +53,26 @@ jobs:
       - name: UI tests (all stages)
         shell: pwsh
         run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life
+      - name: Version
+        shell: pwsh
+        run: |
+          $v = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+          "SAHAR_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Package
         shell: pwsh
         run: |
-          $dir = 'artifacts/Sahar-0.1.0-test-win-x64'
+          $dir = "artifacts/Sahar-$env:SAHAR_VERSION-test-win-x64"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Copy-Item artifacts/engine/Sahar.Engine.exe $dir
           Copy-Item packaging/README-test-build.txt $dir
-          Compress-Archive -Path "$dir/*" -DestinationPath artifacts/Sahar-0.1.0-test-win-x64.zip -Force
+          Compress-Archive -Path "$dir/*" -DestinationPath "$dir.zip" -Force
           $names = (Get-ChildItem $dir).Name | Sort-Object
           Write-Host "zip contains: $($names -join ', ')"
           if (($names -join ',') -ne 'README-test-build.txt,Sahar.Engine.exe') { throw "unexpected zip contents: $names" }
       - uses: actions/upload-artifact@v4
         with:
-          name: Sahar-0.1.0-test-win-x64
-          path: artifacts/Sahar-0.1.0-test-win-x64.zip
+          name: Sahar-${{ env.SAHAR_VERSION }}-test-win-x64
+          path: artifacts/Sahar-${{ env.SAHAR_VERSION }}-test-win-x64.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -80,6 +85,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete test-build --yes --cleanup-tag 2>$null
-          gh release create test-build artifacts/Sahar-0.1.0-test-win-x64.zip artifacts/ui/gallery.png --prerelease `
-            --target $env:GITHUB_SHA --title "Sahar 0.1.0 test build" `
+          gh release create test-build "artifacts/Sahar-$env:SAHAR_VERSION-test-win-x64.zip" artifacts/ui/gallery.png --prerelease `
+            --target $env:GITHUB_SHA --title "Sahar $env:SAHAR_VERSION test build" `
             --notes "Portable test build ($env:GITHUB_SHA). Download the zip, extract it, run Sahar.Engine.exe. See README-test-build.txt inside."
