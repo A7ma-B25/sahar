@@ -1,0 +1,36 @@
+name: ui-test
+
+on:
+  push:
+    branches: [main, "v1/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ui-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-desktop
+        run: npm i -g agent-desktop@1.2.0
+      - name: Publish engine (Native AOT)
+        run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+      - name: UI tests
+        shell: pwsh
+        run: ./tests/ui/run.ps1 -Stage smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui
+          path: artifacts/ui/
