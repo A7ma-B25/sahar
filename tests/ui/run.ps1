@@ -292,12 +292,16 @@ function Stage-Motion {
         $st = State
         $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
         $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 200), [int]($st.y + $st.height / 2 - 60)
-        $drag = Start-Process -FilePath 'agent-desktop' -ArgumentList '--headed', 'drag', '--from-xy', $from, '--to-xy', $to,
-            '--duration', '1600', '--drop-delay', '200', '--timeout-ms', '8000' -PassThru -NoNewWindow
-        Start-Sleep -Milliseconds 900
+        $drag = Start-Job -ScriptBlock {
+            param($from, $to)
+            & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 1600 --drop-delay 200 --timeout-ms 8000
+        } -ArgumentList $from, $to
+        Start-Sleep -Milliseconds 1400
         $during = State
         Screenshot 'motion-dragging.png' | Out-Null
-        $drag.WaitForExit(10000) | Out-Null
+        Wait-Job $drag -Timeout 10 | Out-Null
+        Write-Host "    drag: $(Receive-Job $drag)"
+        Remove-Job $drag -Force
         Start-Sleep -Milliseconds 1500
         $after = State
         Write-Host "    during: $($during.motion), after: $($after.motion)"
