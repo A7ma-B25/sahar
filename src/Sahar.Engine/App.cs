@@ -247,6 +247,12 @@ internal sealed unsafe class App
                 media.Simulate(On("playing"), On("video"), On("browser"), On("front"));
                 return new PipeReply(true, lifeDirector.Describe());
             });
+            pipe.Register("debug-log-fill", r =>
+            {
+                var filler = new string('x', 90);
+                for (int i = 0, n = (int)(Arg(r, "kb") * 1024 / 120); i < n; i++) Log.Write($"fill {i} {filler}");
+                return new PipeReply(true);
+            });
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {

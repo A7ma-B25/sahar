@@ -28,6 +28,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly Media _media;
     private readonly CursorRest _cursorRest = new();
     private bool _cursorResting;
+    private string? _waiting;
     private readonly DispatcherQueueTimer _timer;
     private readonly Preferences _prefs;
     private readonly Routine _routine;
@@ -132,7 +133,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             _motion.Play(MotionKind.Hover);
         }
         if (_motion.PerchIsStale()) { _motion.Play(MotionKind.Wander); return; }   // her window moved, resized or closed
-        if (Typing) { StepAwayFromTyping(); return; }   // no own actions while you type
+        if (Typing) { Waiting("you are typing"); StepAwayFromTyping(); return; }   // no own actions while you type
 
         // Away: she naps in the corner and wakes when you are back.
         bool away = _director.CurrentKey == "sleep";
@@ -149,7 +150,8 @@ internal sealed unsafe class LifeDirector : IDisposable
             Schedule(now);
             return;
         }
-        if (_sleepingForAway || now < _due) return;
+        if (_sleepingForAway) { Waiting("you are away"); return; }
+        if (now < _due) { Waiting($"next turn at {_due.ToLocalTime():HH:mm:ss}"); return; }
 
         // A late-night nap she chose herself ends at her next turn.
         if (_ownSleep && _motion.Current == MotionKind.SleepInCorner)
@@ -167,17 +169,30 @@ internal sealed unsafe class LifeDirector : IDisposable
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
             : LifeChooser.Choose(context, _prefs.Weight, _rng);
-        if (action == LifeAction.None) return;   // not now: try again next second, same gap
+        if (action == LifeAction.None)   // not now: try again next second, same gap
+        {
+            Waiting(_director.Hidden ? "hidden" : !Resting ? $"busy ({_motion.Current})" : "nothing fits now");
+            return;
+        }
 
         switch (action)
         {
             case LifeAction.Flight:
-                _motion.PlayFlight(Enum.GetValues<FlightPattern>()[_rng.Next(Enum.GetValues<FlightPattern>().Length)]);
+                var pattern = Enum.GetValues<FlightPattern>()[_rng.Next(Enum.GetValues<FlightPattern>().Length)];
+                Log.Write($"life: Flight {pattern}{Why(context)}");
+                _motion.PlayFlight(pattern);
                 break;
             case LifeAction.Moment:
-                if (!PlayMoment()) { Schedule(now); return; }   // an event face is showing: let this turn pass
+                if (PlayMoment() is not { } moment)   // an event face is showing: let this turn pass
+                {
+                    Log.Write($"life: no Moment over the '{_director.CurrentKey}' face");
+                    Schedule(now);
+                    return;
+                }
+                Log.Write($"life: Moment {moment}{Why(context)}");
                 break;
             default:
+                Log.Write($"life: {action}{Why(context)}");
                 _motion.Play(action switch
                 {
                     LifeAction.Wander => MotionKind.Wander,
@@ -193,6 +208,7 @@ internal sealed unsafe class LifeDirector : IDisposable
                 });
                 break;
         }
+        _waiting = null;
         _ownSleep = action == LifeAction.SleepInCorner;
         _memory.Started(action, now);
         _lastAction = action;
@@ -201,15 +217,26 @@ internal sealed unsafe class LifeDirector : IDisposable
     }
 
     /// <summary>A small face moment; only while her face is her own (never over an event's face).</summary>
-    private bool PlayMoment()
+    private MomentKind? PlayMoment()
     {
-        if (_director.CurrentKey != "idle" || _expressionKey() != "idle") return false;
+        if (_director.CurrentKey != "idle" || _expressionKey() != "idle") return null;
         var kind = Enum.GetValues<MomentKind>()[_rng.Next(Enum.GetValues<MomentKind>().Length)];
         var (eyes, mouth, seconds) = Moments.Face(kind);
         _face(eyes, mouth, seconds);
         if (kind == MomentKind.Giggle) _poke();
-        return true;
+        return kind;
     }
+
+    /// <summary>Logs why she is not acting, once per change of reason.</summary>
+    private void Waiting(string reason)
+    {
+        if (reason == _waiting) return;
+        _waiting = reason;
+        Log.Write($"life: waiting: {reason}");
+    }
+
+    private static string Why(LifeContext c) =>
+        (c.MusicPlaying ? " (music)" : "") + (c.VideoPlaying ? " (video in front)" : "") + (c.CursorResting ? " (pointer resting)" : "");
 
     public const float NearTypingDip = 120f, AvoidTypingDip = 150f;
 

@@ -30,11 +30,23 @@ internal static class Log
         try
         {
             lock (Gate)
+            {
                 File.AppendAllText(FilePath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {line}{Environment.NewLine}");
+                if (new FileInfo(FilePath).Length > MaxBytes) KeepNewestHalf();
+            }
         }
         catch
         {
             // Logging must never take the engine down.
         }
+    }
+
+    /// <summary>Over 1 MB: keep the newest half, cut at a line start.</summary>
+    private static void KeepNewestHalf()
+    {
+        var bytes = File.ReadAllBytes(FilePath);
+        int start = bytes.Length / 2;
+        while (start < bytes.Length && bytes[start - 1] != (byte)'\n') start++;
+        File.WriteAllBytes(FilePath, bytes[start..]);
     }
 }

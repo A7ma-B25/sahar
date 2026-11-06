@@ -398,6 +398,9 @@ internal static unsafe partial class Native
     [LibraryImport("shell32.dll")]
     public static partial int SHQueryUserNotificationState(int* state);
 
+    [LibraryImport("shell32.dll", EntryPoint = "ShellExecuteW")]
+    public static partial nint ShellExecute(nint hwnd, char* verb, char* file, char* parameters, char* directory, int show);
+
     [LibraryImport("shell32.dll")]
     public static partial int Shell_NotifyIconGetRect(NOTIFYICONIDENTIFIER* id, RECT* rect);
 

@@ -1,21 +1,27 @@
-سَحَر · Sahar — نسخة تجريبية 0.2.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.3.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.2.0
+شو الجديد بـ 0.3.0
 ------------------
-- صارت تعيش لحالها: كل شوي بتختار شي تعمله (تطير مشوار، تطل من ورا التاسك بار، تقعد على النافذة، لفّة فرح).
-- عيونها بتلحق الماوس.
+- صارت تتحرّك أكتر وأنوع: 10 طيرات مختلفة (زيك زاك، رقم 8، لولب لفوق، غطسة، موجة، دايرة كبيرة، ورقة عم توقع، دورية فوق التاسك بار…).
+- حركات جديدة: بتلعب مع قمرها، بتفضول وبتقرّب عالماوس، بترقص مع الموسيقى، بتتنفّس بهدوء، وبتلف حوالين الماوس إذا تركته جنبها.
+- لحظات وجه صغيرة: غمزة، ابتسامة، بتطلّع حواليها، بتنعس، بتضحك.
+- أغنية من يوتيوب أو أي متصفح: بتلبس السماعات. إذا المتصفح قدامك بتضل هادية (ما بتطير فوق الفيديو)، وإذا رحت لنافذة تانية بترقص. لما توقف الأغنية بتوقف رقص.
+- سجل صغير: كبسة يمين على أيقونتها ← "افتح مجلد سَحَر" بيفتحلك المجلد فيه ملف engine.log. السجل بيكتب شو اختارت تعمل وليش كانت عم تستنى، وما بيكبر أكتر من 1 ميغا.
+
+من 0.2.0 (لسا موجودين)
+----------------------
+- بتعيش لحالها، وعيونها بتلحق الماوس.
 - نشاطها: كبسة يمين على أيقونتها ← "نشاطها": هادية (كل 5–10 دقايق)، متوسطة (كل 1–3 دقايق)، نشيطة (كل نص دقيقة لدقيقة ونص).
-- ما بتزعجك: وقت تكتب بتوقف، وإذا كانت قريبة من مكان الكتابة بتبعد. ووقت تحضر فيديو بتهدى.
+- ما بتزعجك: وقت تكتب بتوقف وبتبعد عن مكان الكتابة. ووقت تحضر فيديو بتهدى.
 - بتتعلّم ذوقك: إذا كبست عليها بعد حركة بتعملها أكتر، وإذا شلتها من نصها بتخففها.
-- بتعرف روتينك: بالساعات اللي عادةً بتشتغل فيها بتكون أهدى. بعد ساعتين شغل متواصل بتذكّرك تاخد استراحة، وبعد نص الليل بتصير غامضة.
-- إذا غبت 5 دقايق بتروح تنام بالزاوية، ولما ترجع بتصحى.
-- إذا في موسيقى شغّالة (سبوتيفاي أو يوتيوب…) بتلبس سماعاتها.
+- بتعرف روتينك، بتذكّرك بالاستراحة بعد ساعتين، وبعد نص الليل بتصير غامضة.
+- إذا غبت 5 دقايق بتنام بالزاوية، ولما ترجع بتصحى.
 - لترجّع تعلّمها من الأول: سكّرها وامسح الملف %AppData%\Sahar\life.json
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.2.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.3.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -44,7 +50,9 @@
 - لقطة شاشة عادية: ما لازم تطلع فيها.
 - إشعارات ويندوز لازم تضل تطلع وسَحَر شغالة.
 - اكتب بالمتصفح (مثلاً بحث بجوجل): لازم توقف حركتها وتبعد إذا كانت قريبة.
-- شغّل أغنية بسبوتيفاي أو يوتيوب: لازم تلبس السماعات. وفيديو: لازم تهدى.
+- شغّل أغنية بسبوتيفاي: لازم تلبس السماعات وترقص أحياناً.
+- شغّل أغنية بيوتيوب والمتصفح قدامك: سماعات وبس، بلا طيران. روح لنافذة تانية: بترجع تتحرك وترقص. وقّف الأغنية: بتوقف رقص.
+- خلّيها على "نشيطة" ربع ساعة: لازم تشوف حركات كتير مختلفة، مش بس طيران.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
 بهالنسخة لسا ما في: القائمة الدائرية، الأصوات، الإعدادات، والتنبيهات. هدول بالخطط الجاية.
@@ -53,28 +61,33 @@
 --------------
 ابعتلي:
 - شو عملت وشو صار (ولقطة شاشة أو فيديو قصير إذا قدرت).
-- ملف السجل: %LocalAppData%\Sahar\engine.log
-  (الصق العنوان بشريط العنوان بمستكشف الملفات وبيفتحلك المجلد).
+- ملف السجل engine.log: كبسة يمين على أيقونتها ← "افتح مجلد سَحَر"، وابعتلي الملف.
+  (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.2.0 (Windows)
+Sahar — test build 0.3.0 (Windows)
 ==================================
 
-What's new in 0.2.0
+What's new in 0.3.0
 -------------------
-- She lives on her own: every so often she picks something to do (a flight, a peek from behind the taskbar, sitting on your window, a happy loop).
-- Her eyes follow the mouse.
+- More, and more varied, movement: 10 different flights (zigzag, figure eight, spiral up, dive, wave, glide, big circle, dash and stop, falling leaf, taskbar patrol).
+- New moves: she plays with her moon, gets curious and edges toward the pointer, dances to music, breathes slowly, and circles the pointer when you leave it next to her.
+- Small face moments: a wink, a smile, a look around, a drowsy blink, a giggle.
+- A song from YouTube or any browser: headphones on. While the browser is in front she stays calm (no flights over the video); switch to another window and she dances. Stop the song and the dance stops.
+- A log you can send: right-click her icon → "Open Sahar folder" opens the folder with engine.log. It records what she chose to do and why she was waiting, and never grows past 1 MB.
+
+Still here from 0.2.0
+---------------------
+- She lives on her own, and her eyes follow the mouse.
 - Activity: right-click her icon → "نشاطها / Activity": Calm (every 5–10 min), Medium (1–3 min), Lively (30–90 s).
-- She stays out of your way: no moves while you type, she steps away from where you type, and calms down while you watch a video.
-- She learns what you like: poke her after something and she does it more; grab her in the middle and she does it less.
-- She learns your routine: calmer in your usual work hours; after two hours of non-stop work she suggests a break; after midnight she turns mystic.
+- She stays out of your way while you type, and calms down while you watch a video.
+- She learns what you like (poke = more, grab mid-move = less) and your routine; break reminder after two hours; mystic after midnight.
 - Away for 5 minutes: she naps in the corner and wakes when you are back.
-- Music playing (Spotify, YouTube…): she puts on her headphones.
 - To reset what she learned: quit her and delete %AppData%\Sahar\life.json
 
 Run it
 ------
-1. Unzip Sahar-0.2.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.3.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -102,12 +115,14 @@ Manual checks (GitHub cannot test these)
 - Ordinary screenshots must not show her.
 - Windows notifications must still appear while she runs.
 - Type in a browser (e.g. a Google search): she stops moving and steps away if she is close.
-- Play a song in Spotify or YouTube: headphones on. A video: she calms down.
+- Play a song in Spotify: headphones on, and she dances now and then.
+- Play a song on YouTube with the browser in front: headphones only, no flights. Switch to another window: she moves and dances again. Stop the song: the dance stops.
+- Leave her on Lively for 15 minutes: you should see many different moves, not just flights.
 - After two hours of non-stop work: the break face ☕.
 
 Not in this build yet: the radial menu, sounds, settings and notifications (later plans).
 
 If something goes wrong
 -----------------------
-Send me what you did and what happened (a screenshot or short video helps), and the log file:
-%LocalAppData%\Sahar\engine.log
+Send me what you did and what happened (a screenshot or short video helps), and the log file engine.log:
+right-click her icon → "Open Sahar folder" (or paste %LocalAppData%\Sahar into Explorer's address bar).
