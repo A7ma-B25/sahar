@@ -662,6 +662,25 @@ function Press([string]$id) {
     if (-not $r.ok) { throw "menu-press $id not ok: $($r.error)" }
 }
 
+function Kv([string]$cmd) {
+    $r = Send ('{"type":"cmd","name":"' + $cmd + '"}')
+    if (-not $r.ok) { throw "$cmd not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+function Type-InBubble([string]$text, [switch]$Enter) {
+    # Real focus by a click, then the characters straight to the edit box (SendKeys can't type every Arabic letter).
+    $b = Kv 'debug-bubble'
+    if ($b.open -ne 'true') { throw 'no typing bubble' }
+    [Mouse]::Click([int]$b.x + 20, [int]$b.y + [int]([int]$b.h / 2), $false)
+    Start-Sleep -Milliseconds 300
+    $edit = [IntPtr][long]$b.edit
+    foreach ($ch in $text.ToCharArray()) { [Shell]::PostMessage($edit, 0x0102, [IntPtr][int]$ch, [IntPtr]1) | Out-Null }
+    Start-Sleep -Milliseconds 200
+    if ($Enter) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 300 }
+}
+
 function Stage-Menu {
     Step 'start engine' { Start-Engine }
     Step 'right-click opens the menu with the six buttons' {
@@ -765,6 +784,91 @@ function Stage-Menu {
         $after = State
         if ([math]::Abs($after.x - $before.x) -gt 4 -or [math]::Abs($after.y - $before.y) -gt 4) { throw "she moved from ($($before.x),$($before.y)) to ($($after.x),$($after.y))" }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'a 25-minute timer runs with its ring' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer-5,timer-15,timer-25,timer-45,timer-custom,back') { throw "timer options: $ids" }
+        Press 'timer-25'
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 1490 -or [int]$t.remaining -gt 1500) { throw "timer: running=$($t.running) remaining=$($t.remaining)" }
+        Start-Sleep -Milliseconds 800
+        Screenshot 'timer-ring.png' | Out-Null
+    }
+    Step 'the timer menu offers to stop it' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer-cancel,back') { throw "running timer options: $ids" }
+        Press 'timer-cancel'
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running' }
+    }
+    Step 'a typed time in Arabic digits' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Screenshot 'timer-bubble.png' | Out-Null
+        Type-InBubble ([string][char]0x0662) -Enter
+        Start-Sleep -Milliseconds 300
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 110 -or [int]$t.remaining -gt 120) { throw "typed timer: running=$($t.running) remaining=$($t.remaining)" }
+        if ((Kv 'debug-bubble').open -ne 'false') { throw 'the bubble is still open' }
+    }
+    Step 'when it ends she shows it and a poke dismisses it' {
+        Send '{"type":"cmd","name":"timer","args":{"seconds":"3"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'timer-done' } 6000 'timer-done face' | Out-Null
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running after it ended' }
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $false)
+        Wait-State { param($st) $st.expression -notin 'timer-done' } 2500 'timer face dismissed by a poke' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'do not disturb for 30 minutes' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'dnd-30,dnd-60,dnd-120,dnd-on,back') { throw "dnd options: $ids" }
+        Press 'dnd-30'
+        Wait-State { param($st) $st.expression -eq 'dnd' } 2000 'dnd face' | Out-Null
+        if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd is off' }
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $end = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' during do-not-disturb" }
+        }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'dnd-off,back') { throw "dnd-on options: $ids" }
+        Press 'dnd-off'
+        Wait-State { param($st) $st.expression -eq 'idle' } 2000 'dnd face gone' | Out-Null
+    }
+    Step 'fullscreen while DND is on keeps both' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        Press 'dnd-on'
+        Wait-State { param($st) $st.expression -eq 'dnd' } 2000 'dnd face' | Out-Null
+        $w = Start-TestWindow 'borderless'
+        try { Wait-State { param($st) $st.hidden } 4000 'hidden over fullscreen' | Out-Null }
+        finally { $w.Kill() }
+        Wait-State { param($st) -not $st.hidden } 5000 'back after fullscreen' | Out-Null
+        if ((State).expression -ne 'dnd') { throw "expression after fullscreen: $((State).expression)" }
+        if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd turned off by fullscreen' }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'dnd'
+        Press 'dnd-off'
     }
     Step 'the menu costs nothing at rest' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
