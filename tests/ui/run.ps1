@@ -182,7 +182,7 @@ using System;
 using System.Runtime.InteropServices;
 public static class Shell {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
-    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     public static void TaskbarCreated() { PostMessage((IntPtr)0xFFFF, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero); }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
@@ -934,16 +934,33 @@ function Stage-Menu {
         $edit = [IntPtr][long](Kv 'debug-bubble').edit
         [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
     }
-    Step 'the menu costs nothing at rest' {
-        $i = Info
-        Write-Host ("    working set before opening: {0:N1} MB (managed heap {1} MB)" -f ((State).workingSetBytes / 1MB), $i.gcHeapMB)
+    Step 'the menu and the bubble cost nothing, again and again' {
+        # Absolute RAM at rest is checked by the perf stage; on the runner's software renderer, memory after this
+        # busy stage is not "at rest", so here the check is what the menu adds and that repeating it does not grow.
+        $before = (State).workingSetBytes
+        Write-Host ("    working set before: {0:N1} MB (managed heap {1} MB)" -f ($before / 1MB), (Info).gcHeapMB)
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
-        Start-Sleep -Seconds 10
-        $ws = (State).workingSetBytes
-        Write-Host ("    working set with the menu open: {0:N1} MB" -f ($ws / 1MB))
-        if ($ws -ge 60MB) { throw "working set $ws" }
+        Start-Sleep -Seconds 3
+        $open = (State).workingSetBytes
+        Write-Host ("    with the menu open: {0:N1} MB" -f ($open / 1MB))
+        if ($open - $before -gt 5MB) { throw ("the open menu adds {0:N1} MB" -f (($open - $before) / 1MB)) }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        $first = (State).workingSetBytes
+        foreach ($i in 1..15) {
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            Press 'activity'
+            Press 'back'
+            Press 'note'
+            Start-Sleep -Milliseconds 150
+            $edit = [IntPtr][long](Kv 'debug-bubble').edit
+            if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+            Start-Sleep -Milliseconds 150
+        }
+        Start-Sleep -Seconds 3
+        $after = (State).workingSetBytes
+        Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
+        if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
     }
     Stop-Engine
 }
@@ -992,7 +1009,7 @@ function Stage-Life {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Wait-State { param($st) $st.expression -eq 'music' } 4000 'music face' | Out-Null
         $small = @{}
-        $end = (Get-Date).AddSeconds(12)
+        $end = (Get-Date).AddSeconds(25)   # a Breathe keeps her busy 8 s; two in a row happen
         while ((Get-Date) -lt $end) {
             Start-Sleep -Milliseconds 400
             $m = (State).motion
@@ -1078,7 +1095,7 @@ function Stage-Life {
             while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('salam '); Start-Sleep -Milliseconds 150 }
             if ((Life).typing -ne 'true') { throw 'typing not detected' }
             $far = $false
-            $deadline = (Get-Date).AddSeconds(8)
+            $deadline = (Get-Date).AddSeconds(12)   # a long wander away takes up to 8 s after the first tick
             do {
                 [System.Windows.Forms.SendKeys]::SendWait('x'); Start-Sleep -Milliseconds 300
                 $st = State
