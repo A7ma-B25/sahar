@@ -411,12 +411,31 @@ function Stage-Events {
         Set-Content -Path (Join-Path $Out 'tray-taskbar.json') -Value $json
         if ($json -match 'Sahar') { $found = $true; Write-Host '    found on the taskbar' }
         if (-not $found) {
-            $open = (& agent-desktop --headed open-system-surface --surface system-tray-overflow 2>&1) -join "`n"
-            Start-Sleep -Milliseconds 500
-            $json = (& agent-desktop snapshot --surface system-tray-overflow -i --compact 2>&1) -join "`n"
-            Set-Content -Path (Join-Path $Out 'tray-overflow.json') -Value "$open`n$json"
-            if ($json -match 'Sahar') { $found = $true; Write-Host '    found in the overflow' }
-            & agent-desktop --headed press escape 2>&1 | Out-Null
+            # Open the overflow flyout through its "Show Hidden Icons" button, then read it.
+            $bar = $json | ConvertFrom-Json
+            $chevron = $null
+            function Find-Node($n) {
+                if ($n.native_id.value -eq 'SystemTrayIcon' -or $n.name -eq 'Show Hidden Icons') { return $n }
+                foreach ($c in $n.children) { $r = Find-Node $c; if ($r) { return $r } }
+            }
+            if ($bar.ok) { $chevron = Find-Node $bar.data.tree }
+            $log = @()
+            if ($chevron) {
+                $log += (& agent-desktop click "$($chevron.ref_id)" 2>&1) -join ''
+                Start-Sleep -Milliseconds 800
+                foreach ($surface in 'system-tray-overflow', 'focused', 'popover') {
+                    $t = (& agent-desktop snapshot --surface $surface -i --compact 2>&1) -join ''
+                    $log += "--- $surface`n$t"
+                    if ($t -match 'Sahar') { $found = $true; Write-Host "    found in the overflow ($surface)"; break }
+                }
+                if (-not $found) {
+                    $t = (& agent-desktop list-windows 2>&1) -join ''
+                    $log += "--- list-windows`n$t"
+                }
+                & agent-desktop --headed press escape 2>&1 | Out-Null
+            }
+            else { $log += 'no Show Hidden Icons button' }
+            Set-Content -Path (Join-Path $Out 'tray-overflow.json') -Value ($log -join "`n")
         }
         if (-not $found) { throw 'no "Sahar" in the system tray or its overflow' }
     }
