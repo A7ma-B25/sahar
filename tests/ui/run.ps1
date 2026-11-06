@@ -187,6 +187,15 @@ function Info {
     $h
 }
 
+function Wait-Overlay([string]$visible, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do {
+        if ((Info).overlayVisible -eq $visible) { return }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    throw $what
+}
+
 function Save-Log {
     $log = Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'
     if (Test-Path $log) { Copy-Item $log (Join-Path $Out 'engine.log') -Force }
@@ -436,8 +445,7 @@ function Stage-Events {
                 throw
             }
             finally { Screenshot 'events-fullscreen.png' | Out-Null }
-            Start-Sleep -Milliseconds 800
-            if ((Info).overlayVisible -ne 'false') { throw 'overlay still visible while hidden (a dot over the fullscreen app)' }
+            Wait-Overlay 'false' 2000 'overlay still visible while hidden (a dot over the fullscreen app)'
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
         $back = Wait-State { param($st) -not $st.hidden } 2000 'shown again'
@@ -458,9 +466,8 @@ function Stage-Events {
         $r = Send '{"type":"cmd","name":"hide","args":{"minutes":"60"}}'
         if (-not $r.ok) { throw "hide not ok: $($r.error)" }
         Wait-State { param($st) $st.hidden } 1000 'hidden by hide' | Out-Null
-        Start-Sleep -Milliseconds 800
-        if ((Info).overlayVisible -ne 'false') { throw 'overlay still visible after hide' }
-        $r = Send '{"type":"cmd","name":"show"}'
+        try { Wait-Overlay 'false' 2000 'overlay still visible after hide' }
+        finally { $r = Send '{"type":"cmd","name":"show"}' }
         if (-not $r.ok) { throw "show not ok: $($r.error)" }
         Wait-State { param($st) -not $st.hidden } 1000 'shown by show' | Out-Null
     }
