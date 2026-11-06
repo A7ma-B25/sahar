@@ -41,10 +41,10 @@ public class LifeChooserTests
     }
 
     [Fact]
-    public void Choose_Typing_Video_Away_Hidden_Busy_None()
+    public void Choose_Typing_Away_Hidden_Busy_None()
     {
         var rng = new Random(5);
-        foreach (var c in new[] { Ctx(typing: true), Ctx(video: true), Ctx(away: true), Ctx(hidden: true), Ctx(busy: true) })
+        foreach (var c in new[] { Ctx(typing: true), Ctx(away: true), Ctx(hidden: true), Ctx(busy: true) })
             for (int i = 0; i < 50; i++) Assert.Equal(LifeAction.None, LifeChooser.Choose(c, _ => 1f, rng));
     }
 
@@ -53,7 +53,7 @@ public class LifeChooserTests
     {
         var d = Draw(Ctx(), 500);
         Assert.Equal(0, d[LifeAction.None]);
-        Assert.True(d[LifeAction.Wander] > d[LifeAction.PeekTaskbar]);
+        Assert.True(d[LifeAction.Moment] > d[LifeAction.PeekTaskbar]);
     }
 
     [Fact]

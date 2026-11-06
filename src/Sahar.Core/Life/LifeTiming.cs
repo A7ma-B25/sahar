@@ -3,7 +3,11 @@ using Sahar.Core.Settings;
 namespace Sahar.Core.Life;
 
 /// <summary>Something Sahar can choose to do on her own.</summary>
-public enum LifeAction { None, Wander, PeekTaskbar, PerchWindow, CelebrateLoop, SleepInCorner }
+public enum LifeAction
+{
+    None, Wander, PeekTaskbar, PerchWindow, CelebrateLoop, SleepInCorner,
+    Flight, PlayWithMoon, Curious, Dance, Breathe, OrbitCursor, Moment,
+}
 
 /// <summary>How long until her next own action, by activity level (spec §6).</summary>
 public static class LifeTiming
