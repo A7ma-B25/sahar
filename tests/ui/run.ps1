@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -744,7 +744,7 @@ function Stage-Menu {
         [Mouse]::Click($c[0], $c[1], $true)
         $m = Wait-Menu 'true' 2000 'menu open after a right-click'
         $ids = ($m.buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,note,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if ($ids -ne 'timer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
         Start-Sleep -Milliseconds 600
         Screenshot 'menu-open.png' | Out-Null
@@ -1116,6 +1116,86 @@ function Stage-Menu {
     Stop-Engine
 }
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Clip {
+    [DllImport("user32.dll")] static extern bool OpenClipboard(IntPtr h);
+    [DllImport("user32.dll")] static extern bool CloseClipboard();
+    [DllImport("user32.dll")] static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] static extern IntPtr SetClipboardData(uint f, IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterClipboardFormat(string n);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalAlloc(uint f, UIntPtr n);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalLock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern bool GlobalUnlock(IntPtr h);
+    static IntPtr Text(string t) {
+        var h = GlobalAlloc(2, (UIntPtr)((t.Length + 1) * 2));
+        var p = GlobalLock(h); var b = System.Text.Encoding.Unicode.GetBytes(t + "\0"); Marshal.Copy(b, 0, p, b.Length); GlobalUnlock(h); return h;
+    }
+    /// Copies text the way a password manager does: marked "don't monitor".
+    public static bool CopyPrivate(string t) {
+        for (int i = 0; i < 10 && !OpenClipboard(IntPtr.Zero); i++) System.Threading.Thread.Sleep(50);
+        EmptyClipboard();
+        SetClipboardData(13, Text(t));
+        SetClipboardData(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), GlobalAlloc(2, (UIntPtr)4));
+        return CloseClipboard();
+    }
+}
+'@
+
+function Clip-Count { [int](Kv 'debug-clipboard').count }
+
+function Stage-Senses {
+    $clipJson = Join-Path $env:APPDATA 'Sahar\clipboard.json'
+    Remove-Item $clipJson -ErrorAction SilentlyContinue
+    Step 'start engine' { Start-Engine }
+    Step 'copying text shows the copied face and lands in the history' {
+        Set-Clipboard -Value 'salam sahar'
+        Wait-State { param($st) $st.expression -eq 'copied' } 2500 'copied face' | Out-Null
+        $c = Kv 'debug-clipboard'
+        if ([int]$c.count -ne 1) { throw "history count $($c.count)" }
+        if ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.first)) -ne 'salam sahar') { throw 'first item is wrong' }
+    }
+    Step 'a password-manager style copy is never kept' {
+        Start-Sleep -Seconds 1
+        [Clip]::CopyPrivate('secret-123') | Out-Null
+        Start-Sleep -Milliseconds 800
+        if ((Clip-Count) -ne 1) { throw 'a private copy was kept' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'secret-123') { throw 'the private text reached the log' }
+    }
+    Step 'thirty quick copies keep twenty and one face' {
+        foreach ($i in 1..30) { Set-Clipboard -Value "item $i"; Start-Sleep -Milliseconds 60 }
+        Start-Sleep -Milliseconds 800
+        if ((Clip-Count) -ne 20) { throw "history count $(Clip-Count)" }
+        $faces = @(Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') | Where-Object { $_ -match 'clipboard: copied face' }).Count
+        if ($faces -gt 2) { throw "$faces copied faces" }
+    }
+    Step 'picking an item puts it back on the clipboard' {
+        Send '{"type":"cmd","name":"clipboard-pick","args":{"index":"3"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Get-Clipboard) -ne 'item 27') { throw "clipboard holds '$(Get-Clipboard)'" }
+        if ((Clip-Count) -ne 20) { throw 'picking added a new item' }
+    }
+    Step 'the menu has the clipboard button and its list' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        Press 'clipboard'
+        Start-Sleep -Milliseconds 500
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 20) { throw "list open=$($l.open) lines=$($l.lines)" }
+        Screenshot 'clipboard-list.png' | Out-Null
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'clear all empties it' {
+        Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
+        if ((Clip-Count) -ne 0) { throw 'not cleared' }
+        if (@((Get-Content $clipJson -Raw) | ConvertFrom-Json).Count -ne 0) { throw 'clipboard.json still holds items' }
+    }
+    Stop-Engine
+}
+
 function Stage-Life {
     $settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
     $lifePath = Join-Path $env:APPDATA 'Sahar\life.json'
@@ -1334,6 +1414,7 @@ try {
             'perf' { Stage-Perf }
             'life' { Stage-Life }
             'menu' { Stage-Menu }
+            'senses' { Stage-Senses }
         }
     }
 }
