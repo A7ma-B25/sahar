@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -426,6 +426,28 @@ function Stage-Events {
     Stop-Engine
 }
 
+function Stage-Perf {
+    Step 'start engine' { Start-Engine }
+    Step 'memory at rest under 60 MB' {
+        Start-Sleep -Seconds 30
+        $ws = (State).workingSetBytes
+        Write-Host ("    working set after 30 s at rest: {0:N1} MB" -f ($ws / 1MB))
+        if ($ws -ge 60MB) { throw "working set $ws bytes is over 60 MB" }
+    }
+    Step 'cpu at rest (reported only)' {
+        $p = Get-Process -Id $script:engine.Id
+        $before = $p.TotalProcessorTime
+        $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        Start-Sleep -Seconds 20
+        $p.Refresh()
+        $used = ($p.TotalProcessorTime - $before).TotalMilliseconds
+        $pct = 100 * $used / $clock.Elapsed.TotalMilliseconds / [Environment]::ProcessorCount
+        Write-Host ("    cpu over 20 s: {0:N2} % of the machine ({1:N0} ms on {2} cores)" -f $pct, $used, [Environment]::ProcessorCount)
+        if ($pct -ge 0.5) { Write-Host '::warning::engine CPU at rest is over 0.5 % on the runner (software rendering)' }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -435,6 +457,7 @@ try {
             'gallery' { Stage-Gallery }
             'motion' { Stage-Motion }
             'events' { Stage-Events }
+            'perf' { Stage-Perf }
         }
     }
 }
