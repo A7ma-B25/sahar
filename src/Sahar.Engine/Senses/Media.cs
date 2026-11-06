@@ -53,7 +53,7 @@ internal sealed class Media
         {
             Log.Write($"media poll failed: {e.Message}");
         }
-        foreach (var e in _edges.Update(playing, video)) _post(e);
+        foreach (var e in _edges.Update(playing, video, fromBrowser: false, browserInFront: false)) _post(e);
         MusicPlaying = playing && !video;
     }
 }

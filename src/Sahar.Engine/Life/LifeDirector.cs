@@ -38,6 +38,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     private LifeAction? _forceNext;
     private bool _sleepingForAway, _ownSleep;
     private POINT _cursor;
+    private DateTimeOffset? _oldKey;
     private DateTimeOffset _lastSave = DateTimeOffset.Now;
     private DateOnly _lastDecay = DateOnly.FromDateTime(DateTime.Now);
     private ActivityLevel _level;
@@ -105,7 +106,9 @@ internal sealed unsafe class LifeDirector : IDisposable
         bool moved = cursor.X != _cursor.X || cursor.Y != _cursor.Y;
         _cursor = cursor;
         _routine.Tick(now, sinceInput < TimeSpan.FromMinutes(1));
-        bool typing = _typing.Update(now, sinceInput, moved);
+        // (old heuristic, kept only until the Raw Input fix lands)
+        if (sinceInput <= TimeSpan.FromSeconds(1.5) && !moved) _oldKey = now - sinceInput;
+        bool typing = _typing.Update(now, _oldKey is { } k ? now - k : TimeSpan.MaxValue);
         if (typing != Typing) { Typing = typing; TypingChanged?.Invoke(typing); }
         if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
