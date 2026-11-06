@@ -185,7 +185,7 @@ internal sealed unsafe class LifeDirector : IDisposable
                 if (flown is { } fp) Log.Write($"life: Flight {fp}{Why(context)}");
                 else
                 {
-                    Log.Write($"life: no flight fits here, Wander instead{Why(context)}");
+                    Log.Write($"life: Wander (no flight fits here){Why(context)}");
                     action = LifeAction.Wander;
                     _motion.Play(MotionKind.Wander);
                 }

@@ -163,6 +163,14 @@ public class FlightPlanTests
     }
 
     [Fact]
+    public void Plan_FromASeatOnTheTaskbar_StillFlies()
+    {
+        // Sitting on the taskbar edge (or peeking, or on a window top) her body pokes out of the work area.
+        Assert.NotNull(FlightPath.Plan(FlightPattern.TaskbarPatrol, Body(1700, 990), Work, 1f, []));
+        Assert.NotNull(FlightPath.Plan(FlightPattern.GlideHigh, Body(1700, 1010), Work, 1f, []));
+    }
+
+    [Fact]
     public void Plan_LoopsEndWhereTheyStarted_SoAPointerThereIsFine() =>
         Assert.NotNull(FlightPath.Plan(FlightPattern.FigureEight, Body(900, 400), Work, 1f, [new(920, 420, 40, 40)]));
 
