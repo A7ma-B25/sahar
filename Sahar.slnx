@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Sahar.Core/Sahar.Core.csproj" />
+    <Project Path="src/Sahar.Engine/Sahar.Engine.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sahar.Core.Tests/Sahar.Core.Tests.csproj" />
+  </Folder>
+</Solution>

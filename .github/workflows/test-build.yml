@@ -1,0 +1,85 @@
+name: test-build
+
+# Builds the portable test build after every check passes. The zip is always kept as a workflow artifact;
+# it is published as the "test-build" pre-release only on a v0.1.*-test tag or when asked to (publish: true).
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the "test-build" pre-release
+        type: boolean
+        default: false
+  push:
+    tags: ["v0.1.*-test"]
+    # Until this workflow is on main (dispatch needs it there), packaging changes on v1 branches build the zip
+    # as an artifact only; branch pushes never publish.
+    branches: ["v1/**"]
+    paths: ["packaging/**", ".github/workflows/test-build.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: test-build
+  cancel-in-progress: false
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test tests/Sahar.Core.Tests -c Release
+
+  windows:
+    needs: core
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-desktop
+        run: npm i -g agent-desktop@1.2.0
+      - name: Publish engine (Native AOT)
+        run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+      - name: UI tests (all stages)
+        shell: pwsh
+        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf
+      - name: Package
+        shell: pwsh
+        run: |
+          $dir = 'artifacts/Sahar-0.1.0-test-win-x64'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item artifacts/engine/Sahar.Engine.exe $dir
+          Copy-Item packaging/README-test-build.txt $dir
+          Compress-Archive -Path "$dir/*" -DestinationPath artifacts/Sahar-0.1.0-test-win-x64.zip -Force
+          $names = (Get-ChildItem $dir).Name | Sort-Object
+          Write-Host "zip contains: $($names -join ', ')"
+          if (($names -join ',') -ne 'README-test-build.txt,Sahar.Engine.exe') { throw "unexpected zip contents: $names" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sahar-0.1.0-test-win-x64
+          path: artifacts/Sahar-0.1.0-test-win-x64.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui
+          path: artifacts/ui/
+      - name: Publish the "test-build" pre-release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete test-build --yes --cleanup-tag 2>$null
+          gh release create test-build artifacts/Sahar-0.1.0-test-win-x64.zip artifacts/ui/gallery.png --prerelease `
+            --target $env:GITHUB_SHA --title "Sahar 0.1.0 test build" `
+            --notes "Portable test build ($env:GITHUB_SHA). Download the zip, extract it, run Sahar.Engine.exe. See README-test-build.txt inside."

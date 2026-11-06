@@ -1,0 +1,114 @@
+{
+ "Calm": {
+  "top": "#FFFFFF",
+  "mid": "#F1ECFF",
+  "bottom": "#CBC1F0",
+  "glow": "#B9B0FF",
+  "bud": "#C9B8FF",
+  "blush": "#FFB8A0"
+ },
+ "Happy": {
+  "top": "#FFFFFF",
+  "mid": "#FFF0EA",
+  "bottom": "#FFC9B5",
+  "glow": "#FFB08A",
+  "bud": "#FFB08A",
+  "blush": "#FF9F86"
+ },
+ "Focus": {
+  "top": "#FFFFFF",
+  "mid": "#EAF2FF",
+  "bottom": "#AFC9F2",
+  "glow": "#6F9BEA",
+  "bud": "#7FB0FF",
+  "blush": "#C9B8F0"
+ },
+ "Excited": {
+  "top": "#FFFFFF",
+  "mid": "#FFF6DE",
+  "bottom": "#FFD889",
+  "glow": "#FFC24A",
+  "bud": "#FFD24A",
+  "blush": "#FFA27A"
+ },
+ "Sleepy": {
+  "top": "#E9E6F7",
+  "mid": "#C9C3E6",
+  "bottom": "#8E88B8",
+  "glow": "#5A5490",
+  "bud": "#6C66A0",
+  "blush": "#B6A6D6"
+ },
+ "Hot": {
+  "top": "#FFFFFF",
+  "mid": "#FFE6DA",
+  "bottom": "#FFAE8E",
+  "glow": "#FF8A5C",
+  "bud": "#FF9466",
+  "blush": "#FF8F78"
+ },
+ "Mystic": {
+  "top": "#B7A8F0",
+  "mid": "#7C69C9",
+  "bottom": "#3E2E86",
+  "glow": "#7B5CFF",
+  "bud": "#C6B5FF",
+  "blush": "#9B7FE0"
+ },
+ "Alert": {
+  "top": "#FFFFFF",
+  "mid": "#FFF0E6",
+  "bottom": "#FFC7A6",
+  "glow": "#F2A06E",
+  "bud": "#F2A06E",
+  "blush": "#FF9F86"
+ },
+ "Dim": {
+  "top": "#F1EEF8",
+  "mid": "#DCD6EE",
+  "bottom": "#ABA3CC",
+  "glow": "#E5484D",
+  "bud": "#B0A8CC",
+  "blush": "#C9B8E0"
+ },
+ "Error": {
+  "top": "#FFFFFF",
+  "mid": "#FFEDEE",
+  "bottom": "#F4B5B8",
+  "glow": "#E5484D",
+  "bud": "#E5484D",
+  "blush": "#FF9F9F"
+ },
+ "Online": {
+  "top": "#FFFFFF",
+  "mid": "#E9FBF8",
+  "bottom": "#A9E4DC",
+  "glow": "#5CC9BC",
+  "bud": "#5CC9BC",
+  "blush": "#FFB0A0"
+ },
+ "Cold": {
+  "top": "#FFFFFF",
+  "mid": "#EEF7FF",
+  "bottom": "#BFDDF7",
+  "glow": "#8CC8F2",
+  "bud": "#8CC8F2",
+  "blush": "#C9D8F0"
+ },
+ "Love": {
+  "top": "#FFFFFF",
+  "mid": "#FFEFF4",
+  "bottom": "#FFC2D3",
+  "glow": "#FF8FA3",
+  "bud": "#FF8FA3",
+  "blush": "#FF8FA3"
+ },
+ "Night": {
+  "top": "#E9E4FF",
+  "mid": "#B6A9EC",
+  "bottom": "#6E5CC0",
+  "glow": "#9C86FF",
+  "bud": "#FFE7A8",
+  "blush": "#C9B8F0"
+ }
+}
