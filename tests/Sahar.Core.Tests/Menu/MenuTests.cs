@@ -18,7 +18,7 @@ public class MenuTests
     {
         var body = new RectF(900, 500, 80, 80);
         var slots = RadialLayout.Place(MenuItems.Main, body, Work, 1f);
-        Assert.Equal(6, slots.Count);
+        Assert.Equal(MenuItems.Main.Count, slots.Count);
         var c = Centre(body);
         float r0 = Vector2.Distance(slots[0].Centre, c);
         Assert.True(r0 >= 90);
@@ -40,7 +40,7 @@ public class MenuTests
     {
         var body = new RectF(x, y, 80 * dpi, 80 * dpi);
         var slots = RadialLayout.Place(MenuItems.Main, body, Work, dpi);
-        Assert.Equal(6, slots.Count);
+        Assert.Equal(MenuItems.Main.Count, slots.Count);
         Assert.All(slots, s => Assert.True(Inside(s, Work, dpi), $"{s.Id} at {s.Centre} is off screen"));
     }
 
@@ -50,7 +50,7 @@ public class MenuTests
         var body = new RectF(1840, 480, 80, 80);
         var c = Centre(body);
         var slots = RadialLayout.Place(MenuItems.Main, body, Work, 1f);
-        Assert.Equal(6, slots.Count);
+        Assert.Equal(MenuItems.Main.Count, slots.Count);
         Assert.All(slots, s => Assert.True(s.Centre.X < c.X, $"{s.Id} is on the outer side"));
     }
 
@@ -76,7 +76,7 @@ public class MenuTests
 
     [Fact]
     public void MenuItems_Main_IsExactlyTheSixWorkingButtons() =>
-        Assert.Equal(["timer", "note", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
+        Assert.Equal(["timer", "note", "clipboard", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
 
     [Fact]
     public void MenuItems_Options_TimerRunning_OffersCancel()
