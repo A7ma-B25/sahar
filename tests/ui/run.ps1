@@ -369,6 +369,21 @@ function Stage-Motion {
         Screenshot 'motion-throw-rest.png' | Out-Null
         Assert-BodyInWork $st 'after throw'
     }
+    Step 'her eyes follow the mouse while she hovers' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        $st = State
+        $cy = [int]($st.y + $st.height / 2)
+        & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]($st.x - 200), $cy) | Out-Null
+        Start-Sleep -Milliseconds 700
+        $left = (Info).faceOffsetX
+        & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]($st.x + $st.width + 200), $cy) | Out-Null
+        Start-Sleep -Milliseconds 700
+        $right = (Info).faceOffsetX
+        Write-Host "    face offset: left $left, right $right"
+        if ($null -eq $left -or [double]$left -ge 0) { throw "eyes did not look left ($left)" }
+        if ($null -eq $right -or [double]$right -le 0) { throw "eyes did not look right ($right)" }
+    }
     Step 'click pokes her' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
