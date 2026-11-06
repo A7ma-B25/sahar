@@ -160,7 +160,11 @@ if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$tr
 [System.Windows.Forms.Application]::Run(`$f)
 "@
     $p = Start-Process -FilePath 'pwsh' -ArgumentList '-NoProfile', '-Command', $script -PassThru
-    Start-Sleep -Milliseconds 1500
+    # Wait until the window really exists (a cold pwsh + WinForms start can take several seconds).
+    $deadline = (Get-Date).AddSeconds(15)
+    do { Start-Sleep -Milliseconds 200; $p.Refresh() } while ($p.MainWindowHandle -eq 0 -and (Get-Date) -lt $deadline)
+    if ($p.MainWindowHandle -eq 0) { throw "test window '$kind' did not appear within 15 s" }
+    Start-Sleep -Milliseconds 300
     # Windows refuses a new process the foreground while the runner's terminal has it; a real click on the
     # window takes it (Sahar's overlay is click-through, and she sits bottom-right, away from this point).
     & agent-desktop --headed mouse-click --xy '120,300' 2>&1 | Out-Null
