@@ -155,7 +155,11 @@ Add-Type -AssemblyName System.Windows.Forms
 `$f.Text = 'Sahar test $kind'
 `$f.BackColor = 'DarkSlateBlue'
 if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$true }
-`$f.WindowState = 'Maximized'
+if ('$kind' -eq 'typing') {
+    `$f.StartPosition = 'Manual'; `$f.Location = New-Object System.Drawing.Point(150, 120); `$f.Size = New-Object System.Drawing.Size(560, 380)
+    `$t = New-Object System.Windows.Forms.TextBox; `$t.Multiline = `$true; `$t.Dock = 'Fill'; `$t.Font = New-Object System.Drawing.Font('Segoe UI', 14)
+    `$f.Controls.Add(`$t)
+} else { `$f.WindowState = 'Maximized' }
 `$f.Add_Shown({ `$f.Activate() })
 [System.Windows.Forms.Application]::Run(`$f)
 "@
@@ -592,6 +596,46 @@ function Stage-Life {
         Write-Host "    Wander weight $(Weight $before 'Wander') -> $w; actions $($before.actions) -> $($after.actions)"
         if ($w -ge 1.0) { throw "Wander weight did not drop ($w)" }
         if ([int]$after.actions -ne [int]$before.actions) { throw 'she started another own action right after being grabbed' }
+    }
+    Step 'she steps away from where you type' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'typing'
+        try {
+            [System.Windows.Forms.SendKeys]::SendWait('a')
+            Start-Sleep -Milliseconds 400
+            $spot = (Life).spot
+            if (-not $spot -or $spot -eq 'none') { throw "no typing spot ($spot)" }
+            $sx, $sy = ($spot -split ',') | ForEach-Object { [double]$_ }
+            $st = State
+            $ox = $st.x - (Send '{"type":"cmd","name":"state"}').state.x   # 0, keeps $st fresh
+            # Put her body centre 40 px right of the typing spot (canvas top-left = body centre - offset).
+            $bodyCx = $st.x + $st.width / 2; $bodyCy = $st.y + $st.height / 2
+            $pose = Send '{"type":"cmd","name":"state"}'
+            $canvasDx = $bodyCx - [double](Info).canvasX; $canvasDy = $bodyCy - [double](Info).canvasY
+            $px = [int]($sx + 40 - $canvasDx); $py = [int]($sy - $canvasDy)
+            Send ('{"type":"cmd","name":"pose","args":{"x":"' + $px + '","y":"' + $py + '"}}') | Out-Null
+            Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+            $st = State
+            $d0 = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
+            Write-Host "    typing spot $spot, her distance before typing $([int]$d0) px"
+            # Type for 3 s.
+            $end = (Get-Date).AddSeconds(3)
+            while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('salam '); Start-Sleep -Milliseconds 150 }
+            if ((Life).typing -ne 'true') { throw 'typing not detected' }
+            $far = $false
+            $deadline = (Get-Date).AddSeconds(8)
+            do {
+                [System.Windows.Forms.SendKeys]::SendWait('x'); Start-Sleep -Milliseconds 300
+                $st = State
+                $d = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
+                if ($st.motion -notin 'Wander', 'Hover') { throw "motion '$($st.motion)' while typing" }
+                if ($d -gt 150 -and $st.motion -eq 'Hover') { $far = $true }
+            } while (-not $far -and (Get-Date) -lt $deadline)
+            Screenshot 'life-typing.png' | Out-Null
+            Write-Host "    her distance after typing $([int]$d) px"
+            if (-not $far) { throw "still $([int]$d) px from the typing spot" }
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
     }
     Step 'activity level is saved and survives a restart' {
         $r = Send '{"type":"cmd","name":"set-activity","args":{"level":"Lively"}}'
