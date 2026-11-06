@@ -1230,6 +1230,22 @@ function Stage-Senses {
         if (-not $r.ok) { throw "debug-cpu not ok: $($r.error)" }
         Wait-State { param($st) $st.expression -eq 'hot' } 3000 'hot face' | Out-Null
     }
+    Step 'camera or microphone on: quiet, only small things' {
+        $r = Send '{"type":"cmd","name":"debug-cameramic","args":{"on":"true"}}'
+        if (-not $r.ok) { throw "debug-cameramic not ok: $($r.error)" }
+        if ((Life).quiet -ne 'true') { throw 'not quiet with the camera on' }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $end = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' while the camera is on" }
+        }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Send '{"type":"cmd","name":"debug-cameramic","args":{"on":"false"}}' | Out-Null
+        if ((Life).quiet -ne 'false') { throw 'still quiet after the camera went off' }
+    }
     Step 'clear all empties it' {
         Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
         if ((Clip-Count) -ne 0) { throw 'not cleared' }
