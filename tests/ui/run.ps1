@@ -171,7 +171,8 @@ if ('$kind' -eq 'typing') {
     Start-Sleep -Milliseconds 300
     # Windows refuses a new process the foreground while the runner's terminal has it; a real click on the
     # window takes it (Sahar's overlay is click-through, and she sits bottom-right, away from this point).
-    & agent-desktop --headed mouse-click --xy '120,300' 2>&1 | Out-Null
+    $click = if ($kind -eq 'typing') { '430,320' } else { '120,300' }   # inside the window
+    & agent-desktop --headed mouse-click --xy $click 2>&1 | Out-Null
     Start-Sleep -Milliseconds 300
     $p
 }
@@ -606,6 +607,8 @@ function Stage-Life {
             $spot = (Life).spot
             if (-not $spot -or $spot -eq 'none') { throw "no typing spot ($spot)" }
             $sx, $sy = ($spot -split ',') | ForEach-Object { [double]$_ }
+            # The typing window is at (150,120) 560×380: a spot inside it is the text box's real caret.
+            if ($sx -lt 150 -or $sx -gt 710 -or $sy -lt 120 -or $sy -gt 500) { throw "typing spot $spot is not the text box caret" }
             $st = State
             # Put her body centre 40 px right of the typing spot (canvas top-left = body centre - offset).
             $bodyCx = $st.x + $st.width / 2; $bodyCy = $st.y + $st.height / 2
