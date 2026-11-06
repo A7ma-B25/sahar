@@ -1,5 +1,7 @@
 using System.Numerics;
+using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
+using Sahar.Core.Life;
 using Sahar.Core.Motion;
 using Sahar.Engine.Host;
 using Sahar.Engine.Render;
@@ -26,6 +28,7 @@ internal sealed class MotionController
     private readonly Ticker _ticker;
     private readonly Action<Vector2> _moveCanvasTo;
     private readonly Action<string, bool> _express;   // key, transient (returns to the brain's face after a moment)
+    private readonly Action<Eyes, Mouth, float> _face;   // a passing face (seconds), back to her expression after
     private readonly Wander _wander = new(Environment.TickCount);
     private readonly Random _rng = new();
 
@@ -56,8 +59,10 @@ internal sealed class MotionController
     /// <summary>Sitting or sleeping: no idle bob.</summary>
     public bool Still { get; private set; }
 
-    public MotionController(SaharVisual v, ExpressionPlayer player, Ticker ticker, Action<Vector2> moveCanvasTo, Action<string, bool> express)
+    public MotionController(SaharVisual v, ExpressionPlayer player, Ticker ticker, Action<Vector2> moveCanvasTo, Action<string, bool> express,
+        Action<Eyes, Mouth, float> face)
     {
+        _face = face;
         _v = v;
         _player = player;
         _ticker = ticker;
@@ -101,7 +106,12 @@ internal sealed class MotionController
             case MotionKind.FullscreenHide: Reset(k); StartCorner(sleep: false); break;
             case MotionKind.PerchWindow: Reset(k); StartPerchWindow(); break;
             case MotionKind.CelebrateLoop: Reset(k); StartCelebrate(); break;
-            default: return false;   // 13–25 arrive in Plan 2
+            case MotionKind.PlayWithMoon: Reset(k); StartPlayWithMoon(); break;
+            case MotionKind.Curious: Reset(k); StartCurious(); break;
+            case MotionKind.Dance: Reset(k); StartDance(); break;
+            case MotionKind.Breathe: Reset(k); StartBreathe(); break;
+            case MotionKind.OrbitCursor: Reset(k); StartOrbitCursor(); break;
+            default: return false;   // the rest arrive in later plans
         }
         UpdateTicker();
         return true;
@@ -122,6 +132,8 @@ internal sealed class MotionController
         root.RotationAngleInDegrees = 0;
         root.Scale = Vector3.One;
         root.Clip = null;
+        _v.Character.StopAnimation("RotationAngleInDegrees");
+        _v.Character.RotationAngleInDegrees = 0;
         _v.Face.Container.Offset = Vector3.Zero;
         RestoreBob();
     }
@@ -574,6 +586,136 @@ internal sealed class MotionController
             if (t < 1) return true;
             _step = null;
             Play(MotionKind.Hover);
+            return _step != null;
+        };
+    }
+
+    // ---------- flights (motion 1 variations from the boards) ----------
+
+    /// <summary>Flies one of the board patterns from where she is, mirrored toward the side with more room.</summary>
+    public void PlayFlight(FlightPattern pattern)
+    {
+        Reset(MotionKind.Wander);
+        var start = TopLeft;
+        var work = Monitor.WorkF;
+        float dir = Centre.X > work.X + work.Width / 2 ? -1 : 1;
+        float dip = Monitor.DpiScale, secs = FlightPath.Seconds(pattern), t = 0, tilt = 0;
+        var last = start;
+        _v.Root.CenterPoint = PivotBodyCentre;
+        _step = dt =>
+        {
+            t = MathF.Min(1, t + dt / secs);
+            var o = FlightPath.Offset(pattern, t, BodySize.X / dip) * dip;
+            var next = Clamp(start + new Vector2(o.X * dir, o.Y));
+            float vx = (next.X - last.X) / MathF.Max(dt, 1e-3f);
+            last = next;
+            TopLeft = next;
+            tilt += (Math.Clamp(vx / (300 * dip), -1, 1) * TiltDegrees - tilt) * MathF.Min(1, dt * 6);
+            _v.Root.RotationAngleInDegrees = tilt;
+            if (t < 1) return true;
+            _step = null;
+            Play(MotionKind.Hover);
+            return _step != null;
+        };
+        UpdateTicker();
+    }
+
+    // ---------- 15 PlayWithMoon, 16 Curious, 21 Dance, 22 Breathe, 24 OrbitCursor ----------
+
+    /// <summary>She sways after her moon as it circles (follows the moon's own orbit phase, so nothing jumps).</summary>
+    private void StartPlayWithMoon()
+    {
+        var c = _v.Root.Compositor;
+        var follow = c.CreateExpressionAnimation("Cos(p.t * 6.2831853) * 12");
+        follow.SetReferenceParameter("p", _v.MoonProps);
+        _v.Character.StartAnimation("RotationAngleInDegrees", follow);
+        _face(Eyes.Happy, Mouth.Grin, 4f);
+        Wait(4f, () => Play(MotionKind.Hover));
+    }
+
+    /// <summary>Drifts a little toward the mouse, tilts her head, looks, then goes back.</summary>
+    private void StartCurious()
+    {
+        var p = Native.CursorPos();
+        var toward = new Vector2(p.X, p.Y) - Centre;
+        var dir = toward.Length() < 1 ? Vector2.UnitX : Vector2.Normalize(toward);
+        var home = TopLeft;
+        var near = Clamp(home + dir * 30 * Monitor.DpiScale);
+        _v.Root.CenterPoint = PivotBottom;
+        var c = _v.Root.Compositor;
+        var tilt = c.CreateScalarKeyFrameAnimation();
+        tilt.InsertKeyFrame(0.15f, dir.X < 0 ? -10f : 10f);
+        tilt.InsertKeyFrame(0.85f, dir.X < 0 ? -10f : 10f);
+        tilt.InsertKeyFrame(1f, 0f);
+        tilt.Duration = TimeSpan.FromSeconds(3.6);
+        _v.Root.StartAnimation("RotationAngleInDegrees", tilt);
+        _face(Eyes.Look, Mouth.O, 2.8f);
+        _step = Travel(near, 0.6f, Smooth, done: () =>
+            Wait(2.4f, () => _step = Travel(home, 0.6f, Smooth, done: () => Play(MotionKind.Hover))));
+    }
+
+    /// <summary>Sways and bounces to the beat while music plays (the life director stops her when it ends), at most 12 s.</summary>
+    private void StartDance()
+    {
+        var c = _v.Root.Compositor;
+        HoldStill();
+        Still = false;
+        float dip = Monitor.DpiScale;
+        _v.Character.StartAnimation("RotationAngleInDegrees", IdleAnimations.Loop(c, 1.0, (0f, -8f), (0.5f, 8f), (1f, -8f)));
+        _v.Character.StartAnimation("Offset.Y", IdleAnimations.Loop(c, 0.5, (0f, 0f), (0.5f, -6f * dip), (1f, 0f)));
+        Wait(12f, () => Play(MotionKind.Hover));
+    }
+
+    /// <summary>Two slow breaths with her eyes half closed.</summary>
+    private void StartBreathe()
+    {
+        var c = _v.Root.Compositor;
+        _v.Character.StartAnimation("Scale", IdleAnimations.Loop3(c, 4.0,
+            (0f, Vector3.One), (0.45f, new Vector3(1.06f, 1.06f, 1)), (1f, Vector3.One)));
+        _face(Eyes.Half, Mouth.Smile, 8f);
+        Wait(8f, () =>
+        {
+            _v.Character.StopAnimation("Scale");
+            _v.Character.Scale = Vector3.One;
+            Play(MotionKind.Hover);
+        });
+    }
+
+    /// <summary>One circle around the resting mouse pointer, then home.</summary>
+    private void StartOrbitCursor()
+    {
+        var p = Native.CursorPos();
+        var cursor = new Vector2(p.X, p.Y);
+        var home = TopLeft;
+        float r = 80 * Monitor.DpiScale;
+        var half = BodySize / 2;
+        var from = Centre - cursor;
+        float a0 = from.Length() < 1 ? 0 : MathF.Atan2(from.Y, from.X);
+        Vector2 At(float a) => cursor + new Vector2(MathF.Cos(a), MathF.Sin(a)) * r - half;
+        _step = Travel(Clamp(At(a0)), 0.5f, Smooth, done: () =>
+        {
+            float t = 0;
+            _step = dt =>
+            {
+                t = MathF.Min(1, t + dt / 2f);
+                TopLeft = Clamp(At(a0 + 2 * MathF.PI * Smooth(t)));
+                if (t < 1) return true;
+                _step = Travel(home, 0.5f, Smooth, done: () => Play(MotionKind.Hover));
+                return true;
+            };
+        });
+    }
+
+    /// <summary>Runs <paramref name="then"/> after a pause (on the motion clock).</summary>
+    private void Wait(float seconds, Action then)
+    {
+        float t = 0;
+        _step = dt =>
+        {
+            t += dt;
+            if (t < seconds) return true;
+            _step = null;
+            then();
             return _step != null;
         };
     }

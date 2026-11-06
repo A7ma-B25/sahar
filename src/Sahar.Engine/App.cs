@@ -104,7 +104,18 @@ internal sealed unsafe class App
                 revert.Start();
             }
         }
-        var motion = new MotionController(sahar, player, ticker, MoveTo, Express);
+        // A passing face (a moment, a curious look): back to her expression's own face afterwards.
+        var faceTimer = ui.CreateTimer();
+        faceTimer.IsRepeating = false;
+        faceTimer.Tick += (_, _) => Safe(() => sahar.SetFace(player.Current.Eyes, player.Current.Mouth, ExpressionPlayer.Fade));
+        void Face(Eyes eyes, Mouth mouth, float seconds)
+        {
+            sahar.SetFace(eyes, mouth, ExpressionPlayer.Fade);
+            faceTimer.Stop();
+            faceTimer.Interval = TimeSpan.FromSeconds(seconds);
+            faceTimer.Start();
+        }
+        var motion = new MotionController(sahar, player, ticker, MoveTo, Express, Face);
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); });
@@ -209,6 +220,12 @@ internal sealed unsafe class App
             if (r.Args is null || !r.Args.TryGetValue("kind", out var name)) return new PipeReply(false, "motion needs 'kind'");
             if (!Enum.TryParse<MotionKind>(name, ignoreCase: false, out var kind) || !Enum.IsDefined(kind))
                 return new PipeReply(false, "unknown motion");
+            if (kind == MotionKind.Wander && r.Args.TryGetValue("flight", out var f))
+            {
+                if (!Enum.TryParse<FlightPattern>(f, out var pattern) || !Enum.IsDefined(pattern)) return new PipeReply(false, "unknown flight");
+                motion.PlayFlight(pattern);
+                return new PipeReply(true, State: _state.Snapshot());
+            }
             Vector2? velocity = r.Args.ContainsKey("vx") ? new Vector2(Arg(r, "vx"), Arg(r, "vy")) : null;
             if (!motion.Play(kind, velocity)) return new PipeReply(false, $"motion '{kind}' is not available yet");
             return new PipeReply(true, State: _state.Snapshot());
