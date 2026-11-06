@@ -43,7 +43,14 @@ internal sealed unsafe class LifeDirector : IDisposable
     public bool Enabled { get; set; } = true;
     public int Actions { get; private set; }
     public bool Typing { get; private set; }
-    public TimeSpan? GapOverride { get; set; }
+    private TimeSpan? _gapOverride;
+
+    /// <summary>Test mode: a fixed gap; takes effect at once (the queued turn is rescheduled).</summary>
+    public TimeSpan? GapOverride
+    {
+        get => _gapOverride;
+        set { _gapOverride = value; Schedule(DateTimeOffset.Now); }
+    }
     public event Action<bool>? TypingChanged;
 
     public LifeDirector(DispatcherQueue ui, MotionController motion, Director director, Media media, ActivityLevel level, string path)
@@ -169,7 +176,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     }
 
     private void Schedule(DateTimeOffset now) =>
-        _due = now + (GapOverride ?? LifeTiming.NextGap(_level, _rng, _routine.BusyFactor(now.Hour)));
+        _due = now + (_gapOverride ?? LifeTiming.NextGap(_level, _rng, _routine.BusyFactor(now.Hour)));
 
     private void Housekeeping(DateTimeOffset now)
     {
