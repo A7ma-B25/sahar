@@ -983,6 +983,32 @@ function Stage-Menu {
         $edit = [IntPtr][long](Kv 'debug-bubble').edit
         [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
     }
+    Step 'the show plays every step with a caption' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $actions = [int](Life).actions
+        $r = Send '{"type":"cmd","name":"showcase","args":{"from":"30"}}'
+        if (-not $r.ok) { throw "showcase not ok: $($r.error)" }
+        $seen = @{}
+        $deadline = (Get-Date).AddSeconds(35)
+        $shot = $false
+        do {
+            Start-Sleep -Milliseconds 500
+            $s = Kv 'debug-showcase'
+            if ($s.running -ne 'true') { throw "the show stopped early at $($s.step)" }
+            $seen[$s.step] = $s.id
+            if (-not $shot -and $seen.Count -ge 2) { Start-Sleep -Milliseconds 400; Screenshot 'showcase.png' | Out-Null; $shot = $true }
+        } while ($seen.Count -lt 8 -and (Get-Date) -lt $deadline)
+        Write-Host "    steps seen: $(($seen.Values) -join ', ')"
+        if ($seen.Count -lt 8) { throw "only $($seen.Count) steps in 35 s" }
+        if ([int](Life).actions -ne $actions) { throw 'she did her own things during the show' }
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $false)
+        Start-Sleep -Milliseconds 600
+        if ((Kv 'debug-showcase').running -ne 'false') { throw 'a click did not stop the show' }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
     Step 'the menu and the bubble cost nothing, again and again' {
         # Absolute RAM at rest is checked by the perf stage; on the runner's software renderer, memory after this
         # busy stage is not "at rest", so here the check is what the menu adds and that repeating it does not grow.

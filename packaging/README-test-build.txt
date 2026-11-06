@@ -1,13 +1,24 @@
-سَحَر · Sahar — نسخة تجريبية 0.3.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.4.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.3.0
+شو الجديد بـ 0.4.0
 ------------------
-- صارت تتحرّك أكتر وأنوع: 10 طيرات مختلفة (زيك زاك، رقم 8، لولب لفوق، غطسة، موجة، دايرة كبيرة، ورقة عم توقع، دورية فوق التاسك بار…).
-- حركات جديدة: بتلعب مع قمرها، بتفضول وبتقرّب عالماوس، بترقص مع الموسيقى، بتتنفّس بهدوء، وبتلف حوالين الماوس إذا تركته جنبها.
-- لحظات وجه صغيرة: غمزة، ابتسامة، بتطلّع حواليها، بتنعس، بتضحك.
-- أغنية من يوتيوب أو أي متصفح: بتلبس السماعات. إذا المتصفح قدامك بتضل هادية (ما بتطير فوق الفيديو)، وإذا رحت لنافذة تانية بترقص. لما توقف الأغنية بتوقف رقص.
-- سجل صغير: كبسة يمين على أيقونتها ← "افتح مجلد سَحَر" بيفتحلك المجلد فيه ملف engine.log. السجل بيكتب شو اختارت تعمل وليش كانت عم تستنى، وما بيكبر أكتر من 1 ميغا.
+- القائمة الدائرية: كليك يمين أو كبستين عليها. فيها 6 أزرار:
+  ⏱️ مؤقت (5 / 15 / 25 / 45 دقيقة أو وقت بتكتبه، مع حلقة وقت حواليها، ولما يخلص بتلفت انتباهك. كبسة عليها بتسكّت المؤقت).
+  📝 ملاحظة سريعة (بتكتب وبتكبس Enter، وبتشوف آخر 3 ملاحظات).
+  🌗 مستوى نشاطها. 🔕 لا تزعجني (نص ساعة، ساعة، ساعتين، أو لحد ما توقّفها). 😴 خبّيها ساعة. 🎲 العبي (حركة عشوائية).
+  بتتسكّر بـ Esc أو بكبسة برّا. إذا كانت جنب حافة الشاشة بتصير نص دايرة.
+- الحركات الـ25 كلها صارت موجودة. الجديدة: بتلحق الماوس، بتختبي ورا نافذة وبتطل، بتستحي إذا قرّبت الماوس كتير،
+  بتدخل وبتسلّم أول ما تشغّل الجهاز، بتودّعك لما تسكّرها، بتنط على التاسك بار، بتلفت انتباهك بالأشياء المهمة،
+  وبتغفى على أيقونة.
+- "فرجيني حركاتك": كبسة يمين على أيقونتها ← "فرجيني حركاتك". بتعرض كل حركاتها ووجوهها ورا بعض، وتحتها اسم كل وحدة.
+  كبسة عليها بتوقف العرض.
+
+من 0.3.0 (لسا موجودين)
+----------------------
+- 10 طيرات مختلفة، وحركات: بتلعب مع قمرها، فضولية، بترقص مع الموسيقى، بتتنفّس، بتلف حوالين الماوس، ولحظات وجه صغيرة.
+- أغنية من يوتيوب: سماعات. والمتصفح قدامك: ما بتطير فوق الفيديو.
+- "افتح مجلد سَحَر" من قائمة أيقونتها: فيه ملف السجل engine.log لتبعتلي ياه.
 
 من 0.2.0 (لسا موجودين)
 ----------------------
@@ -21,7 +32,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.3.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.4.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -53,6 +64,10 @@
 - شغّل أغنية بسبوتيفاي: لازم تلبس السماعات وترقص أحياناً.
 - شغّل أغنية بيوتيوب والمتصفح قدامك: سماعات وبس، بلا طيران. روح لنافذة تانية: بترجع تتحرك وترقص. وقّف الأغنية: بتوقف رقص.
 - خلّيها على "نشيطة" ربع ساعة: لازم تشوف حركات كتير مختلفة، مش بس طيران.
+- كبستين على التاتش باد، وكليك يمين: لازم تفتح القائمة. جرّبها وهي بكل زاوية من الشاشة: كل الأزرار لازم تبيّن.
+- حط مؤقت 5 دقايق ونيّم الجهاز 10 دقايق: لما يصحى لازم يخلص المؤقت فوراً.
+- اكتب ملاحظة بالعربي (بلغة الكيبورد العربي): لازم تنحفظ وتبيّن صح.
+- سكّرها من أيقونتها: لازم تودّعك وتتحوّل لنجوم.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
 بهالنسخة لسا ما في: القائمة الدائرية، الأصوات، الإعدادات، والتنبيهات. هدول بالخطط الجاية.
@@ -65,16 +80,27 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.3.0 (Windows)
+Sahar — test build 0.4.0 (Windows)
 ==================================
 
-What's new in 0.3.0
+What's new in 0.4.0
 -------------------
-- More, and more varied, movement: 10 different flights (zigzag, figure eight, spiral up, dive, wave, glide, big circle, dash and stop, falling leaf, taskbar patrol).
-- New moves: she plays with her moon, gets curious and edges toward the pointer, dances to music, breathes slowly, and circles the pointer when you leave it next to her.
-- Small face moments: a wink, a smile, a look around, a drowsy blink, a giggle.
-- A song from YouTube or any browser: headphones on. While the browser is in front she stays calm (no flights over the video); switch to another window and she dances. Stop the song and the dance stops.
-- A log you can send: right-click her icon → "Open Sahar folder" opens the folder with engine.log. It records what she chose to do and why she was waiting, and never grows past 1 MB.
+- The radial menu: right-click or double-click her. Six buttons:
+  ⏱️ Timer (5 / 15 / 25 / 45 min or a time you type; a ring of time around her; when it ends she draws your eye, a click on her dismisses it).
+  📝 Quick note (type, press Enter; the last 3 notes show under it).
+  🌗 Activity. 🔕 Do not disturb (30 min, 1 h, 2 h, or until you turn it off). 😴 Hide 1 h. 🎲 Play (a random move).
+  Esc or a click outside closes it; near a screen edge it becomes a half circle.
+- All 25 moves now. New: she follows the pointer, hides behind a window and peeks, gets shy if the pointer keeps coming close,
+  flies in and says hello when the PC starts, waves goodbye when you quit her, hops along the taskbar, draws your eye for
+  important things, and naps on an icon.
+- "Show me your moves": right-click her icon → "Show me your moves". She plays every move and face, with its name under her.
+  A click on her stops the show.
+
+Still here from 0.3.0
+---------------------
+- 10 different flights; plays with her moon, gets curious, dances to music, breathes, circles the pointer, small face moments.
+- A song on YouTube: headphones; with the browser in front she does not fly over the video.
+- "Open Sahar folder" in her icon's menu: engine.log is there to send.
 
 Still here from 0.2.0
 ---------------------
@@ -87,7 +113,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.3.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.4.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -118,6 +144,10 @@ Manual checks (GitHub cannot test these)
 - Play a song in Spotify: headphones on, and she dances now and then.
 - Play a song on YouTube with the browser in front: headphones only, no flights. Switch to another window: she moves and dances again. Stop the song: the dance stops.
 - Leave her on Lively for 15 minutes: you should see many different moves, not just flights.
+- Double-click on a touchpad, and right-click: the menu opens. Try it with her in every corner: every button shows.
+- Start a 5-minute timer and sleep the PC for 10 minutes: when it wakes, the timer ends right away.
+- Write a note in Arabic (Arabic keyboard layout): it is saved and shows correctly.
+- Quit her from her icon: she waves goodbye and turns into stars.
 - After two hours of non-stop work: the break face ☕.
 
 Not in this build yet: the radial menu, sounds, settings and notifications (later plans).

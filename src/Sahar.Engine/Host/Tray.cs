@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -26,6 +26,10 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    /// <summary>"فرجيني حركاتك" (start) or "وقّف العرض" (stop) was chosen.</summary>
+    public event Action? ShowToggled;
+    /// <summary>Her show is running (the menu item then stops it).</summary>
+    public bool ShowRunning { get; set; }
     public event Action? ShowNow;
     public event Action<ActivityLevel>? ActivityChosen;
     /// <summary>The level shown as checked in the menu.</summary>
@@ -120,8 +124,10 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* activity = "نشاطها / Activity")
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
         fixed (char* folder = "افتح مجلد سَحَر / Open Sahar folder")
+        fixed (char* show = ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves")
         fixed (char* quit = "إغلاق / Quit")
         {
+            Native.AppendMenu(menu, MF_STRING, CmdShow, show);
             Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
@@ -136,6 +142,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         if (cmd is >= CmdActivity and <= CmdActivity + 2) ActivityChosen?.Invoke((ActivityLevel)(cmd - CmdActivity));
         else if (cmd == CmdHide) HideHour?.Invoke();
         else if (cmd == CmdFolder) OpenFolder();
+        else if (cmd == CmdShow) ShowToggled?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 

@@ -125,8 +125,12 @@ internal sealed unsafe class App
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
         Director? dismissDirector = null;
+        Action? stopShow = null;
+        Func<bool> showRunning = () => false;
         _ = new InputController(input, motion, () =>
         {
+            // A click during her show stops it.
+            if (showRunning()) { stopShow?.Invoke(); return; }
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
             Express("poked", true);
@@ -141,7 +145,7 @@ internal sealed unsafe class App
         void SetHidden(bool hidden)
         {
             _state.Hidden = hidden;
-            if (hidden) menu.Close();
+            if (hidden) { menu.Close(); stopShow?.Invoke(); }
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
@@ -220,12 +224,23 @@ internal sealed unsafe class App
         lifeDirector.DndOn = () => dndTool.On;
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
+        using var show = new ShowcasePlayer(ui, motion, sahar, key => Express(key, false), () => Express("", false));
         menu.OpenChanged += open =>
         {
             _state.MenuOpen = open;
-            lifeDirector.Paused = open;
+            if (open) show.Stop();
+            lifeDirector.Paused = open || show.Running;
             if (open) motion.Play(MotionKind.Hover);
         };
+        show.RunningChanged += running =>
+        {
+            tray.ShowRunning = running;
+            lifeDirector.Paused = running || menu.IsOpen;
+        };
+        tray.ShowToggled += () => Safe(() => { if (show.Running) show.Stop(); else show.Start(); });
+        motion.DragStarted += () => Safe(show.Stop);
+        stopShow = () => show.Stop();
+        showRunning = () => show.Running;
         var playRng = new Random();
         menu.Pressed += id => Safe(() =>
         {
@@ -366,6 +381,13 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-menu", _ => new PipeReply(true, menu.Describe()));
             pipe.Register("debug-timer", _ => new PipeReply(true, timerTool.Describe()));
+            pipe.Register("showcase", r =>
+            {
+                show.Start(r.Args?.ContainsKey("from") == true ? (int)Arg(r, "from") : 0);
+                return new PipeReply(true, show.Describe());
+            });
+            pipe.Register("showcase-stop", _ => { show.Stop(); return new PipeReply(true, show.Describe()); });
+            pipe.Register("debug-showcase", _ => new PipeReply(true, show.Describe()));
             pipe.Register("timer", r => { timerTool.Start(TimeSpan.FromSeconds(Arg(r, "seconds"))); return new PipeReply(true, timerTool.Describe()); });
             pipe.Register("debug-dnd", _ => new PipeReply(true, dndTool.Describe()));
             pipe.Register("debug-bubble", _ =>
