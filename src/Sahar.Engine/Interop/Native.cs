@@ -115,6 +115,15 @@ internal unsafe struct NOTIFYICONDATAW
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NOTIFYICONIDENTIFIER
+{
+    public uint CbSize;
+    public nint HWnd;
+    public uint UID;
+    public Guid GuidItem;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct ICONINFO
 {
     public int FIcon;
@@ -370,6 +379,9 @@ internal static unsafe partial class Native
 
     [LibraryImport("shell32.dll")]
     public static partial int SHQueryUserNotificationState(int* state);
+
+    [LibraryImport("shell32.dll")]
+    public static partial int Shell_NotifyIconGetRect(NOTIFYICONIDENTIFIER* id, RECT* rect);
 
     [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW")]
     public static partial uint RegisterWindowMessage(char* name);

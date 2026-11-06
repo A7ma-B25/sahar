@@ -155,6 +155,9 @@ internal sealed unsafe class App
         });
         if (_options.TestMode)
         {
+            pipe.Register("debug-tray", _ => tray.IconRect() is { } r
+                ? new PipeReply(true, State: _state.Snapshot() with { X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top })
+                : new PipeReply(false, "tray icon unknown to Explorer"));
             pipe.Register("debug-device-lost", _ =>
             {
                 host.RecreateDevice();

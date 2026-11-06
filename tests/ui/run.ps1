@@ -161,6 +161,8 @@ if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$tr
 "@
     $p = Start-Process -FilePath 'pwsh' -ArgumentList '-NoProfile', '-Command', $script -PassThru
     Start-Sleep -Milliseconds 1500
+    # Windows may refuse a new process the foreground; ask for it explicitly.
+    & agent-desktop --headed focus-window --title "Sahar test $kind" 2>&1 | Out-Null
     $p
 }
 
@@ -406,38 +408,14 @@ function Stage-Events {
         [Shell]::TaskbarCreated()
         Start-Sleep -Milliseconds 1000
         $found = $false
-        # Visible tray icons live on the taskbar itself; hidden ones in the overflow behind the chevron.
+        # Visible tray icons are named on the taskbar; agent-desktop 1.2.0 cannot open the Windows 11 overflow
+        # on the runner, so Explorer itself is asked where the icon is (Shell_NotifyIconGetRect).
         $json = (& agent-desktop snapshot --surface taskbar -i --compact 2>&1) -join "`n"
         Set-Content -Path (Join-Path $Out 'tray-taskbar.json') -Value $json
-        if ($json -match 'Sahar') { $found = $true; Write-Host '    found on the taskbar' }
-        if (-not $found) {
-            # Open the overflow flyout through its "Show Hidden Icons" button, then read it.
-            $bar = $json | ConvertFrom-Json
-            $chevron = $null
-            function Find-Node($n) {
-                if ($n.native_id.value -eq 'SystemTrayIcon' -or $n.name -eq 'Show Hidden Icons') { return $n }
-                foreach ($c in $n.children) { $r = Find-Node $c; if ($r) { return $r } }
-            }
-            if ($bar.ok) { $chevron = Find-Node $bar.data.tree }
-            $log = @()
-            if ($chevron) {
-                $log += (& agent-desktop click "$($chevron.ref_id)" 2>&1) -join ''
-                Start-Sleep -Milliseconds 800
-                foreach ($surface in 'system-tray-overflow', 'focused', 'popover') {
-                    $t = (& agent-desktop snapshot --surface $surface -i --compact 2>&1) -join ''
-                    $log += "--- $surface`n$t"
-                    if ($t -match 'Sahar') { $found = $true; Write-Host "    found in the overflow ($surface)"; break }
-                }
-                if (-not $found) {
-                    $t = (& agent-desktop list-windows 2>&1) -join ''
-                    $log += "--- list-windows`n$t"
-                }
-                & agent-desktop --headed press escape 2>&1 | Out-Null
-            }
-            else { $log += 'no Show Hidden Icons button' }
-            Set-Content -Path (Join-Path $Out 'tray-overflow.json') -Value ($log -join "`n")
-        }
-        if (-not $found) { throw 'no "Sahar" in the system tray or its overflow' }
+        if ($json -match 'Sahar') { $found = $true; Write-Host '    named on the taskbar' }
+        $r = Send '{"type":"cmd","name":"debug-tray"}'
+        if ($r.ok) { $found = $true; Write-Host "    Explorer has the icon at ($($r.state.x),$($r.state.y) $($r.state.width)x$($r.state.height))" }
+        if (-not $found) { throw "tray icon missing: $($r.error)" }
     }
     Stop-Engine
 }

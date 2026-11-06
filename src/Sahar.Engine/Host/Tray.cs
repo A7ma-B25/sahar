@@ -53,6 +53,14 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         Log.Write(_added ? "tray icon added" : "tray icon not added (no taskbar yet?)");
     }
 
+    /// <summary>Where Explorer shows the icon (or its overflow), or null when Explorer does not know it.</summary>
+    public RECT? IconRect()
+    {
+        var id = new NOTIFYICONIDENTIFIER { CbSize = (uint)sizeof(NOTIFYICONIDENTIFIER), HWnd = Hwnd, UID = 1 };
+        RECT r;
+        return Native.Shell_NotifyIconGetRect(&id, &r) >= 0 ? r : null;
+    }
+
     private NOTIFYICONDATAW Data() => new() { CbSize = (uint)sizeof(NOTIFYICONDATAW), HWnd = Hwnd, UID = 1 };
 
     public nint? OnMessage(nint hwnd, uint msg, nuint wParam, nint lParam)
