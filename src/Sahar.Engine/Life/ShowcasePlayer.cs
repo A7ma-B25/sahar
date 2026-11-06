@@ -59,7 +59,8 @@ internal sealed class ShowcasePlayer : IDisposable
         Advance();
     }
 
-    public void Stop()
+    /// <param name="flyHome">Fly back to where the show started (not when you just grabbed her).</param>
+    public void Stop(bool flyHome = true)
     {
         if (!Running) return;
         Running = false;
@@ -68,15 +69,17 @@ internal sealed class ShowcasePlayer : IDisposable
         _backToBrain();
         if (_motion.Current is MotionKind.Goodbye or MotionKind.FullscreenHide or MotionKind.SleepInCorner or MotionKind.NapOnIcon)
             _motion.Play(MotionKind.Wake);
-        else _motion.Play(MotionKind.Hover);
-        _motion.TopLeft = _home;
-        _motion.Reclamp();
+        else if (flyHome) _motion.FlyTo(_home);   // smoothly: never a jump
+        else if (_motion.Current is not (MotionKind.Drag or MotionKind.Throw)) _motion.Play(MotionKind.Hover);
         Log.Write("show: stopped");
         RunningChanged?.Invoke(false);
     }
 
     public string Describe() =>
-        $"running={(Running ? "true" : "false")} step={Index + 1}/{Showcase.Steps.Count} id={(Running && Index >= 0 ? Showcase.Steps[Index].Id : "none")}";
+        $"running={(Running ? "true" : "false")} step={Index + 1}/{Showcase.Steps.Count} id={(Running && Index >= 0 ? Showcase.Steps[Index].Id : "none")}" +
+        FormattableString.Invariant($" captionMinX={_captionMinX:0} captionMaxX={_captionMaxX:0}");
+
+    private float _captionMinX, _captionMaxX;
 
     private void Advance()
     {
@@ -149,9 +152,15 @@ internal sealed class ShowcasePlayer : IDisposable
         bool above = body.Bottom + h + 12 * dpi > work.Bottom;
         var offset = new Vector2((units.X + units.Width / 2) * _v.Scale - w / 2,
             above ? units.Y * _v.Scale - h - 8 * dpi : (units.Y + units.Height) * _v.Scale + 8 * dpi);
-        var follow = c.CreateExpressionAnimation("r.Offset + o");
+        // It follows her, but never past the edges of her screen's work area (overlay coordinates).
+        float minX = work.X - _v.Origin.X, maxX = work.Right - w - _v.Origin.X;
+        _captionMinX = work.X;
+        _captionMaxX = work.Right;
+        var follow = c.CreateExpressionAnimation("Vector3(Clamp(r.Offset.X + o.X, mn, mx), r.Offset.Y + o.Y, 0)");
         follow.SetReferenceParameter("r", _v.Root);
         follow.SetVector3Parameter("o", new Vector3(offset, 0));
+        follow.SetScalarParameter("mn", minX);
+        follow.SetScalarParameter("mx", MathF.Max(minX, maxX));
         _caption.StartAnimation("Offset", follow);
     }
 

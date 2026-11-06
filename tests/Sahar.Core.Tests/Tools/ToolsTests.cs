@@ -1,3 +1,4 @@
+using Sahar.Core.Life;
 using Sahar.Core.Brain;
 using Sahar.Core.Tools;
 using B = Sahar.Core.Brain.Brain;
@@ -197,5 +198,51 @@ public class BrainEndTests
         Assert.Equal("timer-done", b.Tick(t0.AddSeconds(1)).ExpressionKey);
         b.End(EventKind.TimerDone);
         Assert.Equal("idle", b.Tick(t0.AddSeconds(2)).ExpressionKey);
+    }
+}
+
+public class NotesStoreLockedTests : IDisposable
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 6, 12, 0, 0, TimeSpan.Zero);
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "sahar-notes-lock-" + Guid.NewGuid().ToString("N"));
+    private string PathFor => Path.Combine(_dir, "notes.json");
+
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch (IOException) { } }
+
+    [Fact]
+    public void NotesStore_UnreadableAtStart_NeverOverwritesTheFile()
+    {
+        new NotesStore(PathFor).Add("old note", T0);
+        NotesStore s;
+        using (new FileStream(PathFor, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            s = new NotesStore(PathFor);
+            Assert.True(s.Add("new note", T0.AddMinutes(1)));
+            Assert.True(s.SaveFailed);
+        }
+        Assert.True(s.Add("later note", T0.AddMinutes(2)));   // the file can be read again: merge, then save
+        var all = new NotesStore(PathFor).Latest(10).Select(n => n.Text).ToList();
+        Assert.Equal(["later note", "new note", "old note"], all);
+    }
+}
+
+public class HelloTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 11, 6, 9, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void Hello_SoonAfterSignIn() => Assert.True(Hello.ShouldGreet(Now, Now.AddMinutes(-2), testMode: false, simulateBoot: false));
+
+    [Fact]
+    public void Hello_NotHoursAfterSignIn() => Assert.False(Hello.ShouldGreet(Now, Now.AddHours(-3), testMode: false, simulateBoot: false));
+
+    [Fact]
+    public void Hello_UnknownSignIn_NoHello() => Assert.False(Hello.ShouldGreet(Now, null, testMode: false, simulateBoot: false));
+
+    [Fact]
+    public void Hello_TestMode_OnlyWhenAsked()
+    {
+        Assert.False(Hello.ShouldGreet(Now, Now.AddMinutes(-1), testMode: true, simulateBoot: false));
+        Assert.True(Hello.ShouldGreet(Now, null, testMode: true, simulateBoot: true));
     }
 }

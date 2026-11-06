@@ -48,7 +48,7 @@ internal sealed class MenuVisual : IDisposable
         Clear();
         var c = _host.Compositor;
         float w = LabelWidthDip * dpi, r = slots.Count > 0 ? slots[0].Radius : RadialLayout.ButtonRadiusDip * dpi;
-        float pad = PadDip * dpi, h = 2 * r + 2 * pad + LabelHeightDip * dpi + 4 * dpi;
+        float pad = PadDip * dpi, h = pad + r + (RadialLayout.LabelTopDip + RadialLayout.LabelHeightDip + 2) * dpi;
         var size = new SizeI((int)MathF.Ceiling(w), (int)MathF.Ceiling(h));
         for (int i = 0; i < slots.Count; i++)
         {
@@ -120,8 +120,9 @@ internal sealed class MenuVisual : IDisposable
             new D2DRect { Left = centre.X - r, Top = centre.Y - r, Right = centre.X + r, Bottom = centre.Y + r }, dc.SolidBrush(new D2DColor(Ink)));
 
         // Label pill under the disc.
-        float textW = MathF.Min(LabelWidthDip - 4, item.Label.Length * 7f + 18) * dpi, pillH = LabelHeightDip * dpi;
-        float left = (w - textW) / 2, top = pad * 2 + 2 * r + 2 * dpi, rad = pillH / 2;
+        // Same size and place as RadialLayout's label rectangle (layout and hit-testing use it).
+        float textW = RadialLayout.LabelWidthDip(item.Label) * dpi, pillH = RadialLayout.LabelHeightDip * dpi;
+        float left = (w - textW) / 2, top = pad + r + RadialLayout.LabelTopDip * dpi, rad = pillH / 2;
         var pill = dc.Path(PathData.Parse(FormattableString.Invariant(
             $"M{left + rad} {top} L{left + textW - rad} {top} A{rad} {rad} 0 0 1 {left + textW - rad} {top + pillH} L{left + rad} {top + pillH} A{rad} {rad} 0 0 1 {left + rad} {top} Z")));
         dc.FillGeometry(pill, dc.SolidBrush(new D2DColor(White, 0.92f)));

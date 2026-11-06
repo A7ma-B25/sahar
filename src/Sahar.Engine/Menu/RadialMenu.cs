@@ -97,12 +97,7 @@ internal sealed class RadialMenu : IDisposable
         _hovered = null;
     }
 
-    private ButtonSlot? Hit(Vector2 p)
-    {
-        foreach (var s in Slots)
-            if (Vector2.Distance(s.Centre, p) <= s.Radius + 2) return s;
-        return null;
-    }
+    private ButtonSlot? Hit(Vector2 p) => RadialLayout.HitTest(Slots, p) is { } id ? Slots.First(s => s.Id == id) : null;
 
     private void Click(Vector2 p)
     {
@@ -121,7 +116,8 @@ internal sealed class RadialMenu : IDisposable
     /// <summary>"open=true ring=main buttons=id:x,y,r;…" (screen px) for the UI tests.</summary>
     public string Describe() =>
         $"open={(IsOpen ? "true" : "false")} level={Ring} buttons=" +
-        string.Join(';', Slots.Select(s => FormattableString.Invariant($"{s.Id}:{s.Centre.X:0},{s.Centre.Y:0},{s.Radius:0}")));
+        string.Join(';', Slots.Select(s => FormattableString.Invariant(
+            $"{s.Id}:{s.Centre.X:0},{s.Centre.Y:0},{s.Radius:0},{s.Label.X:0},{s.Label.Y:0},{s.Label.Width:0},{s.Label.Height:0}")));
 
     private static void Safe(Action a)
     {

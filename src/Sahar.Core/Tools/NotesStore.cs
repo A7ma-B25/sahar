@@ -17,11 +17,12 @@ public sealed class NotesStore
 
     private readonly string _path;
     private readonly List<Note> _notes;
+    private bool _unread;   // the file exists but could not be read: never overwrite it
 
     public NotesStore(string path)
     {
         _path = path;
-        _notes = Load(path);
+        _notes = Load(path, out _unread);
     }
 
     public static string DefaultPath =>
@@ -40,8 +41,15 @@ public sealed class NotesStore
     {
         var clean = Clean(text);
         if (clean.Length == 0) return false;
+        if (_unread)
+        {
+            // Try again; if the file can be read now, keep its notes and add ours after them.
+            var onDisk = Load(_path, out _unread);
+            if (!_unread) _notes.InsertRange(0, onDisk);
+        }
         _notes.Add(new Note(clean, now));
         if (_notes.Count > MaxNotes) _notes.RemoveRange(0, _notes.Count - MaxNotes);
+        if (_unread) { SaveFailed = true; return true; }   // kept in memory for now
         Save();
         return true;
     }
@@ -63,16 +71,17 @@ public sealed class NotesStore
         return sb.ToString(0, cut);
     }
 
-    private static List<Note> Load(string path)
+    private static List<Note> Load(string path, out bool unread)
     {
+        unread = false;
         string text;
         try
         {
             if (!File.Exists(path)) return [];
             text = File.ReadAllText(path);
         }
-        catch (IOException) { return []; }
-        catch (UnauthorizedAccessException) { return []; }
+        catch (IOException) { unread = true; return []; }
+        catch (UnauthorizedAccessException) { unread = true; return []; }
         try
         {
             return JsonSerializer.Deserialize(text, NotesJson.Default.ListNote)?.Where(n => n?.Text is { Length: > 0 }).ToList() ?? [];

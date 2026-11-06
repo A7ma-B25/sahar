@@ -147,7 +147,36 @@ internal sealed class MotionController
         _v.Character.StopAnimation("RotationAngleInDegrees");
         _v.Character.RotationAngleInDegrees = 0;
         _v.Face.Container.Offset = Vector3.Zero;
+        RemoveRings();
+        if (BodyScaleBusy)
+        {
+            // An interrupted breath or shy shrink: stop it, and give the expression back its own body animations.
+            BodyScaleBusy = false;
+            _v.Character.StopAnimation("Scale");
+            _v.Character.Scale = Vector3.One;
+            _player.Reapply();
+        }
         RestoreBob();
+    }
+
+    /// <summary>A motion owns her body's scale (Breathe, Shy) until it ends or is interrupted.</summary>
+    public bool BodyScaleBusy { get; private set; }
+
+    private readonly List<ShapeVisual> _rings = [];
+
+    private void RemoveRings()
+    {
+        foreach (var v in _rings) { _v.Root.Children.Remove(v); v.Dispose(); }
+        _rings.Clear();
+    }
+
+    /// <summary>Flies smoothly to a spot (no jump), then hovers.</summary>
+    public void FlyTo(Vector2 topLeft)
+    {
+        Reset(MotionKind.Wander);
+        float secs = Math.Clamp(Vector2.Distance(topLeft, TopLeft) / (200 * Monitor.DpiScale), 0.4f, 1.5f);
+        _step = Travel(Clamp(topLeft), secs, Smooth, done: () => Play(MotionKind.Hover));
+        UpdateTicker();
     }
 
     private void RestoreBob()
@@ -702,13 +731,9 @@ internal sealed class MotionController
         var c = _v.Root.Compositor;
         _v.Character.StartAnimation("Scale", IdleAnimations.Loop3(c, 4.0,
             (0f, Vector3.One), (0.45f, new Vector3(1.06f, 1.06f, 1)), (1f, Vector3.One)));
+        BodyScaleBusy = true;
         _face(Eyes.Half, Mouth.Smile, 8f);
-        Wait(8f, () =>
-        {
-            _v.Character.StopAnimation("Scale");
-            _v.Character.Scale = Vector3.One;
-            Play(MotionKind.Hover);
-        });
+        Wait(8f, () => Play(MotionKind.Hover));   // Reset ends the breath
     }
 
     /// <summary>One circle around the resting mouse pointer, then home.</summary>
@@ -830,9 +855,10 @@ internal sealed class MotionController
         shrink.InsertKeyFrame(1f, Vector3.One);
         shrink.Duration = TimeSpan.FromSeconds(2.5);
         _v.Character.StartAnimation("Scale", shrink);
+        BodyScaleBusy = true;
         _face(Eyes.Half, Mouth.Smile, 2.5f);
         _step = Travel(Clamp(TopLeft + dir * 120 * Monitor.DpiScale), 0.8f, EaseOut,
-            done: () => Wait(1.7f, () => Play(MotionKind.Hover)));
+            done: () => Wait(1.7f, () => { BodyScaleBusy = false; Play(MotionKind.Hover); }));
     }
 
     // ---------- 18 StartupEntry ----------
@@ -977,7 +1003,7 @@ internal sealed class MotionController
         var c = _v.Root.Compositor;
         var centre = BodyOffset + BodySize / 2;
         float radius = BodySize.X / 2;
-        var rings = new List<ShapeVisual>();
+        var rings = _rings;
         for (int i = 0; i < 3; i++)
         {
             var g = c.CreateEllipseGeometry();
@@ -1007,12 +1033,8 @@ internal sealed class MotionController
             rings.Add(v);
         }
         _face(Eyes.Open, Mouth.O, 3f);
-        void Done()
-        {
-            foreach (var v in rings) { _v.Root.Children.Remove(v); v.Dispose(); }
-        }
         _step = Travel(near, 0.6f, Smooth, done: () =>
-            Wait(2.2f, () => { Done(); _step = Travel(home, 0.6f, Smooth, done: () => Play(MotionKind.Hover)); }));
+            Wait(2.2f, () => { RemoveRings(); _step = Travel(home, 0.6f, Smooth, done: () => Play(MotionKind.Hover)); }));
     }
 
     /// <summary>Runs <paramref name="then"/> after a pause (on the motion clock).</summary>

@@ -103,3 +103,58 @@ public class MenuTests
         Assert.Empty(MenuItems.Options("hide", false, false, ActivityLevel.Medium));
     }
 }
+
+public class MenuLabelTests
+{
+    private static readonly RectF Work = new(0, 0, 1920, 1040);
+
+    public static TheoryData<string, float, float, float> Cases()
+    {
+        var d = new TheoryData<string, float, float, float>();
+        var spots = new (float X, float Y)[] { (0, 0), (1840, 0), (0, 960), (1840, 960), (1700, 900), (900, 480), (1840, 480), (900, 0) };
+        foreach (var ring in new[] { "main", "timer", "activity", "dnd" })
+            foreach (var dpi in new[] { 1f, 1.5f })
+                foreach (var (x, y) in spots)
+                    d.Add(ring, x, y, dpi);
+        return d;
+    }
+
+    private static IReadOnlyList<MenuItem> Items(string ring) =>
+        ring == "main" ? MenuItems.Main : MenuItems.Options(ring, false, false, Sahar.Core.Settings.ActivityLevel.Medium);
+
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public void RadialLayout_LabelsOnScreen_AndNothingOverlaps(string ring, float x, float y, float dpi)
+    {
+        var body = new RectF(Math.Min(x, 1920 - 80 * dpi), Math.Min(y, 1040 - 80 * dpi), 80 * dpi, 80 * dpi);
+        var slots = RadialLayout.Place(Items(ring), body, Work, dpi);
+        foreach (var s in slots)
+        {
+            Assert.True(Work.Contains(s.Bounds), $"{ring} {s.Id} at {s.Bounds} is off screen");
+            foreach (var o in slots)
+            {
+                if (o == s) continue;
+                Assert.False(s.Label.Intersects(o.Label), $"{ring}: label {s.Id} overlaps label {o.Id}");
+                Assert.False(s.Label.Intersects(o.Circle), $"{ring}: label {s.Id} overlaps button {o.Id}");
+                Assert.False(s.Circle.Intersects(o.Circle), $"{ring}: button {s.Id} overlaps button {o.Id}");
+            }
+        }
+    }
+
+    [Fact]
+    public void RadialLayout_LabelWidth_FollowsTheText()
+    {
+        Assert.True(RadialLayout.LabelWidthDip("لحد ما وقّفها") > RadialLayout.LabelWidthDip("5 د"));
+        Assert.True(RadialLayout.LabelWidthDip(new string('x', 40)) <= 112);
+    }
+
+    [Fact]
+    public void RadialLayout_HitTest_CircleOrLabel()
+    {
+        var slots = RadialLayout.Place(MenuItems.Main, new RectF(900, 480, 80, 80), Work, 1f);
+        var s = slots[0];
+        Assert.Equal(s.Id, RadialLayout.HitTest(slots, s.Centre));
+        Assert.Equal(s.Id, RadialLayout.HitTest(slots, new Vector2(s.Label.X + s.Label.Width / 2, s.Label.Y + s.Label.Height / 2)));
+        Assert.Null(RadialLayout.HitTest(slots, new Vector2(5, 5)));
+    }
+}

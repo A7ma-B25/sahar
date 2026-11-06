@@ -70,7 +70,7 @@
 - سكّرها من أيقونتها: لازم تودّعك وتتحوّل لنجوم.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
-بهالنسخة لسا ما في: القائمة الدائرية، الأصوات، الإعدادات، والتنبيهات. هدول بالخطط الجاية.
+بهالنسخة لسا ما في: الأصوات، الإعدادات، الحافظة، الصلاة، الاستماع، وربط Claude. هدول بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -150,7 +150,7 @@ Manual checks (GitHub cannot test these)
 - Quit her from her icon: she waves goodbye and turns into stars.
 - After two hours of non-stop work: the break face ☕.
 
-Not in this build yet: the radial menu, sounds, settings and notifications (later plans).
+Not in this build yet: sounds, settings, clipboard, prayer times, listening and the Claude link (later plans).
 
 If something goes wrong
 -----------------------

@@ -125,12 +125,12 @@ internal sealed unsafe class App
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
         Director? dismissDirector = null;
-        Action? stopShow = null;
+        Action<bool>? stopShow = null;
         Func<bool> showRunning = () => false;
         _ = new InputController(input, motion, () =>
         {
             // A click during her show stops it.
-            if (showRunning()) { stopShow?.Invoke(); return; }
+            if (showRunning()) { stopShow?.Invoke(false); return; }
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
             Express("poked", true);
@@ -138,6 +138,7 @@ internal sealed unsafe class App
         }, () =>
         {
             if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
+            if (showRunning()) stopShow?.Invoke(false);   // first, so the menu opens around where she stays
             menu.Toggle();
         });
         // Senses → brain → what she shows. Hidden means gone: she shrinks away, then the overlay is hidden
@@ -145,7 +146,7 @@ internal sealed unsafe class App
         void SetHidden(bool hidden)
         {
             _state.Hidden = hidden;
-            if (hidden) { menu.Close(); stopShow?.Invoke(); }
+            if (hidden) { menu.Close(); stopShow?.Invoke(false); }
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
@@ -228,7 +229,7 @@ internal sealed unsafe class App
         menu.OpenChanged += open =>
         {
             _state.MenuOpen = open;
-            if (open) show.Stop();
+            if (open) show.Stop(flyHome: false);
             lifeDirector.Paused = open || show.Running;
             if (open) motion.Play(MotionKind.Hover);
         };
@@ -238,8 +239,8 @@ internal sealed unsafe class App
             lifeDirector.Paused = running || menu.IsOpen;
         };
         tray.ShowToggled += () => Safe(() => { if (show.Running) show.Stop(); else show.Start(); });
-        motion.DragStarted += () => Safe(show.Stop);
-        stopShow = () => show.Stop();
+        motion.DragStarted += () => Safe(() => show.Stop(flyHome: false));
+        stopShow = flyHome => show.Stop(flyHome);
         showRunning = () => show.Running;
         var playRng = new Random();
         menu.Pressed += id => Safe(() =>
@@ -262,7 +263,7 @@ internal sealed unsafe class App
                         if (TimerInput.ParseMinutes(text) is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
                         else
                         {
-                            Log.Write($"timer: typed time not understood ({text.Length} characters: {string.Join(' ', text.Select(ch => ((int)ch).ToString("X4")))})");
+                            Log.Write($"timer: typed time not understood ({text.Length} characters)");   // never what was typed (spec §14)
                             Express("error", true);
                         }
                     }));
@@ -284,7 +285,7 @@ internal sealed unsafe class App
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
         // The PC just started (or a test says so): she flies in and says hello (motion 18).
-        if (_options.SimulateBoot || Environment.TickCount64 < (long)TimeSpan.FromMinutes(5).TotalMilliseconds)
+        if (Hello.ShouldGreet(DateTimeOffset.Now, SignIn.Time(), _options.TestMode, _options.SimulateBoot))
             ui.TryEnqueue(() => Safe(() => { Log.Write("hello: the PC just started"); motion.Play(MotionKind.StartupEntry); }));
         Foreground.Start();
 
@@ -347,7 +348,7 @@ internal sealed unsafe class App
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
-                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth}" +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
@@ -368,6 +369,7 @@ internal sealed unsafe class App
             });
             pipe.Register("menu-open", _ =>
             {
+                if (show.Running) show.Stop(flyHome: false);
                 if (!_state.Hidden) menu.Open();
                 return new PipeReply(true, menu.Describe(), _state.Snapshot());
             });
