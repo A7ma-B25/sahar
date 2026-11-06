@@ -12,6 +12,10 @@ on:
         default: false
   push:
     tags: ["v0.1.*-test"]
+    # Until this workflow is on main (dispatch needs it there), packaging changes on v1 branches build the zip
+    # as an artifact only; branch pushes never publish.
+    branches: ["v1/**"]
+    paths: ["packaging/**", ".github/workflows/test-build.yml"]
 
 permissions:
   contents: write
@@ -70,7 +74,7 @@ jobs:
           name: ui
           path: artifacts/ui/
       - name: Publish the "test-build" pre-release
-        if: github.event_name == 'push' || inputs.publish
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
