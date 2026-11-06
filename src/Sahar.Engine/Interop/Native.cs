@@ -94,6 +94,15 @@ internal struct GUITHREADINFO
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct RAWINPUTDEVICE
+{
+    public ushort UsagePage;
+    public ushort Usage;
+    public uint Flags;
+    public nint HwndTarget;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct LASTINPUTINFO { public uint CbSize; public uint DwTime; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -439,6 +448,12 @@ internal static unsafe partial class Native
 
     [LibraryImport("user32.dll")]
     public static partial int ClientToScreen(nint hwnd, POINT* point);
+
+    [LibraryImport("user32.dll")]
+    public static partial int RegisterRawInputDevices(RAWINPUTDEVICE* devices, uint count, uint size);
+
+    [LibraryImport("user32.dll")]
+    public static partial int IsWindow(nint hwnd);
 
     public static POINT CursorPos()
     {

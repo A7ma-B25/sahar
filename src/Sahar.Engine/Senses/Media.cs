@@ -40,20 +40,34 @@ internal sealed class Media
         }
     }
 
+    /// <summary>Looks at every media session (not just Windows' "current" one). App ids stay in memory only.</summary>
     private void Poll()
     {
-        bool playing = false, video = false;
+        bool music = false, video = false, browser = false;
         try
         {
-            var info = _manager?.GetCurrentSession()?.GetPlaybackInfo();
-            playing = info?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-            video = info?.PlaybackType == Windows.Media.MediaPlaybackType.Video;
+            if (_manager != null)
+                foreach (var session in _manager.GetSessions())
+                {
+                    var info = session.GetPlaybackInfo();
+                    if (info?.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing) continue;
+                    if (MediaEdges.IsBrowser(session.SourceAppUserModelId ?? "")) browser = true;
+                    else if (info.PlaybackType == Windows.Media.MediaPlaybackType.Video) video = true;
+                    else music = true;
+                }
         }
         catch (Exception e)
         {
             Log.Write($"media poll failed: {e.Message}");
         }
-        foreach (var e in _edges.Update(playing, video, fromBrowser: false, browserInFront: false)) _post(e);
-        MusicPlaying = playing && !video;
+        var events = music ? _edges.Update(true, false, false, false)
+            : video ? _edges.Update(true, true, false, false)
+            : _edges.Update(browser, false, browser, BrowserInFront());
+        foreach (var e in events) _post(e);
+        MusicPlaying = music;
     }
+
+    /// <summary>Chromium-based browsers (and Electron apps) or Firefox in front.</summary>
+    private static bool BrowserInFront() =>
+        Native.ClassName(Native.GetForegroundWindow()) is "Chrome_WidgetWin_1" or "MozillaWindowClass";
 }

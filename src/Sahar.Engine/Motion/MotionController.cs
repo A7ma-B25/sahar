@@ -525,8 +525,22 @@ internal sealed class MotionController
         });
     }
 
+    private nint _perchHwnd;
+    private RECT _perchRect;
+
+    /// <summary>She sits on a window that has since moved, changed size or state, or closed.</summary>
+    public unsafe bool PerchIsStale()
+    {
+        if (Current != MotionKind.PerchWindow || _perchHwnd == 0) return false;
+        RECT r;
+        if (Native.IsWindow(_perchHwnd) == 0 || Native.IsWindowVisible(_perchHwnd) == 0 || Native.IsIconic(_perchHwnd) != 0 ||
+            Native.IsZoomed(_perchHwnd) != 0 || Native.GetWindowRect(_perchHwnd, &r) == 0) return true;
+        return Math.Abs(r.Left - _perchRect.Left) > 4 || Math.Abs(r.Top - _perchRect.Top) > 4 || Math.Abs(r.Right - _perchRect.Right) > 4;
+    }
+
     private unsafe Vector2? WindowPerch()
     {
+        _perchHwnd = 0;
         nint fg = Native.GetForegroundWindow();
         if (fg == 0 || fg == Native.GetShellWindow() || Win.Own.Contains(fg)) return null;
         if (Native.IsWindowVisible(fg) == 0 || Native.IsIconic(fg) != 0 || Native.IsZoomed(fg) != 0) return null;
@@ -539,6 +553,7 @@ internal sealed class MotionController
         var topLeft = new Vector2(p.X - size.X / 2, p.Y - size.Y);
         var work = Monitors.At(p).WorkF;
         if (topLeft.Y < work.Y || topLeft.X < work.X || topLeft.X + size.X > work.X + work.Width) return null;
+        (_perchHwnd, _perchRect) = (fg, r);
         return topLeft;
     }
 

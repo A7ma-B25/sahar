@@ -20,7 +20,6 @@ namespace Sahar.Engine.Life;
 /// </summary>
 internal sealed unsafe class LifeDirector : IDisposable
 {
-    public static readonly TimeSpan LearnWindow = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan SaveEvery = TimeSpan.FromMinutes(10);
 
     private readonly MotionController _motion;
@@ -34,13 +33,13 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly string _path;
 
     private DateTimeOffset _due;
-    private (LifeAction Action, DateTimeOffset At)? _last;
+    private readonly ActionMemory _memory = new();
+    private readonly Func<TimeSpan> _sinceKeyboard;
+    private LifeAction _lastAction = LifeAction.None;
     private LifeAction? _forceNext;
     private bool _sleepingForAway, _ownSleep;
-    private POINT _cursor;
-    private DateTimeOffset? _oldKey;
     private DateTimeOffset _lastSave = DateTimeOffset.Now;
-    private DateOnly _lastDecay = DateOnly.FromDateTime(DateTime.Now);
+    private DateOnly _lastDecay;
     private ActivityLevel _level;
 
     public bool Enabled { get; set; } = true;
@@ -56,8 +55,10 @@ internal sealed unsafe class LifeDirector : IDisposable
     }
     public event Action<bool>? TypingChanged;
 
-    public LifeDirector(DispatcherQueue ui, MotionController motion, Director director, Media media, ActivityLevel level, string path)
+    public LifeDirector(DispatcherQueue ui, MotionController motion, Director director, Media media, ActivityLevel level, string path,
+        Func<TimeSpan> sinceKeyboard)
     {
+        _sinceKeyboard = sinceKeyboard;
         _motion = motion;
         _director = director;
         _media = media;
@@ -66,7 +67,10 @@ internal sealed unsafe class LifeDirector : IDisposable
         var state = LifeStore.Load(path);
         _prefs = Preferences.FromState(state.Weights);
         _routine = Routine.FromState(state.Hours);
-        _cursor = Native.CursorPos();
+        // Preferences fade a step a day, including the days she was not running.
+        _lastDecay = DateOnly.FromDateTime(DateTime.Now);
+        if (DateOnly.TryParseExact(state.LastDecay, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var last))
+            _prefs.DecayDays(_lastDecay.DayNumber - last.DayNumber);
         Schedule(DateTimeOffset.Now);
         motion.DragStarted += OnDragStarted;
         motion.ExtraAvoid = () => Typing ? TypingAvoid() : [];
@@ -102,18 +106,14 @@ internal sealed unsafe class LifeDirector : IDisposable
         var sinceInput = Native.GetLastInputInfo(&info) != 0
             ? TimeSpan.FromMilliseconds(unchecked(Native.GetTickCount() - info.DwTime))
             : TimeSpan.MaxValue;
-        var cursor = Native.CursorPos();
-        bool moved = cursor.X != _cursor.X || cursor.Y != _cursor.Y;
-        _cursor = cursor;
         _routine.Tick(now, sinceInput < TimeSpan.FromMinutes(1));
-        // (old heuristic, kept only until the Raw Input fix lands)
-        if (sinceInput <= TimeSpan.FromSeconds(1.5) && !moved) _oldKey = now - sinceInput;
-        bool typing = _typing.Update(now, _oldKey is { } k ? now - k : TimeSpan.MaxValue);
+        bool typing = _typing.Update(now, _sinceKeyboard());
         if (typing != Typing) { Typing = typing; TypingChanged?.Invoke(typing); }
         if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         if (!Enabled) return;
+        if (_motion.PerchIsStale()) { _motion.Play(MotionKind.Wander); return; }   // her window moved, resized or closed
         if (Typing) { StepAwayFromTyping(); return; }   // no own actions while you type
 
         // Away: she naps in the corner and wakes when you are back.
@@ -160,7 +160,8 @@ internal sealed unsafe class LifeDirector : IDisposable
             _ => MotionKind.SleepInCorner,
         });
         _ownSleep = action == LifeAction.SleepInCorner;
-        _last = (action, now);
+        _memory.Started(action, now);
+        _lastAction = action;
         Actions++;
         Schedule(now);
     }
@@ -168,11 +169,14 @@ internal sealed unsafe class LifeDirector : IDisposable
     public const float NearTypingDip = 120f, AvoidTypingDip = 150f;
 
     /// <summary>Where you are typing: the caret, or the mouse pointer in apps without a system caret.</summary>
-    private static RectF TypingSpot(out RectI window)
+    private static RectF TypingSpot(out RectI window) => TypingSpot(out window, out _);
+
+    private static RectF TypingSpot(out RectI window, out bool fromCaret)
     {
         var (hwnd, w, caret, _) = ForegroundInfo.Current();
         window = w;
-        if (hwnd != 0 && caret is { } c) return new RectF(c.Left, c.Top, Math.Max(1, c.Right - c.Left), Math.Max(1, c.Bottom - c.Top));
+        fromCaret = hwnd != 0 && caret is not null;
+        if (caret is { } c && fromCaret) return new RectF(c.Left, c.Top, Math.Max(1, c.Right - c.Left), Math.Max(1, c.Bottom - c.Top));
         var p = Native.CursorPos();
         return new RectF(p.X, p.Y, 1, 20);
     }
@@ -190,8 +194,13 @@ internal sealed unsafe class LifeDirector : IDisposable
     private void StepAwayFromTyping()
     {
         if (_director.Hidden || !Resting) return;
-        var spot = TypingSpot(out _);
+        var spot = TypingSpot(out _, out bool fromCaret);
         var body = _motion.Body;
+        // Without a caret the pointer stands in for the typing spot, unless the pointer is on her: then you are
+        // playing with her, not typing next to her.
+        float pad = 40 * _motion.DpiScale;
+        if (!fromCaret && spot.X >= body.X - pad && spot.X <= body.X + body.Width + pad &&
+            spot.Y >= body.Y - pad - body.Height / 2 && spot.Y <= body.Y + body.Height + pad) return;
         var d = Vector2.Distance(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2),
             new Vector2(spot.X + spot.Width / 2, spot.Y + spot.Height / 2));
         if (d < NearTypingDip * _motion.DpiScale + body.Width / 2) _motion.Play(MotionKind.Wander);
@@ -200,17 +209,13 @@ internal sealed unsafe class LifeDirector : IDisposable
     /// <summary>A poke shortly after one of her own actions: she learns you liked it.</summary>
     public void OnPoked()
     {
-        if (_last is { } l && DateTimeOffset.Now - l.At <= LearnWindow) _prefs.Liked(l.Action);
+        if (_memory.TakeForFeedback(DateTimeOffset.Now) is { } a) _prefs.Liked(a);   // once per action
     }
 
     private void OnDragStarted()
     {
         var now = DateTimeOffset.Now;
-        if (_last is { } l && now - l.At <= LearnWindow)
-        {
-            _prefs.Disliked(l.Action);
-            _last = null;
-        }
+        if (_memory.TakeForFeedback(now) is { } a) _prefs.Disliked(a);
         Schedule(now);   // being grabbed restarts the wait
     }
 
@@ -227,7 +232,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     public void Save()
     {
         _lastSave = DateTimeOffset.Now;
-        try { LifeStore.Save(_path, new LifeState(1, _prefs.ToState(), _routine.ProfileToState())); }
+        try { LifeStore.Save(_path, new LifeState(1, _prefs.ToState(), _routine.ProfileToState(), _lastDecay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))); }
         catch (Exception e) { Log.Write($"life.json not saved: {e.Message}"); }
     }
 
@@ -238,7 +243,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var weights = string.Join(",", Enum.GetValues<LifeAction>().Where(a => a != LifeAction.None)
             .Select(a => string.Create(CultureInfo.InvariantCulture, $"{a}:{_prefs.Weight(a):0.00}")));
         return string.Create(CultureInfo.InvariantCulture,
-            $"level={_level} enabled={(Enabled ? "true" : "false")} next={next:0.0} last={_last?.Action.ToString() ?? "None"} " +
+            $"level={_level} enabled={(Enabled ? "true" : "false")} next={next:0.0} last={_lastAction} " +
             $"typing={(Typing ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
     }
 

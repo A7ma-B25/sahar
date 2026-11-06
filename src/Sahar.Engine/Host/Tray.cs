@@ -12,7 +12,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 {
     public const string Tip = "سَحَر · Sahar";
     private const uint CallbackMessage = 0x8001;          // WM_APP + 1
-    private const uint WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1;
+    private const uint WM_POWERBROADCAST = 0x0218, WM_WTSSESSION_CHANGE = 0x02B1, WM_INPUT = 0x00FF,
+        WM_QUERYENDSESSION = 0x0011, WM_ENDSESSION = 0x0016, RIDEV_INPUTSINK = 0x100;
     private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205, NIN_SELECT = 0x0400, WM_LBUTTONUP = 0x0202;
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
@@ -32,12 +33,20 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public event Action? Quit;
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
+    /// <summary>Windows is shutting down, logging off or restarting for an update.</summary>
+    public event Action? EndSession;
+    private long _lastKeyTick;
+
+    /// <summary>Time since the last real key press anywhere (Raw Input: a timestamp, never which key).</summary>
+    public TimeSpan SinceKeyboard => _lastKeyTick == 0 ? TimeSpan.MaxValue : TimeSpan.FromMilliseconds(Environment.TickCount64 - _lastKeyTick);
 
     public Tray()
     {
         fixed (char* name = "TaskbarCreated") _taskbarCreated = Native.RegisterWindowMessage(name);
         Hwnd = Win.Create(this, Native.WS_EX_TOOLWINDOW, Native.WS_POPUP, default, "Sahar tray");
         Native.WTSRegisterSessionNotification(Hwnd, 0 /* this session */);
+        var keyboard = new RAWINPUTDEVICE { UsagePage = 1, Usage = 6, Flags = RIDEV_INPUTSINK, HwndTarget = Hwnd };
+        if (Native.RegisterRawInputDevices(&keyboard, 1, (uint)sizeof(RAWINPUTDEVICE)) == 0) Log.Write("keyboard raw input not registered");
         _icon = MakeIcon();
         Add();
     }
@@ -81,6 +90,14 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 uint ev = (uint)(lParam & 0xFFFF);
                 if (ev is WM_CONTEXTMENU or WM_RBUTTONUP) ShowMenu();
                 else if (ev is NIN_SELECT or WM_LBUTTONUP) ShowNow?.Invoke();   // a click on the icon brings her back
+                return 0;
+            case WM_INPUT:
+                _lastKeyTick = Environment.TickCount64;
+                return null;   // DefWindowProc cleans up the input
+            case WM_QUERYENDSESSION:
+                return 1;
+            case WM_ENDSESSION:
+                if (wParam != 0) EndSession?.Invoke();
                 return 0;
             case WM_POWERBROADCAST:
                 PowerChanged?.Invoke();

@@ -158,11 +158,12 @@ internal sealed unsafe class App
         _ = new Network(ui, director.Post);
         var media = new Media(ui, director.Post);
         // Her daily life. In test mode it waits for the pipe's "life" command, so it never disturbs other tests.
-        using var lifeDirector = new LifeDirector(ui, motion, director, media, settings.Activity, LifeStore.DefaultPath)
+        using var lifeDirector = new LifeDirector(ui, motion, director, media, settings.Activity, LifeStore.DefaultPath, () => tray.SinceKeyboard)
         {
             Enabled = !_options.TestMode,
         };
         life = lifeDirector;
+        tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         Foreground.Start();
 
         void OnDisplayChanged()
