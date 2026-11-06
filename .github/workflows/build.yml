@@ -34,7 +34,8 @@ jobs:
         run: |
           $out = & cmd /c "artifacts\engine\Sahar.Engine.exe --version > artifacts\version.txt 2>&1" ; $v = (Get-Content artifacts\version.txt -Raw).Trim()
           Write-Host "version: '$v'"
-          if ($v -ne "Sahar 0.1.0") { throw "unexpected version output: '$v'" }
+          $want = "Sahar " + (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+          if ($v -ne $want) { throw "unexpected version output: '$v' (want '$want')" }
           Remove-Item artifacts/engine/*.pdb -ErrorAction SilentlyContinue
           Get-ChildItem artifacts/engine | Format-Table Name, Length
       - uses: actions/upload-artifact@v4

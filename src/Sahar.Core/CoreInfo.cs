@@ -3,5 +3,5 @@ namespace Sahar.Core;
 /// <summary>Build-wide facts shared by every Sahar program.</summary>
 public static class CoreInfo
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 }

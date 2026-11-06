@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -155,7 +155,11 @@ Add-Type -AssemblyName System.Windows.Forms
 `$f.Text = 'Sahar test $kind'
 `$f.BackColor = 'DarkSlateBlue'
 if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$true }
-`$f.WindowState = 'Maximized'
+if ('$kind' -eq 'typing') {
+    `$f.StartPosition = 'Manual'; `$f.Location = New-Object System.Drawing.Point(150, 120); `$f.Size = New-Object System.Drawing.Size(560, 380)
+    `$t = New-Object System.Windows.Forms.TextBox; `$t.Multiline = `$true; `$t.Dock = 'Fill'; `$t.Font = New-Object System.Drawing.Font('Segoe UI', 14)
+    `$f.Controls.Add(`$t)
+} else { `$f.WindowState = 'Maximized' }
 `$f.Add_Shown({ `$f.Activate() })
 [System.Windows.Forms.Application]::Run(`$f)
 "@
@@ -167,7 +171,8 @@ if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$tr
     Start-Sleep -Milliseconds 300
     # Windows refuses a new process the foreground while the runner's terminal has it; a real click on the
     # window takes it (Sahar's overlay is click-through, and she sits bottom-right, away from this point).
-    & agent-desktop --headed mouse-click --xy '120,300' 2>&1 | Out-Null
+    $click = if ($kind -eq 'typing') { '430,320' } else { '120,300' }   # inside the window
+    & agent-desktop --headed mouse-click --xy $click 2>&1 | Out-Null
     Start-Sleep -Milliseconds 300
     $p
 }
@@ -179,6 +184,10 @@ public static class Shell {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     public static void TaskbarCreated() { PostMessage((IntPtr)0xFFFF, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero); }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+    /// Tells Sahar's tray window that Windows is shutting down (WM_ENDSESSION, wParam TRUE).
+    public static bool EndSession() { var h = FindWindow("Sahar.Engine", "Sahar tray"); return h != IntPtr.Zero && PostMessage(h, 0x16, (IntPtr)1, IntPtr.Zero); }
 }
 "@
 
@@ -198,6 +207,20 @@ function Wait-Overlay([string]$visible, [int]$ms, [string]$what) {
         Start-Sleep -Milliseconds 100
     } while ((Get-Date) -lt $deadline)
     throw $what
+}
+
+# Test-mode life diagnostics: "level=… next=… last=… typing=… video=… actions=N weights=Wander:1.00,…".
+function Life {
+    $r = Send '{"type":"cmd","name":"debug-life"}'
+    if (-not $r.ok) { throw "debug-life not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+
+function Weight($life, [string]$action) {
+    foreach ($w in ($life.weights -split ',')) { $n, $v = $w -split ':'; if ($n -eq $action) { return [double]$v } }
+    1.0
 }
 
 function Save-Log {
@@ -369,6 +392,21 @@ function Stage-Motion {
         Screenshot 'motion-throw-rest.png' | Out-Null
         Assert-BodyInWork $st 'after throw'
     }
+    Step 'her eyes follow the mouse while she hovers' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        $st = State
+        $cy = [int]($st.y + $st.height / 2)
+        & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]($st.x - 200), $cy) | Out-Null
+        Start-Sleep -Milliseconds 700
+        $left = (Info).faceOffsetX
+        & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]($st.x + $st.width + 200), $cy) | Out-Null
+        Start-Sleep -Milliseconds 700
+        $right = (Info).faceOffsetX
+        Write-Host "    face offset: left $left, right $right"
+        if ($null -eq $left -or [double]$left -ge 0) { throw "eyes did not look left ($left)" }
+        if ($null -eq $right -or [double]$right -le 0) { throw "eyes did not look right ($right)" }
+    }
     Step 'click pokes her' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
@@ -522,6 +560,149 @@ function Stage-Perf {
     Stop-Engine
 }
 
+function Stage-Life {
+    $settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
+    $lifePath = Join-Path $env:APPDATA 'Sahar\life.json'
+    Remove-Item $settingsPath, $lifePath -ErrorAction SilentlyContinue
+    Step 'start engine' { Start-Engine }
+    Step 'she acts on her own (10 actions in 90 s, gap 2 s)' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"life","args":{"gap":"2"}}'
+        if (-not $r.ok) { throw "life not ok: $($r.error)" }
+        $start = [int](Life).actions
+        $seen = @{}
+        $deadline = (Get-Date).AddSeconds(90)
+        do {
+            Start-Sleep -Milliseconds 500
+            $m = (State).motion
+            $seen[$m] = 1 + [int]$seen[$m]
+            $done = [int](Life).actions - $start
+        } while ($done -lt 10 -and (Get-Date) -lt $deadline)
+        Write-Host "    own actions: $done; motions seen: $(($seen.Keys | Sort-Object) -join ', ')"
+        Screenshot 'life-acting.png' | Out-Null
+        if ($done -lt 10) { throw "only $done own actions in 90 s" }
+        Assert-TopLeftInWork (State) 'after her own actions'
+    }
+    Step 'grabbing her mid-action teaches her and pauses her' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"30"}}' | Out-Null
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"300","y":"250"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"life","args":{"now":"Wander"}}'
+        if (-not $r.ok) { throw "life now not ok: $($r.error)" }
+        Wait-State { param($st) $st.motion -eq 'Wander' } 3000 'her own Wander' | Out-Null
+        $before = (Life)
+        $st = State
+        $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 120), [int]($st.y + $st.height / 2 + 60)
+        & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 600 --drop-delay 200 --timeout-ms 8000 | Out-Null
+        Start-Sleep -Milliseconds 2000
+        $after = (Life)
+        $w = Weight $after 'Wander'
+        Write-Host "    Wander weight $(Weight $before 'Wander') -> $w; actions $($before.actions) -> $($after.actions)"
+        if ($w -ge 1.0) { throw "Wander weight did not drop ($w)" }
+        if ([int]$after.actions -ne [int]$before.actions) { throw 'she started another own action right after being grabbed' }
+    }
+    Step 'she steps away from where you type' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'typing'
+        try {
+            [System.Windows.Forms.SendKeys]::SendWait('a')
+            Start-Sleep -Milliseconds 400
+            $spot = (Life).spot
+            if (-not $spot -or $spot -eq 'none') { throw "no typing spot ($spot)" }
+            $sx, $sy = ($spot -split ',') | ForEach-Object { [double]$_ }
+            # The typing window is at (150,120) 560×380: a spot inside it is the text box's real caret.
+            if ($sx -lt 150 -or $sx -gt 710 -or $sy -lt 120 -or $sy -gt 500) { throw "typing spot $spot is not the text box caret" }
+            $st = State
+            # Put her body centre 40 px right of the typing spot (canvas top-left = body centre - offset).
+            $bodyCx = $st.x + $st.width / 2; $bodyCy = $st.y + $st.height / 2
+            $canvasDx = $bodyCx - [double](Info).canvasX; $canvasDy = $bodyCy - [double](Info).canvasY
+            $px = [int]($sx + 40 - $canvasDx); $py = [int]($sy - $canvasDy)
+            Send ('{"type":"cmd","name":"pose","args":{"x":"' + $px + '","y":"' + $py + '"}}') | Out-Null
+            Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+            $st = State
+            $d0 = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
+            Write-Host "    typing spot $spot, her distance before typing $([int]$d0) px"
+            # Type for 3 s.
+            $end = (Get-Date).AddSeconds(3)
+            while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('salam '); Start-Sleep -Milliseconds 150 }
+            if ((Life).typing -ne 'true') { throw 'typing not detected' }
+            $far = $false
+            $deadline = (Get-Date).AddSeconds(8)
+            do {
+                [System.Windows.Forms.SendKeys]::SendWait('x'); Start-Sleep -Milliseconds 300
+                $st = State
+                $d = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
+                if ($st.motion -notin 'Wander', 'Hover') { throw "motion '$($st.motion)' while typing" }
+                if ($d -gt 150 -and $st.motion -eq 'Hover') { $far = $true }
+            } while (-not $far -and (Get-Date) -lt $deadline)
+            Screenshot 'life-typing.png' | Out-Null
+            Write-Host "    her distance after typing $([int]$d) px"
+            if (-not $far) { throw "still $([int]$d) px from the typing spot" }
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'she stays put when you poke, hover over or drop her (no-caret app in front)' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'maximized'
+        try {
+            Send '{"type":"cmd","name":"pose","args":{"x":"300","y":"250"}}' | Out-Null
+            function Centre { $st = State; [pscustomobject]@{ x = $st.x + $st.width / 2; y = $st.y + $st.height / 2; motion = $st.motion } }
+            function Assert-Still($before, [string]$what) {
+                for ($i = 0; $i -lt 10; $i++) {
+                    Start-Sleep -Milliseconds 500
+                    $c = Centre
+                    if ([math]::Abs($c.x - $before.x) -gt 4 -or [math]::Abs($c.y - $before.y) -gt 4 -or $c.motion -eq 'Wander') {
+                        throw "${what}: she moved from ($([int]$before.x),$([int]$before.y)) to ($([int]$c.x),$([int]$c.y)), motion $($c.motion)"
+                    }
+                }
+            }
+            $c = Centre
+            & agent-desktop --headed mouse-click --xy ('{0},{1}' -f [int]$c.x, [int]$c.y) | Out-Null
+            Assert-Still $c 'after a poke'
+            & agent-desktop --headed mouse-move --xy ('{0},{1}' -f [int]$c.x, [int]($c.y - 10)) | Out-Null
+            Assert-Still $c 'with the cursor resting on her'
+            & agent-desktop --headed drag --from-xy ('{0},{1}' -f [int]$c.x, [int]$c.y) --to-xy ('{0},{1}' -f [int]($c.x + 150), [int]($c.y + 40)) --duration 600 --drop-delay 300 --timeout-ms 8000 | Out-Null
+            Start-Sleep -Milliseconds 800
+            Assert-Still (Centre) 'after being dropped'
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'she leaves a window edge when that window is maximized' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        $script:win = Start-TestWindow 'typing'
+        try {
+            $r = Send '{"type":"cmd","name":"motion","args":{"kind":"PerchWindow"}}'
+            Start-Sleep -Milliseconds 2000
+            if ((State).motion -ne 'PerchWindow') { throw "she did not perch ($((State).motion))" }
+            $script:win.Refresh()
+            [Shell]::ShowWindow($script:win.MainWindowHandle, 3) | Out-Null   # SW_MAXIMIZE
+            Wait-State { param($st) $st.motion -ne 'PerchWindow' } 2500 'leaving the maximized window' | Out-Null
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'what she learned is saved when Windows shuts down' {
+        Remove-Item $lifePath -ErrorAction SilentlyContinue
+        if (-not [Shell]::EndSession()) { throw 'tray window not found' }
+        $deadline = (Get-Date).AddSeconds(3)
+        while (-not (Test-Path $lifePath) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
+        if (-not (Test-Path $lifePath)) { throw 'life.json not written on WM_ENDSESSION' }
+    }
+    Step 'activity level is saved and survives a restart' {
+        $r = Send '{"type":"cmd","name":"set-activity","args":{"level":"Lively"}}'
+        if (-not $r.ok) { throw "set-activity not ok: $($r.error)" }
+        if (-not (Test-Path $settingsPath)) { throw 'settings.json not written' }
+        $json = Get-Content $settingsPath -Raw
+        if ($json -notmatch '"activity"\s*:\s*"lively"') { throw "settings.json: $json" }
+        Stop-Engine
+        if (-not (Test-Path $lifePath)) { throw 'life.json not written on quit' }
+        Start-Engine
+        $level = (Life).level
+        if ($level -ne 'Lively') { throw "level after restart is '$level'" }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -532,6 +713,7 @@ try {
             'motion' { Stage-Motion }
             'events' { Stage-Events }
             'perf' { Stage-Perf }
+            'life' { Stage-Life }
         }
     }
 }

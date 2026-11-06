@@ -42,8 +42,15 @@ internal sealed class MotionController
     private Vector2 _lastDragVelocity;
 
     public MotionKind Current { get; private set; } = MotionKind.Hover;
+    /// <summary>More places to keep away from when she wanders (e.g. where you are typing).</summary>
+    public Func<IReadOnlyList<RectF>>? ExtraAvoid { get; set; }
+    /// <summary>Her body in screen pixels.</summary>
+    public RectF Body => new(TopLeft.X, TopLeft.Y, BodySize.X, BodySize.Y);
+    public float DpiScale => _v.DpiScale;
     /// <summary>Raised when FullscreenHide has shrunk her away (the overlay can then be hidden).</summary>
     public event Action? HiddenAway;
+    /// <summary>The user grabbed her (mouse or pipe).</summary>
+    public event Action? DragStarted;
     private bool _throwNext;
     private Vector2? _home;
     /// <summary>Sitting or sleeping: no idle bob.</summary>
@@ -106,7 +113,8 @@ internal sealed class MotionController
     {
         Current = next;
         _step = null;
-        _eyes = false;
+        // Her eyes follow the mouse whenever she is resting (spec §6 motion 4).
+        _eyes = next is MotionKind.Hover or MotionKind.EyesFollow or MotionKind.LandAndSit or MotionKind.PerchWindow;
         Still = false;
         var root = _v.Root;
         root.StopAnimation("RotationAngleInDegrees");
@@ -213,7 +221,7 @@ internal sealed class MotionController
     {
         var m = Monitor;
         var cursor = Native.CursorPos();
-        var avoid = new[] { new RectF(cursor.X - 80, cursor.Y - 80, 160, 160) };
+        RectF[] avoid = [new RectF(cursor.X - 80, cursor.Y - 80, 160, 160), .. ExtraAvoid?.Invoke() ?? []];
         var target = _wander.NextTarget(m.WorkF, BodySize, avoid);
         float dist = Vector2.Distance(target, TopLeft);
         float secs = Math.Clamp(dist / (90 * m.DpiScale), 4, 8);
@@ -305,6 +313,7 @@ internal sealed class MotionController
     /// <summary>Starts hanging from the leaf under the cursor.</summary>
     public void BeginDrag()
     {
+        DragStarted?.Invoke();
         Reset(MotionKind.Drag);
         HoldStill();
         Still = false;
@@ -490,6 +499,7 @@ internal sealed class MotionController
             if (t < 0.75f) return true;
             _step = null;
             Current = MotionKind.Hover;   // awake: hovering again (lean works)
+            _eyes = true;
             return false;
         };
     }
@@ -515,8 +525,22 @@ internal sealed class MotionController
         });
     }
 
+    private nint _perchHwnd;
+    private RECT _perchRect;
+
+    /// <summary>She sits on a window that has since moved, changed size or state, or closed.</summary>
+    public unsafe bool PerchIsStale()
+    {
+        if (Current != MotionKind.PerchWindow || _perchHwnd == 0) return false;
+        RECT r;
+        if (Native.IsWindow(_perchHwnd) == 0 || Native.IsWindowVisible(_perchHwnd) == 0 || Native.IsIconic(_perchHwnd) != 0 ||
+            Native.IsZoomed(_perchHwnd) != 0 || Native.GetWindowRect(_perchHwnd, &r) == 0) return true;
+        return Math.Abs(r.Left - _perchRect.Left) > 4 || Math.Abs(r.Top - _perchRect.Top) > 4 || Math.Abs(r.Right - _perchRect.Right) > 4;
+    }
+
     private unsafe Vector2? WindowPerch()
     {
+        _perchHwnd = 0;
         nint fg = Native.GetForegroundWindow();
         if (fg == 0 || fg == Native.GetShellWindow() || Win.Own.Contains(fg)) return null;
         if (Native.IsWindowVisible(fg) == 0 || Native.IsIconic(fg) != 0 || Native.IsZoomed(fg) != 0) return null;
@@ -529,6 +553,7 @@ internal sealed class MotionController
         var topLeft = new Vector2(p.X - size.X / 2, p.Y - size.Y);
         var work = Monitors.At(p).WorkF;
         if (topLeft.Y < work.Y || topLeft.X < work.X || topLeft.X + size.X > work.X + work.Width) return null;
+        (_perchHwnd, _perchRect) = (fg, r);
         return topLeft;
     }
 
