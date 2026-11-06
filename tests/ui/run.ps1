@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -608,6 +608,176 @@ function Stage-Perf {
     Stop-Engine
 }
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Mouse {
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    public static void Click(int x, int y, bool right) {
+        SetCursorPos(x, y); System.Threading.Thread.Sleep(60);
+        mouse_event(right ? 0x0008u : 0x0002u, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(30);
+        mouse_event(right ? 0x0010u : 0x0004u, 0, 0, 0, UIntPtr.Zero);
+    }
+    public static void DoubleClick(int x, int y) { Click(x, y, false); System.Threading.Thread.Sleep(120); Click(x, y, false); }
+}
+'@
+
+# debug-menu: "open=true level=main buttons=id:x,y,r;id:x,y,r" (screen px)
+function Menu {
+    $r = Send '{"type":"cmd","name":"debug-menu"}'
+    if (-not $r.ok) { throw "debug-menu not ok: $($r.error)" }
+    $h = @{ buttons = @() }
+    foreach ($pair in ($r.error -split ' ')) {
+        $k, $v = $pair -split '=', 2
+        if ($k -eq 'buttons') {
+            if ($v) {
+                $h.buttons = @($v -split ';' | ForEach-Object {
+                    $id, $xyr = $_ -split ':', 2; $x, $y, $rad = $xyr -split ','
+                    [pscustomobject]@{ id = $id; x = [double]$x; y = [double]$y; r = [double]$rad }
+                })
+            }
+        }
+        else { $h[$k] = $v }
+    }
+    $h
+}
+function Body-Centre { $st = State; @([int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)) }
+function Pose-Body([double]$bx, [double]$by) {
+    # pose moves her canvas; shift it so her body's top-left lands on (bx, by)
+    $st = State
+    $p = Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"300"}}'
+    $st = $p.state
+    $x = 400 + ($bx - $st.x); $y = 300 + ($by - $st.y)
+    (Send ('{"type":"cmd","name":"pose","args":{"x":"' + [int]$x + '","y":"' + [int]$y + '"}}')).state
+}
+function Wait-Menu([string]$open, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do { $m = Menu; if ($m.open -eq $open) { return $m }; Start-Sleep -Milliseconds 100 } while ((Get-Date) -lt $deadline)
+    throw "$what not seen within $ms ms (open=$($m.open))"
+}
+function Press([string]$id) {
+    $r = Send ('{"type":"cmd","name":"menu-press","args":{"id":"' + $id + '"}}')
+    if (-not $r.ok) { throw "menu-press $id not ok: $($r.error)" }
+}
+
+function Stage-Menu {
+    Step 'start engine' { Start-Engine }
+    Step 'right-click opens the menu with the six buttons' {
+        Pose-Body 900 450 | Out-Null
+        Start-Sleep -Milliseconds 300
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'menu open after a right-click'
+        $ids = ($m.buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer,note,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
+        Start-Sleep -Milliseconds 600
+        Screenshot 'menu-open.png' | Out-Null
+    }
+    Step 'Esc closes it' {
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Menu 'false' 1000 'menu closed by Esc' | Out-Null
+    }
+    Step 'a double-click opens it' {
+        $c = Body-Centre
+        [Mouse]::DoubleClick($c[0], $c[1])
+        Wait-Menu 'true' 2000 'menu open after a double-click' | Out-Null
+    }
+    Step 'a click outside closes it and nothing else happens' {
+        $before = (State).expression
+        $c = Body-Centre
+        [Mouse]::Click($c[0] - 400, $c[1] + 250, $false)
+        Wait-Menu 'false' 1000 'menu closed by a click outside' | Out-Null
+        if ((State).expression -ne $before) { throw "expression changed to $((State).expression)" }
+    }
+    Step 'buttons work by real clicks' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'menu open'
+        Start-Sleep -Milliseconds 600
+        $b = $m.buttons | Where-Object id -eq 'activity'
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Start-Sleep -Milliseconds 700
+        $m = Menu
+        if ($m.level -ne 'activity') { throw "level is '$($m.level)' after clicking activity" }
+        $b = $m.buttons | Where-Object id -eq 'activity-lively'
+        if (-not $b) { throw "no activity-lively button: $(($m.buttons | ForEach-Object id) -join ',')" }
+        Screenshot 'menu-activity.png' | Out-Null
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Wait-Menu 'false' 1500 'menu closed after choosing a level' | Out-Null
+        if ((Life).level -ne 'Lively') { throw "level is $((Life).level)" }
+    }
+    Step 'from every corner every button is on screen' {
+        $n = 0
+        foreach ($corner in @(@($Work.Left, $Work.Top), @($Work.Right - 80, $Work.Top), @($Work.Left, $Work.Bottom - 80), @($Work.Right - 80, $Work.Bottom - 80))) {
+            $n++
+            Pose-Body $corner[0] $corner[1] | Out-Null
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            $m = Wait-Menu 'true' 1000 "menu open in corner $n"
+            foreach ($b in $m.buttons) {
+                if ($b.x - $b.r -lt $Work.Left -or $b.y - $b.r -lt $Work.Top -or $b.x + $b.r -gt $Work.Right -or $b.y + $b.r + 24 -gt $Work.Bottom) {
+                    throw "corner ${n}: $($b.id) at ($($b.x),$($b.y)) is off the work area $Work"
+                }
+            }
+            Start-Sleep -Milliseconds 600
+            Screenshot "menu-corner-$n.png" | Out-Null
+            Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+            Wait-Menu 'false' 1000 'menu closed' | Out-Null
+        }
+        Pose-Body 900 450 | Out-Null
+    }
+    Step 'hide closes the menu and hides her' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'hide'
+        Wait-Menu 'false' 1000 'menu closed after hide' | Out-Null
+        Wait-State { param($st) $st.hidden } 2000 'hidden' | Out-Null
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Wait-State { param($st) -not $st.hidden } 3000 'shown again' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'play makes her move' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'play'
+        Wait-Menu 'false' 1000 'menu closed after play' | Out-Null
+        Wait-State { param($st) $st.motion -notin 'Hover', 'EyesFollow' } 1500 'a move' | Out-Null
+        Start-Sleep -Seconds 9
+    }
+    Step 'the menu closes when she hides' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null
+        Wait-Menu 'false' 1000 'menu closed by hiding' | Out-Null
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'no drag while the menu is open' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        $before = State
+        $c = Body-Centre
+        & agent-desktop --headed drag --from-xy ('{0},{1}' -f $c[0], $c[1]) --to-xy ('{0},{1}' -f ($c[0] + 200), ($c[1] + 60)) --duration 600 --drop-delay 200 --timeout-ms 8000 | Out-Null
+        $after = State
+        if ([math]::Abs($after.x - $before.x) -gt 4 -or [math]::Abs($after.y - $before.y) -gt 4) { throw "she moved from ($($before.x),$($before.y)) to ($($after.x),$($after.y))" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'the menu costs nothing at rest' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Start-Sleep -Seconds 10
+        $ws = (State).workingSetBytes
+        Write-Host ("    working set with the menu open: {0:N1} MB" -f ($ws / 1MB))
+        if ($ws -ge 60MB) { throw "working set $ws" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Stop-Engine
+}
+
 function Stage-Life {
     $settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
     $lifePath = Join-Path $env:APPDATA 'Sahar\life.json'
@@ -825,6 +995,7 @@ try {
             'events' { Stage-Events }
             'perf' { Stage-Perf }
             'life' { Stage-Life }
+            'menu' { Stage-Menu }
         }
     }
 }

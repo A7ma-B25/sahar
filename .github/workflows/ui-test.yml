@@ -28,7 +28,7 @@ jobs:
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: UI tests
         shell: pwsh
-        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life
+        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life,menu
       - uses: actions/upload-artifact@v4
         if: always()
         with:
