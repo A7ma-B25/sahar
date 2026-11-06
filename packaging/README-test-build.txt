@@ -1,8 +1,19 @@
-سَحَر · Sahar — نسخة تجريبية 0.4.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.5.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.4.0
+شو الجديد بـ 0.5.0
 ------------------
+- 📋 الحافظة بالقائمة: آخر 20 شي نسخته (نص، رابط، صورة). كبسة على وحدة بترجّعها للحافظة، و"امسح الكل" بيمسح.
+  ما بتحفظ شي من برامج كلمات السر، ولا شي معلّم إنو خاص. كل شي بيضل على جهازك.
+- بتعرف وقت يخلص تنزيل ملف، ووقت تاخد لقطة شاشة (Print Screen أو Win+Shift+S)، ووقت الجهاز يضل مشغول كتير دقيقتين.
+- إذا الكاميرا أو المايك شغالين (مكالمة فيديو) بتهدى: ما بتعلّق وما بتعمل حركات كبيرة.
+- بتعلّق بلطف أحياناً: إذا صار لك ساعة أو ساعتين على نفس البرنامج، أو صباح الخير أول النهار.
+  مرة كل 45 دقيقة بالكتير، وإذا كبست عليها لتسكّر التعليق بتعلّق أقل. بتعرف اسم البرنامج بس، ما بتقرا شي من الشاشة.
+- المطر (إذا بدك): كبسة يمين على أيقونتها ← "الطقس…" واكتب مدينتك. إذا في مطر جاي بالساعتين الجايين بتنبهك.
+  اسم المدينة بيروح لـ Open-Meteo مرة وحدة، وبعدين بس الإحداثيات، مرة بالساعة.
+
+من 0.4.0
+--------
 - القائمة الدائرية: كليك يمين أو كبستين عليها. فيها 6 أزرار:
   ⏱️ مؤقت (5 / 15 / 25 / 45 دقيقة أو وقت بتكتبه، مع حلقة وقت حواليها، ولما يخلص بتلفت انتباهك. كبسة عليها بتسكّت المؤقت).
   📝 ملاحظة سريعة (بتكتب وبتكبس Enter، وبتشوف آخر 3 ملاحظات).
@@ -32,7 +43,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.4.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.5.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -68,9 +79,13 @@
 - حط مؤقت 5 دقايق ونيّم الجهاز 10 دقايق: لما يصحى لازم يخلص المؤقت فوراً.
 - اكتب ملاحظة بالعربي (بلغة الكيبورد العربي): لازم تنحفظ وتبيّن صح.
 - سكّرها من أيقونتها: لازم تودّعك وتتحوّل لنجوم.
+- انسخ كلمة سر من برنامج كلمات السر (Bitwarden أو 1Password…): ما لازم تطلع بالحافظة تبعها.
+- نزّل ملف حقيقي من المتصفح، وخود لقطة بـ Win+Shift+S، وافتح مكالمة فيديو: لازم تتفاعل متل ما هو مكتوب فوق.
+- شغّل الطقس بمدينتك.
+- "لا تزعجني" تبع ويندوز (Focus Assist) ما إلو طريقة رسمية لنعرفه، فاستعمل "لا تزعجني" تبعها من قائمتها.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
-بهالنسخة لسا ما في: الأصوات، الإعدادات، الحافظة، الصلاة، الاستماع، وربط Claude. هدول بالخطط الجاية.
+بهالنسخة لسا ما في: الأصوات، الإعدادات، الصلاة، الاستماع، وربط Claude. هدول بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -80,11 +95,22 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.4.0 (Windows)
+Sahar — test build 0.5.0 (Windows)
 ==================================
 
-What's new in 0.4.0
+What's new in 0.5.0
 -------------------
+- 📋 Clipboard in her menu: the last 20 things you copied (text, links, images). Click one to copy it again; "Clear all".
+  Nothing from password managers or content marked private is kept. Everything stays on your PC.
+- She notices a finished download, a screenshot (Print Screen or Win+Shift+S) and a CPU busy for two minutes.
+- Camera or microphone on (a video call): she goes quiet — no comments, no big moves.
+- Gentle comments now and then: an hour or two on the same app, or good morning. At most every 45 minutes, and less
+  if you click them away. She only knows the app's name; she reads nothing on your screen.
+- Rain (if you want it): right-click her icon → "Weather…" and type your city. Rain within two hours: she tells you.
+  Your city goes to Open-Meteo once, then only its coordinates, once an hour.
+
+From 0.4.0
+----------
 - The radial menu: right-click or double-click her. Six buttons:
   ⏱️ Timer (5 / 15 / 25 / 45 min or a time you type; a ring of time around her; when it ends she draws your eye, a click on her dismisses it).
   📝 Quick note (type, press Enter; the last 3 notes show under it).
@@ -113,7 +139,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.4.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.5.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -148,9 +174,13 @@ Manual checks (GitHub cannot test these)
 - Start a 5-minute timer and sleep the PC for 10 minutes: when it wakes, the timer ends right away.
 - Write a note in Arabic (Arabic keyboard layout): it is saved and shows correctly.
 - Quit her from her icon: she waves goodbye and turns into stars.
+- Copy a password from a password manager (Bitwarden, 1Password…): it must not appear in her clipboard list.
+- Download a real file in a browser, take a Win+Shift+S snip, start a video call: she reacts as described above.
+- Turn on the weather for your city.
+- Windows' own "Do not disturb" (Focus Assist) has no official way to be read; use her own "Do not disturb" in her menu.
 - After two hours of non-stop work: the break face ☕.
 
-Not in this build yet: sounds, settings, clipboard, prayer times, listening and the Claude link (later plans).
+Not in this build yet: sounds, settings, prayer times, listening and the Claude link (later plans).
 
 If something goes wrong
 -----------------------
