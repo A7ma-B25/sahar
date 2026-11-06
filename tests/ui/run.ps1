@@ -653,7 +653,7 @@ function Stage-Life {
                     Start-Sleep -Milliseconds 500
                     $c = Centre
                     if ([math]::Abs($c.x - $before.x) -gt 4 -or [math]::Abs($c.y - $before.y) -gt 4 -or $c.motion -eq 'Wander') {
-                        throw "$what: she moved from ($([int]$before.x),$([int]$before.y)) to ($([int]$c.x),$([int]$c.y)), motion $($c.motion)"
+                        throw "${what}: she moved from ($([int]$before.x),$([int]$before.y)) to ($([int]$c.x),$([int]$c.y)), motion $($c.motion)"
                     }
                 }
             }
