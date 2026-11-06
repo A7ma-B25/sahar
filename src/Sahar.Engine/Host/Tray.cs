@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -119,11 +119,13 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 Native.AppendMenu(levels, MF_STRING | (level == Activity ? MF_CHECKED : 0), (nuint)(CmdActivity + (int)level), t);
         fixed (char* activity = "نشاطها / Activity")
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
+        fixed (char* folder = "افتح مجلد سَحَر / Open Sahar folder")
         fixed (char* quit = "إغلاق / Quit")
         {
             Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
+            Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
         }
@@ -133,7 +135,21 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         Native.DestroyMenu(menu);
         if (cmd is >= CmdActivity and <= CmdActivity + 2) ActivityChosen?.Invoke((ActivityLevel)(cmd - CmdActivity));
         else if (cmd == CmdHide) HideHour?.Invoke();
+        else if (cmd == CmdFolder) OpenFolder();
         else if (cmd == CmdQuit) Quit?.Invoke();
+    }
+
+    /// <summary>Opens %LocalAppData%\Sahar (where engine.log lives) in Explorer, so the log is easy to send.</summary>
+    private static void OpenFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(Log.Folder);
+            fixed (char* verb = "open")
+            fixed (char* path = Log.Folder)
+                if (Native.ShellExecute(0, verb, path, null, null, 1 /* SW_SHOWNORMAL */) <= 32) Log.Write("open folder failed");
+        }
+        catch (Exception e) { Log.Write($"open folder failed: {e.Message}"); }
     }
 
     /// <summary>Placeholder icon (board icon C to come): a lavender Sahar-coloured disc with two eyes.</summary>

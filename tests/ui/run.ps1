@@ -378,6 +378,46 @@ function Stage-Motion {
             }
         }
     }
+    foreach ($kind in 'PlayWithMoon', 'Curious', 'Dance', 'Breathe', 'OrbitCursor') {
+        Step "motion $kind" {
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+            $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}')
+            if (-not $r.ok) { throw "motion $kind not ok: $($r.error)" }
+            if ($r.state.motion -ne $kind) { throw "state.motion is '$($r.state.motion)', expected '$kind'" }
+            $frames = Join-Path $dir "new-$kind"
+            New-Item -ItemType Directory -Force -Path $frames | Out-Null
+            for ($f = 1; $f -le 4; $f++) {
+                Start-Sleep -Milliseconds 400
+                Assert-BodyInWork (State) "$kind frame $f"
+                Copy-Item (Screenshot 'motion-full.png') (Join-Path $frames "$f.png") -Force
+            }
+        }
+    }
+    Step 'every flight stays on screen, from every corner' {
+        $patterns = 'Zigzag', 'FigureEight', 'SpiralUp', 'Dive', 'Wave', 'GlideHigh', 'BigCircle', 'DashAndStop', 'FallingLeaf', 'TaskbarPatrol'
+        $st = State
+        $right = $Work.Right - $st.width; $bottom = $Work.Bottom - $st.height
+        $corners = @(@($Work.Left, $Work.Top), @($right, $Work.Top), @($Work.Left, $bottom), @($right, $bottom))
+        foreach ($p in $patterns) {
+            $c = $corners[[array]::IndexOf($patterns, $p) % 4]
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            # pose takes the canvas top-left: shift by the body's offset inside the canvas.
+            $i = Info; $s0 = State
+            $dx = $s0.x - [double]$i.canvasX; $dy = $s0.y - [double]$i.canvasY
+            Send ('{"type":"cmd","name":"pose","args":{"x":"' + [int]($c[0] - $dx) + '","y":"' + [int]($c[1] - $dy) + '"}}') | Out-Null
+            $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"Wander","flight":"' + $p + '"}}')
+            if (-not $r.ok) { throw "flight $p not ok: $($r.error)" }
+            $end = (Get-Date).AddSeconds(8)
+            do {
+                Start-Sleep -Milliseconds 300
+                $st = State
+                Assert-BodyInWork $st "flight $p"
+            } while ($st.motion -ne 'Hover' -and (Get-Date) -lt $end)
+            if ($st.motion -ne 'Hover') { throw "flight $p did not end" }
+        }
+        Copy-Item (Screenshot 'motion-full.png') (Join-Path $dir 'flights-end.png') -Force
+    }
     Step 'unknown motion is rejected' {
         $r = Send '{"type":"cmd","name":"motion","args":{"kind":"Moonwalk"}}'
         if ($r.ok) { throw 'unknown motion answered ok' }
@@ -557,6 +597,14 @@ function Stage-Perf {
         Write-Host ("    cpu over 20 s: {0:N2} % of the machine ({1:N0} ms on {2} cores)" -f $pct, $used, [Environment]::ProcessorCount)
         if ($pct -ge 0.5) { Write-Host '::warning::engine CPU at rest is over 0.5 % on the runner (software rendering)' }
     }
+    Step 'the log never grows past 1 MB' {
+        $r = Send '{"type":"cmd","name":"debug-log-fill","args":{"kb":"1200"}}'
+        if (-not $r.ok) { throw "debug-log-fill not ok: $($r.error)" }
+        $size = (Get-Item (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log')).Length
+        Write-Host ("    engine.log after writing 1.2 MB: {0:N0} KB" -f ($size / 1KB))
+        if ($size -gt 1MB) { throw "engine.log is $size bytes" }
+        if (-not ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Tail 5) -match 'fill')) { throw 'the newest lines were not kept' }
+    }
     Stop-Engine
 }
 
@@ -582,6 +630,68 @@ function Stage-Life {
         Screenshot 'life-acting.png' | Out-Null
         if ($done -lt 10) { throw "only $done own actions in 90 s" }
         Assert-TopLeftInWork (State) 'after her own actions'
+    }
+    Step 'she does many different things (≥ 6 kinds in 120 s)' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $kinds = @{}
+        $deadline = (Get-Date).AddSeconds(120)
+        do {
+            Start-Sleep -Milliseconds 500
+            $kinds[(Life).last] = 1
+        } while ($kinds.Count -lt 7 -and (Get-Date) -lt $deadline)
+        $kinds.Remove('None')
+        Write-Host "    kinds: $(($kinds.Keys | Sort-Object) -join ', ')"
+        if ($kinds.Count -lt 6) { throw "only $($kinds.Count) kinds" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        $named = @($kinds.Keys | Where-Object { $log -match "life: $_" })
+        if ($named.Count -lt $kinds.Count) { throw "the log names only $($named -join ', ') of her actions" }
+    }
+    Step 'music from a browser in front: headphones, no big moves' {
+        $r = Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"true","front":"true"}}'
+        if (-not $r.ok) { throw "debug-media not ok: $($r.error)" }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'music' } 4000 'music face' | Out-Null
+        $small = @{}
+        $end = (Get-Date).AddSeconds(12)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' while a browser plays in front" }
+            $small[(Life).last] = 1
+        }
+        Write-Host "    small things seen: $(($small.Keys | Sort-Object) -join ', ')"
+        if (-not $small.ContainsKey('Moment')) { throw 'no face moment while the browser plays in front: she just sits there' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'media: .*browser') { throw 'the log does not say what is playing' }
+    }
+    Step 'she stops dancing when the music stops' {
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Dance"}}' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Dance' } 3000 'dancing' | Out-Null
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Wait-State { param($st) $st.motion -ne 'Dance' } 4000 'dance ending with the music' | Out-Null
+    }
+    Step 'a face moment never covers an event face' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Post 'claude.permission' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $face = (Info).face
+        if (-not $face) { throw 'debug-info does not report her face' }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Moment"}}' | Out-Null
+        Start-Sleep -Milliseconds 2500
+        if ((State).expression -ne 'claude-permission') { throw "expression is '$((State).expression)'" }
+        if ((Life).last -eq 'Moment') { throw 'a moment played over the permission face' }
+        if ((Info).face -ne $face) { throw "her face changed from $face to $((Info).face) over the permission face" }
+    }
+    Step 'her own moves never change an event face' {
+        $face = (Info).face
+        if (-not $face) { throw 'debug-info does not report her face' }
+        foreach ($kind in 'Breathe', 'Curious', 'PlayWithMoon') {
+            Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}') | Out-Null
+            Start-Sleep -Milliseconds 1500
+            if ((Info).face -ne $face) { throw "$kind changed her face from $face to $((Info).face) over the permission face" }
+        }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
     }
     Step 'grabbing her mid-action teaches her and pauses her' {
         Send '{"type":"cmd","name":"life","args":{"gap":"30"}}' | Out-Null
@@ -694,6 +804,7 @@ function Stage-Life {
         if (-not (Test-Path $settingsPath)) { throw 'settings.json not written' }
         $json = Get-Content $settingsPath -Raw
         if ($json -notmatch '"activity"\s*:\s*"lively"') { throw "settings.json: $json" }
+        if ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw) -notmatch 'activity: Lively') { throw 'the log does not say the activity level changed' }
         Stop-Engine
         if (-not (Test-Path $lifePath)) { throw 'life.json not written on quit' }
         Start-Engine

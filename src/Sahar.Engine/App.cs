@@ -104,7 +104,20 @@ internal sealed unsafe class App
                 revert.Start();
             }
         }
-        var motion = new MotionController(sahar, player, ticker, MoveTo, Express);
+        // A passing face (a moment, a curious look): back to her expression's own face afterwards.
+        var faceTimer = ui.CreateTimer();
+        faceTimer.IsRepeating = false;
+        faceTimer.Tick += (_, _) => Safe(() => sahar.SetFace(player.Current.Eyes, player.Current.Mouth, ExpressionPlayer.Fade));
+        // Only over her own face (idle, or music's headphones): never over an event's face (permission, error…).
+        void Face(Eyes eyes, Mouth mouth, float seconds)
+        {
+            if (_state.Expression is not ("idle" or "music")) return;
+            sahar.SetFace(eyes, mouth, ExpressionPlayer.Fade);
+            faceTimer.Stop();
+            faceTimer.Interval = TimeSpan.FromSeconds(seconds);
+            faceTimer.Start();
+        }
+        var motion = new MotionController(sahar, player, ticker, MoveTo, Express, Face);
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); });
@@ -130,6 +143,7 @@ internal sealed unsafe class App
         using var tray = new Tray { Activity = settings.Activity };
         void SetActivity(ActivityLevel level)
         {
+            Log.Write($"activity: {level}");
             settings = settings with { Activity = level };
             tray.Activity = level;
             if (life != null) life.Level = level;
@@ -158,7 +172,8 @@ internal sealed unsafe class App
         _ = new Network(ui, director.Post);
         var media = new Media(ui, director.Post);
         // Her daily life. In test mode it waits for the pipe's "life" command, so it never disturbs other tests.
-        using var lifeDirector = new LifeDirector(ui, motion, director, media, settings.Activity, LifeStore.DefaultPath, () => tray.SinceKeyboard)
+        using var lifeDirector = new LifeDirector(ui, motion, director, media, settings.Activity, LifeStore.DefaultPath, () => tray.SinceKeyboard,
+            Face, () => _state.Expression, () => motion.Squish())
         {
             Enabled = !_options.TestMode,
         };
@@ -209,6 +224,12 @@ internal sealed unsafe class App
             if (r.Args is null || !r.Args.TryGetValue("kind", out var name)) return new PipeReply(false, "motion needs 'kind'");
             if (!Enum.TryParse<MotionKind>(name, ignoreCase: false, out var kind) || !Enum.IsDefined(kind))
                 return new PipeReply(false, "unknown motion");
+            if (kind == MotionKind.Wander && r.Args.TryGetValue("flight", out var f))
+            {
+                if (!Enum.TryParse<FlightPattern>(f, out var pattern) || !Enum.IsDefined(pattern)) return new PipeReply(false, "unknown flight");
+                motion.PlayFlight(pattern, force: true);
+                return new PipeReply(true, State: _state.Snapshot());
+            }
             Vector2? velocity = r.Args.ContainsKey("vx") ? new Vector2(Arg(r, "vx"), Arg(r, "vy")) : null;
             if (!motion.Play(kind, velocity)) return new PipeReply(false, $"motion '{kind}' is not available yet");
             return new PipeReply(true, State: _state.Snapshot());
@@ -217,12 +238,25 @@ internal sealed unsafe class App
         {
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
-                FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}")));
+                FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("show", _ => { director.HideFor(TimeSpan.Zero); return new PipeReply(true, State: _state.Snapshot()); });
+            pipe.Register("debug-media", r =>
+            {
+                bool On(string key) => r.Args?.TryGetValue(key, out var v) == true && v == "true";
+                media.Simulate(On("playing"), On("video"), On("browser"), On("front"));
+                return new PipeReply(true, lifeDirector.Describe());
+            });
+            pipe.Register("debug-log-fill", r =>
+            {
+                var filler = new string('x', 90);
+                for (int i = 0, n = (int)(Arg(r, "kb") * 1024 / 120); i < n; i++) Log.Write($"fill {i} {filler}");
+                return new PipeReply(true);
+            });
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {

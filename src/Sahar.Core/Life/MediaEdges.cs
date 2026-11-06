@@ -4,8 +4,8 @@ namespace Sahar.Core.Life;
 
 /// <summary>
 /// Turns "something is playing" readings into the brain's music start/stop events and a "video" flag.
-/// Browsers report every tab as music (Chromium hard-codes it), so browser playback never shows the music face;
-/// while the browser is in front it counts as video (she keeps still).
+/// Browsers report every tab as music (Chromium hard-codes it): browser playback shows as music (headphones),
+/// and while the browser is in front it also counts as video, so she makes no big moves over it.
 /// </summary>
 public sealed class MediaEdges
 {
@@ -21,9 +21,14 @@ public sealed class MediaEdges
         return false;
     }
 
+    /// <summary>Is this executable a web browser? (Electron apps share Chromium's window class, so the class can't tell.)</summary>
+    public static bool IsBrowserProcess(string exePath) =>
+        Path.GetFileNameWithoutExtension(exePath[(exePath.LastIndexOfAny(['\\', '/']) + 1)..]).ToLowerInvariant() is "chrome" or "msedge" or "firefox" or "brave" or "opera" or "vivaldi"
+            or "arc" or "chromium" or "thorium" or "zen" or "librewolf" or "waterfox" or "floorp" or "yandex";
+
     public IReadOnlyList<EventKind> Update(bool playing, bool isVideo, bool fromBrowser, bool browserInFront)
     {
-        bool music = playing && !isVideo && !fromBrowser;
+        bool music = playing && !isVideo;
         VideoPlaying = playing && (isVideo || (fromBrowser && browserInFront));
         if (music == _music) return [];
         _music = music;

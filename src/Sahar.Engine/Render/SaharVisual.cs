@@ -165,6 +165,9 @@ internal sealed class SaharVisual
         DrawMood(fade);
     }
 
+    /// <summary>The eyes and mouth showing now (for test checks).</summary>
+    public (Eyes Eyes, Mouth Mouth) FaceShown => (_eyes, _mouth);
+
     public void SetFace(Eyes e, Mouth m, TimeSpan fade)
     {
         if (e == _eyes && m == _mouth) return;

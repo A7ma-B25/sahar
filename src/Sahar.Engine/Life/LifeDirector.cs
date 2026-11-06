@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using Sahar.Core.Brain;
+using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
 using Sahar.Core.Life;
 using Sahar.Core.Motion;
@@ -25,6 +26,9 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly MotionController _motion;
     private readonly Director _director;
     private readonly Media _media;
+    private readonly CursorRest _cursorRest = new();
+    private bool _cursorResting;
+    private string? _waiting;
     private readonly DispatcherQueueTimer _timer;
     private readonly Preferences _prefs;
     private readonly Routine _routine;
@@ -35,6 +39,9 @@ internal sealed unsafe class LifeDirector : IDisposable
     private DateTimeOffset _due;
     private readonly ActionMemory _memory = new();
     private readonly Func<TimeSpan> _sinceKeyboard;
+    private readonly Action<Eyes, Mouth, float> _face;
+    private readonly Func<string> _expressionKey;
+    private readonly Action _poke;
     private LifeAction _lastAction = LifeAction.None;
     private LifeAction? _forceNext;
     private bool _sleepingForAway, _ownSleep;
@@ -56,9 +63,12 @@ internal sealed unsafe class LifeDirector : IDisposable
     public event Action<bool>? TypingChanged;
 
     public LifeDirector(DispatcherQueue ui, MotionController motion, Director director, Media media, ActivityLevel level, string path,
-        Func<TimeSpan> sinceKeyboard)
+        Func<TimeSpan> sinceKeyboard, Action<Eyes, Mouth, float> face, Func<string> expressionKey, Action squish)
     {
         _sinceKeyboard = sinceKeyboard;
+        _face = face;
+        _expressionKey = expressionKey;
+        _poke = squish;
         _motion = motion;
         _director = director;
         _media = media;
@@ -113,8 +123,17 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         if (!Enabled) return;
+        var cursor = Native.CursorPos();
+        var body = _motion.Body;
+        _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
+            new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying))
+        {
+            Log.Write("life: the music stopped (or a video is in front), dance ends");
+            _motion.Play(MotionKind.Hover);
+        }
         if (_motion.PerchIsStale()) { _motion.Play(MotionKind.Wander); return; }   // her window moved, resized or closed
-        if (Typing) { StepAwayFromTyping(); return; }   // no own actions while you type
+        if (Typing) { Waiting("you are typing"); StepAwayFromTyping(); return; }   // no own actions while you type
 
         // Away: she naps in the corner and wakes when you are back.
         bool away = _director.CurrentKey == "sleep";
@@ -131,7 +150,8 @@ internal sealed unsafe class LifeDirector : IDisposable
             Schedule(now);
             return;
         }
-        if (_sleepingForAway || now < _due) return;
+        if (_sleepingForAway) { Waiting("you are away"); return; }
+        if (now < _due) { Waiting($"next turn at {_due.ToLocalTime():HH:mm:ss}"); return; }
 
         // A late-night nap she chose herself ends at her next turn.
         if (_ownSleep && _motion.Current == MotionKind.SleepInCorner)
@@ -145,26 +165,85 @@ internal sealed unsafe class LifeDirector : IDisposable
         var forced = _forceNext;
         _forceNext = null;
         var context = new LifeContext(Typing, _media.VideoPlaying, _media.MusicPlaying, away, _director.Hidden, !Resting,
-            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()));
+            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
             : LifeChooser.Choose(context, _prefs.Weight, _rng);
-        if (action == LifeAction.None) return;   // not now: try again next second, same gap
-
-        _motion.Play(action switch
+        if (action == LifeAction.None)   // not now: try again next second, same gap
         {
-            LifeAction.Wander => MotionKind.Wander,
-            LifeAction.PeekTaskbar => MotionKind.PeekTaskbar,
-            LifeAction.PerchWindow => MotionKind.PerchWindow,
-            LifeAction.CelebrateLoop => MotionKind.CelebrateLoop,
-            _ => MotionKind.SleepInCorner,
-        });
+            Waiting(_director.Hidden ? "hidden" : !Resting ? $"busy ({_motion.Current})" : "nothing fits now");
+            return;
+        }
+
+        switch (action)
+        {
+            case LifeAction.Flight:
+                // A pattern that fits where she is (and doesn't end under the pointer); none fits: a wander.
+                FlightPattern? flown = null;
+                foreach (var p in Enum.GetValues<FlightPattern>().OrderBy(_ => _rng.Next()))
+                    if (_motion.PlayFlight(p)) { flown = p; break; }
+                if (flown is { } fp) Log.Write($"life: Flight {fp}{Why(context)}");
+                else
+                {
+                    Log.Write($"life: no flight fits here, Wander instead{Why(context)}");
+                    action = LifeAction.Wander;
+                    _motion.Play(MotionKind.Wander);
+                }
+                break;
+            case LifeAction.Moment:
+                if (PlayMoment() is { } moment) { Log.Write($"life: Moment {moment}{Why(context)}"); break; }
+                // An event face is showing: her face stays; a slow breath instead of nothing.
+                Log.Write($"life: no Moment over the '{_expressionKey()}' face, Breathe instead");
+                action = LifeAction.Breathe;
+                _motion.Play(MotionKind.Breathe);
+                break;
+            default:
+                Log.Write($"life: {action}{Why(context)}");
+                _motion.Play(action switch
+                {
+                    LifeAction.Wander => MotionKind.Wander,
+                    LifeAction.PeekTaskbar => MotionKind.PeekTaskbar,
+                    LifeAction.PerchWindow => MotionKind.PerchWindow,
+                    LifeAction.CelebrateLoop => MotionKind.CelebrateLoop,
+                    LifeAction.PlayWithMoon => MotionKind.PlayWithMoon,
+                    LifeAction.Curious => MotionKind.Curious,
+                    LifeAction.Dance => MotionKind.Dance,
+                    LifeAction.Breathe => MotionKind.Breathe,
+                    LifeAction.OrbitCursor => MotionKind.OrbitCursor,
+                    _ => MotionKind.SleepInCorner,
+                });
+                break;
+        }
+        _waiting = null;
         _ownSleep = action == LifeAction.SleepInCorner;
         _memory.Started(action, now);
         _lastAction = action;
         Actions++;
         Schedule(now);
     }
+
+    /// <summary>A small face moment; only while her face is her own (never over an event's face).</summary>
+    private MomentKind? PlayMoment()
+    {
+        // Her own face is idle, or music's headphones (sticky while something plays); never an event's face.
+        if (_director.CurrentKey is not ("idle" or "music") || _expressionKey() is not ("idle" or "music")) return null;
+        var kind = Enum.GetValues<MomentKind>()[_rng.Next(Enum.GetValues<MomentKind>().Length)];
+        var (eyes, mouth, seconds) = Moments.Face(kind);
+        _face(eyes, mouth, seconds);
+        if (kind == MomentKind.Giggle) _poke();
+        return kind;
+    }
+
+    /// <summary>Logs why she is not acting, once per change of reason.</summary>
+    private void Waiting(string reason)
+    {
+        if (reason == _waiting) return;
+        _waiting = reason;
+        Log.Write($"life: waiting: {reason}");
+    }
+
+    private static string Why(LifeContext c) =>
+        (c.MusicPlaying ? " (music)" : "") + (c.VideoPlaying ? " (video in front)" : "") + (c.CursorResting ? " (pointer resting)" : "");
 
     public const float NearTypingDip = 120f, AvoidTypingDip = 150f;
 
