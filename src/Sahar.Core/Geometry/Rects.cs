@@ -20,3 +20,5 @@ public readonly record struct RectF(float X, float Y, float Width, float Height)
     public static RectF FromRectI(RectI r, float scale) =>
         new(r.Left / scale, r.Top / scale, r.Width / scale, r.Height / scale);
 }
+
+public readonly record struct SizeI(int Width, int Height);
