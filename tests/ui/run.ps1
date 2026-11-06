@@ -433,6 +433,12 @@ function Stage-Motion {
             finally { if ($w) { $w.Kill() } }
         }
     }
+    Step 'no hello in test mode unless asked' {
+        Stop-Engine
+        Start-Engine
+        Start-Sleep -Milliseconds 800
+        if ((State).motion -eq 'StartupEntry') { throw 'she said hello without --simulate-boot' }
+    }
     Step 'the PC just started: she flies in and says hello' {
         Stop-Engine
         Start-Engine @('--simulate-boot')
@@ -680,8 +686,10 @@ function Menu {
         if ($k -eq 'buttons') {
             if ($v) {
                 $h.buttons = @($v -split ';' | ForEach-Object {
-                    $id, $xyr = $_ -split ':', 2; $x, $y, $rad = $xyr -split ','
-                    [pscustomobject]@{ id = $id; x = [double]$x; y = [double]$y; r = [double]$rad }
+                    $id, $xyr = $_ -split ':', 2; $p = $xyr -split ','
+                    $b = [pscustomobject]@{ id = $id; x = [double]$p[0]; y = [double]$p[1]; r = [double]$p[2]; lx = $null; ly = $null; lw = $null; lh = $null }
+                    if ($p.Count -ge 7) { $b.lx = [double]$p[3]; $b.ly = [double]$p[4]; $b.lw = [double]$p[5]; $b.lh = [double]$p[6] }
+                    $b
                 })
             }
         }
@@ -788,8 +796,12 @@ function Stage-Menu {
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
             $m = Wait-Menu 'true' 1000 "menu open in corner $n"
             foreach ($b in $m.buttons) {
-                if ($b.x - $b.r -lt $Work.Left -or $b.y - $b.r -lt $Work.Top -or $b.x + $b.r -gt $Work.Right -or $b.y + $b.r + 24 -gt $Work.Bottom) {
+                if ($b.x - $b.r -lt $Work.Left -or $b.y - $b.r -lt $Work.Top -or $b.x + $b.r -gt $Work.Right -or $b.y + $b.r -gt $Work.Bottom) {
                     throw "corner ${n}: $($b.id) at ($($b.x),$($b.y)) is off the work area $Work"
+                }
+                if ($null -eq $b.lx) { throw "corner ${n}: debug-menu gives no label rectangle for $($b.id)" }
+                if ($b.lx -lt $Work.Left -or $b.ly -lt $Work.Top -or $b.lx + $b.lw -gt $Work.Right -or $b.ly + $b.lh -gt $Work.Bottom) {
+                    throw "corner ${n}: the label of $($b.id) is off the work area"
                 }
             }
             Start-Sleep -Milliseconds 600
@@ -1008,6 +1020,70 @@ function Stage-Menu {
         if ((Kv 'debug-showcase').running -ne 'false') { throw 'a click did not stop the show' }
         Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
         Start-Sleep -Seconds 2
+    }
+    Step 'clicking a label presses its button' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        Start-Sleep -Milliseconds 500
+        $b = (Menu).buttons | Where-Object id -eq 'timer-15'
+        if ($null -eq $b.lx) { throw 'debug-menu gives no label rectangle' }
+        [Mouse]::Click([int]($b.lx + $b.lw / 2), [int]($b.ly + $b.lh / 2), $false)
+        Start-Sleep -Milliseconds 500
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 890) { throw "a click on the label '15 د' did not start the timer (running=$($t.running))" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-cancel'
+    }
+    Step 'a typed time she does not understand is not written to the log' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'abc' -Enter
+        Start-Sleep -Milliseconds 400
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match '0061') { throw 'the log holds what was typed' }
+        if ($log -notmatch 'typed time not understood \(3 characters\)') { throw 'the log does not say a typed time was not understood' }
+        Start-Sleep -Seconds 2
+    }
+    Step 'a right-click during the show keeps the menu around her' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"showcase","args":{"from":"1"}}' | Out-Null
+        Start-Sleep -Seconds 2
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'menu open during the show'
+        if ((Kv 'debug-showcase').running -ne 'false') { throw 'the show is still running with the menu open' }
+        $c = Body-Centre
+        foreach ($b in $m.buttons) {
+            $d = [math]::Sqrt([math]::Pow($b.x - $c[0], 2) + [math]::Pow($b.y - $c[1], 2))
+            if ($d -gt 320) { throw "button $($b.id) is $([int]$d) px from her" }
+        }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'stopping the show does not make her jump' {
+        Send '{"type":"cmd","name":"showcase","args":{"from":"1"}}' | Out-Null
+        Start-Sleep -Seconds 2
+        $s0 = Kv 'debug-showcase'
+        if ([double]$s0.captionMinX -lt $Work.Left -or [double]$s0.captionMaxX -gt $Work.Right) { throw "caption spans $($s0.captionMinX)..$($s0.captionMaxX), outside $Work" }
+        $c = Body-Centre
+        $p0 = State
+        [Mouse]::Click($c[0], $c[1], $false)
+        Start-Sleep -Milliseconds 80
+        $p1 = State
+        $jump = [math]::Sqrt([math]::Pow($p1.x - $p0.x, 2) + [math]::Pow($p1.y - $p0.y, 2))
+        if ($jump -gt 60) { throw "she jumped $([int]$jump) px when the show stopped" }
+        Start-Sleep -Seconds 2
+    }
+    Step 'an interrupted breath does not keep pulsing' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Breathe"}}' | Out-Null
+        Start-Sleep -Milliseconds 700
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Info).bodyScale -ne 'free') { throw "body scale after an interrupted breath: '$((Info).bodyScale)'" }
     }
     Step 'the menu and the bubble cost nothing, again and again' {
         # Absolute RAM at rest is checked by the perf stage; on the runner's software renderer, memory after this
