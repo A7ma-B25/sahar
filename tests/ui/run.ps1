@@ -265,7 +265,7 @@ function Stage-Idle {
         if (-not $r.ok) { throw "debug-simulate-device-removed not ok: $($r.error)" }
         Start-Sleep -Milliseconds 2500
         $after = [int](Info).generation
-        if ($after -le $before) { throw "device generation stayed $before: removal not detected without a draw" }
+        if ($after -le $before) { throw "device generation stayed ${before}: removal not detected without a draw" }
         Assert-Body (Screenshot 'idle-after-device-removed.png') $script:baseline $script:state
     }
     Step 'after a display change she is back inside the work area' {
