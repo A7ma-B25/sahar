@@ -623,6 +623,46 @@ function Stage-Life {
         if ($done -lt 10) { throw "only $done own actions in 90 s" }
         Assert-TopLeftInWork (State) 'after her own actions'
     }
+    Step 'she does many different things (≥ 6 kinds in 120 s)' {
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $kinds = @{}
+        $deadline = (Get-Date).AddSeconds(120)
+        do {
+            Start-Sleep -Milliseconds 500
+            $kinds[(Life).last] = 1
+        } while ($kinds.Count -lt 7 -and (Get-Date) -lt $deadline)
+        $kinds.Remove('None')
+        Write-Host "    kinds: $(($kinds.Keys | Sort-Object) -join ', ')"
+        if ($kinds.Count -lt 6) { throw "only $($kinds.Count) kinds" }
+    }
+    Step 'music from a browser in front: headphones, no big moves' {
+        $r = Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"true","front":"true"}}'
+        if (-not $r.ok) { throw "debug-media not ok: $($r.error)" }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'music' } 4000 'music face' | Out-Null
+        $end = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' while a browser plays in front" }
+        }
+    }
+    Step 'she stops dancing when the music stops' {
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Dance"}}' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Dance' } 3000 'dancing' | Out-Null
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Wait-State { param($st) $st.motion -ne 'Dance' } 4000 'dance ending with the music' | Out-Null
+    }
+    Step 'a face moment never covers an event face' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Post 'claude.permission' | Out-Null
+        $before = [int](Life).actions
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Moment"}}' | Out-Null
+        Start-Sleep -Milliseconds 2500
+        if ((State).expression -ne 'claude-permission') { throw "expression is '$((State).expression)'" }
+        if ([int](Life).actions -ne $before) { throw 'a moment played over the permission face' }
+    }
     Step 'grabbing her mid-action teaches her and pauses her' {
         Send '{"type":"cmd","name":"life","args":{"gap":"30"}}' | Out-Null
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
