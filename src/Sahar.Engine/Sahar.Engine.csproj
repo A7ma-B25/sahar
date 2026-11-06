@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>Sahar.Engine</AssemblyName>
+    <RootNamespace>Sahar.Engine</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Compiles on non-Windows machines too (compile checks only). -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Sahar.Core\Sahar.Core.csproj" />
+  </ItemGroup>
+</Project>
