@@ -48,10 +48,12 @@ internal sealed unsafe class CompositionHost : IDisposable
         _d2dDevice = CreateD2DDevice(out var driver);
         Driver = driver;
         GraphicsDevice = CreateGraphicsDevice(Compositor, _d2dDevice);
+        var ui = DispatcherQueue.GetForCurrentThread();
         GraphicsDevice.RenderingDeviceReplaced += (_, _) =>
         {
+            // May be raised off the UI thread; surfaces are redrawn on it.
             Log.Write("rendering device replaced");
-            DeviceLost?.Invoke();
+            ui.TryEnqueue(() => DeviceLost?.Invoke());
         };
         Log.Write($"composition ready ({Driver})");
     }
