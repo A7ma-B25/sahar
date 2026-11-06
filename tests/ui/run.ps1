@@ -161,8 +161,10 @@ if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$tr
 "@
     $p = Start-Process -FilePath 'pwsh' -ArgumentList '-NoProfile', '-Command', $script -PassThru
     Start-Sleep -Milliseconds 1500
-    # Windows may refuse a new process the foreground; ask for it explicitly.
-    & agent-desktop --headed focus-window --title "Sahar test $kind" 2>&1 | Out-Null
+    # Windows refuses a new process the foreground while the runner's terminal has it; a real click on the
+    # window takes it (Sahar's overlay is click-through, and she sits bottom-right, away from this point).
+    & agent-desktop --headed mouse-click --xy '120,300' 2>&1 | Out-Null
+    Start-Sleep -Milliseconds 300
     $p
 }
 
