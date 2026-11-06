@@ -12,6 +12,8 @@ using Sahar.Engine.Host;
 using Sahar.Engine.Input;
 using Sahar.Engine.Life;
 using Sahar.Engine.Menu;
+using Sahar.Engine.Tools;
+using Sahar.Core.Tools;
 using Sahar.Core.Life;
 using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
@@ -122,7 +124,14 @@ internal sealed unsafe class App
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
-        _ = new InputController(input, motion, () => { Express("poked", true); life?.OnPoked(); }, () =>
+        Director? dismissDirector = null;
+        _ = new InputController(input, motion, () =>
+        {
+            // A poke on the timer's face says "seen": it goes away.
+            if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
+            Express("poked", true);
+            life?.OnPoked();
+        }, () =>
         {
             if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
             menu.Toggle();
@@ -143,6 +152,12 @@ internal sealed unsafe class App
         }
         motion.HiddenAway += () => { if (_state.Hidden) Native.ShowWindow(overlay.Hwnd, Native.SW_HIDE); };
         director = new Director(ui, key => Express(key, false), SetHidden);
+        dismissDirector = director;
+        var timerTool = new TimerTool(ui, sahar, director);
+        var dndTool = new DndTool(ui, director);
+        var bubble = new TextBubble(_options.Capturable);
+        sahar.Rescaled += () => Safe(timerTool.Redraw);
+        host.DeviceLost += () => Safe(timerTool.Redraw);
         // Settings: a bad or locked file never stops her (defaults).
         var settings = new SaharSettings();
         try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
@@ -187,6 +202,11 @@ internal sealed unsafe class App
         life = lifeDirector;
         // Her menu: life pauses and she hovers while it is open.
         menu.Level = () => settings.Activity;
+        menu.TimerRunning = () => timerTool.Running;
+        menu.DndOn = () => dndTool.On;
+        lifeDirector.DndOn = () => dndTool.On;
+        tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); });
+        tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
         menu.OpenChanged += open =>
         {
             _state.MenuOpen = open;
@@ -202,6 +222,23 @@ internal sealed unsafe class App
                 case "activity-medium": SetActivity(ActivityLevel.Medium); break;
                 case "activity-lively": SetActivity(ActivityLevel.Lively); break;
                 case "hide": director.HideFor(TimeSpan.FromHours(1)); break;
+                case "timer-5": timerTool.Start(TimeSpan.FromMinutes(5)); break;
+                case "timer-15": timerTool.Start(TimeSpan.FromMinutes(15)); break;
+                case "timer-25": timerTool.Start(TimeSpan.FromMinutes(25)); break;
+                case "timer-45": timerTool.Start(TimeSpan.FromMinutes(45)); break;
+                case "timer-cancel": timerTool.Cancel(); break;
+                case "timer-custom":
+                    bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
+                    {
+                        if (TimerInput.ParseMinutes(text) is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
+                        else Express("error", true);
+                    }));
+                    break;
+                case "dnd-30": dndTool.TurnOn(TimeSpan.FromMinutes(30)); break;
+                case "dnd-60": dndTool.TurnOn(TimeSpan.FromHours(1)); break;
+                case "dnd-120": dndTool.TurnOn(TimeSpan.FromHours(2)); break;
+                case "dnd-on": dndTool.TurnOn(null); break;
+                case "dnd-off": dndTool.TurnOff(); break;
                 case "play":
                     MotionKind[] picks = [MotionKind.Wander, MotionKind.CelebrateLoop, MotionKind.PlayWithMoon, MotionKind.Curious, MotionKind.OrbitCursor];
                     int pick = playRng.Next(picks.Length + 1);
@@ -305,6 +342,16 @@ internal sealed unsafe class App
                 return new PipeReply(true, menu.Describe(), _state.Snapshot());
             });
             pipe.Register("debug-menu", _ => new PipeReply(true, menu.Describe()));
+            pipe.Register("debug-timer", _ => new PipeReply(true, timerTool.Describe()));
+            pipe.Register("timer", r => { timerTool.Start(TimeSpan.FromSeconds(Arg(r, "seconds"))); return new PipeReply(true, timerTool.Describe()); });
+            pipe.Register("debug-dnd", _ => new PipeReply(true, dndTool.Describe()));
+            pipe.Register("debug-bubble", _ =>
+            {
+                var e = bubble.EditRect;
+                return new PipeReply(true, bubble.IsOpen
+                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd}"
+                    : "open=false");
+            });
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {

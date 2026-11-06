@@ -94,6 +94,9 @@ internal sealed unsafe class LifeDirector : IDisposable
         _timer.Start();
     }
 
+    /// <summary>"Do not disturb" is on: only small things (like a video in front).</summary>
+    public Func<bool> DndOn { get; set; } = () => false;
+
     /// <summary>Her menu is open (or a show is running): no own actions.</summary>
     public bool Paused { get; set; }
 
@@ -130,7 +133,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
             new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
-        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying))
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn()))
         {
             Log.Write("life: the music stopped (or a video is in front), dance ends");
             _motion.Play(MotionKind.Hover);
@@ -167,7 +170,7 @@ internal sealed unsafe class LifeDirector : IDisposable
 
         var forced = _forceNext;
         _forceNext = null;
-        var context = new LifeContext(Typing, _media.VideoPlaying, _media.MusicPlaying, away, _director.Hidden, !Resting,
+        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
             now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f

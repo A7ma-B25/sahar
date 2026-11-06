@@ -17,7 +17,7 @@ internal sealed class Director
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
     private string _lastKey = "idle";
-    private bool _hidden, _fullscreen;
+    private bool _hidden, _fullscreen, _dnd;
     private DateTimeOffset _hiddenUntil;
 
     public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden)
@@ -42,11 +42,30 @@ internal sealed class Director
         catch (Exception e) { Diagnostics.Log.Write($"director error: {e}"); }
     }
 
-    public void Post(EventKind k)
+    public void Post(EventKind k) => Post(k, null);
+
+    public void Post(EventKind k, TimeSpan? ttl)
     {
-        _brain.Post(k, DateTimeOffset.UtcNow);
+        _brain.Post(k, DateTimeOffset.UtcNow, ttl);
         Tick();
     }
+
+    /// <summary>Ends an event now (a poke dismisses the timer's face).</summary>
+    public void End(EventKind k)
+    {
+        _brain.End(k);
+        Tick();
+    }
+
+    /// <summary>Her own "do not disturb" (quiet, alongside fullscreen).</summary>
+    public void SetDnd(bool on)
+    {
+        _dnd = on;
+        ApplyQuiet();
+    }
+
+    private void ApplyQuiet() =>
+        _brain.SetQuiet((_fullscreen ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None));
 
     /// <summary>"Hide 1 h" from the tray; <see cref="TimeSpan.Zero"/> shows her again (tray click).</summary>
     public void HideFor(TimeSpan span)
@@ -60,7 +79,7 @@ internal sealed class Director
         bool fs = _debounce.Update(FullscreenWatcher.Check(), DateTimeOffset.UtcNow);
         if (fs == _fullscreen) return;
         _fullscreen = fs;
-        _brain.SetQuiet(fs ? QuietReason.Fullscreen : QuietReason.None);
+        ApplyQuiet();
     }
 
     private void Tick()
