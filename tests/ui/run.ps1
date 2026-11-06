@@ -1218,6 +1218,19 @@ function Stage-Senses {
         Wait-State { param($st) $st.expression -eq 'download' } 6000 'download face for a direct write' | Out-Null
         Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
     }
+    Step 'downloads: a Firefox placeholder beside its .part shows nothing' {
+        New-Item -ItemType File -Path (Join-Path $script:dl 'd.mp4') | Out-Null
+        [IO.File]::WriteAllBytes((Join-Path $script:dl 'd.mp4.part'), (New-Object byte[] 2048))
+        $end = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $end) { if ((State).expression -eq 'download') { throw 'the face showed when the download only started' }; Start-Sleep -Milliseconds 300 }
+    }
+    Step 'a comment that names an app reads right to left' {
+        $text = 'صار لك ساعتين على VS Code، كيف ماشي؟'
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        Send ('{"type":"cmd","name":"say","args":{"text64":"' + $b64 + '"}}') | Out-Null
+        Start-Sleep -Milliseconds 600
+        Screenshot 'comment-latin.png' | Out-Null
+    }
     Step 'a screenshot key shows her screenshot face' {
         [System.Windows.Forms.SendKeys]::SendWait('{PRTSC}')
         Start-Sleep -Milliseconds 300

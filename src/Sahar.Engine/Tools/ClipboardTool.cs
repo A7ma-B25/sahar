@@ -31,7 +31,7 @@ internal sealed class ClipboardTool(ListBubble list, ClipboardSense sense, Func<
         Log.Write("clipboard: cleared");
     }
 
-    private static string Line(ClipItem i) => i.Kind switch
+    private static string Line(ClipItem i) => i.Secret ? "🔒 ••••••" : i.Kind switch
     {
         ClipKind.Image => $"🖼️ صورة {i.Width}×{i.Height}",
         ClipKind.Link => "🔗 " + Short(i.Text),

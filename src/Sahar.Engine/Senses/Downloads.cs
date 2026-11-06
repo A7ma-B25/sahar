@@ -65,7 +65,10 @@ internal sealed class Downloads : IDisposable
             if (!File.Exists(path)) { _growing.Remove(path); continue; }
             long s = Size(path);
             if (s != size) { _growing[path] = (s, now); continue; }
-            if (now - since >= TimeSpan.FromSeconds(2)) { _growing.Remove(path); Done(); }
+            if (now - since < TimeSpan.FromSeconds(2)) continue;
+            _growing.Remove(path);
+            var siblings = Directory.EnumerateFiles(Path.GetDirectoryName(path) ?? ".").Select(Path.GetFileName).OfType<string>();
+            if (DownloadRules.Settled(Path.GetFileName(path), s, siblings)) Done();
         }
         if (_growing.Count == 0) _settle.Stop();
     }

@@ -4,7 +4,8 @@
 شو الجديد بـ 0.5.0
 ------------------
 - 📋 الحافظة بالقائمة: آخر 20 شي نسخته (نص، رابط، صورة). كبسة على وحدة بترجّعها للحافظة، و"امسح الكل" بيمسح.
-  ما بتحفظ شي من برامج كلمات السر، ولا شي معلّم إنو خاص. كل شي بيضل على جهازك.
+  ما بتحفظ شي من برامج كلمات السر يلي على الجهاز، ولا شي معلّم إنو خاص. وإذا نسخت شي بيشبه كلمة سر من المتصفح
+  (متل إضافات كلمات السر)، بتبيّنه "🔒 ••••••" وما بتكتبه على الجهاز أبداً. كل شي بيضل على جهازك.
 - بتعرف وقت يخلص تنزيل ملف، ووقت تاخد لقطة شاشة (Print Screen أو Win+Shift+S)، ووقت الجهاز يضل مشغول كتير دقيقتين.
 - إذا الكاميرا أو المايك شغالين (مكالمة فيديو) بتهدى: ما بتعلّق وما بتعمل حركات كبيرة.
 - بتعلّق بلطف أحياناً: إذا صار لك ساعة أو ساعتين على نفس البرنامج، أو صباح الخير أول النهار.
@@ -79,7 +80,7 @@
 - حط مؤقت 5 دقايق ونيّم الجهاز 10 دقايق: لما يصحى لازم يخلص المؤقت فوراً.
 - اكتب ملاحظة بالعربي (بلغة الكيبورد العربي): لازم تنحفظ وتبيّن صح.
 - سكّرها من أيقونتها: لازم تودّعك وتتحوّل لنجوم.
-- انسخ كلمة سر من برنامج كلمات السر (Bitwarden أو 1Password…): ما لازم تطلع بالحافظة تبعها.
+- انسخ كلمة سر من برنامج كلمات السر (Bitwarden أو 1Password…) أو من إضافته بالمتصفح: ما لازم تطلع مكشوفة بالحافظة تبعها.
 - نزّل ملف حقيقي من المتصفح، وخود لقطة بـ Win+Shift+S، وافتح مكالمة فيديو: لازم تتفاعل متل ما هو مكتوب فوق.
 - شغّل الطقس بمدينتك.
 - "لا تزعجني" تبع ويندوز (Focus Assist) ما إلو طريقة رسمية لنعرفه، فاستعمل "لا تزعجني" تبعها من قائمتها.
@@ -101,7 +102,8 @@ Sahar — test build 0.5.0 (Windows)
 What's new in 0.5.0
 -------------------
 - 📋 Clipboard in her menu: the last 20 things you copied (text, links, images). Click one to copy it again; "Clear all".
-  Nothing from password managers or content marked private is kept. Everything stays on your PC.
+  Nothing from password-manager apps or content marked private is kept. A password-looking copy from a browser (password
+  extensions) shows as "🔒 ••••••" and is never written to disk. Everything stays on your PC.
 - She notices a finished download, a screenshot (Print Screen or Win+Shift+S) and a CPU busy for two minutes.
 - Camera or microphone on (a video call): she goes quiet — no comments, no big moves.
 - Gentle comments now and then: an hour or two on the same app, or good morning. At most every 45 minutes, and less
@@ -174,7 +176,7 @@ Manual checks (GitHub cannot test these)
 - Start a 5-minute timer and sleep the PC for 10 minutes: when it wakes, the timer ends right away.
 - Write a note in Arabic (Arabic keyboard layout): it is saved and shows correctly.
 - Quit her from her icon: she waves goodbye and turns into stars.
-- Copy a password from a password manager (Bitwarden, 1Password…): it must not appear in her clipboard list.
+- Copy a password from a password manager app or its browser extension: it must never appear in clear in her list.
 - Download a real file in a browser, take a Win+Shift+S snip, start a video call: she reacts as described above.
 - Turn on the weather for your city.
 - Windows' own "Do not disturb" (Focus Assist) has no official way to be read; use her own "Do not disturb" in her menu.

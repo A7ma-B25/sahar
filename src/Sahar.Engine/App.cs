@@ -240,6 +240,7 @@ internal sealed unsafe class App
         using var downloads = new Downloads(ui, director.Post, _options.DownloadsDir);
         var screenshotKeys = new ScreenshotKeys();
         int printScreenSeen = 0;   // test diagnostics: a count, never which keys
+        tray.SessionLocked += _ => screenshotKeys.Reset();   // key-ups on the lock screen never reach us
         tray.KeyChanged += (vk, down) => Safe(() =>
         {
             if (vk == 0x2C) printScreenSeen++;
@@ -260,7 +261,8 @@ internal sealed unsafe class App
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => director.CurrentKey == "sleep",
             say: line => speech.Say(line));
-        speech.Ended += timedOut => { if (timedOut) apps.Limiter.Accepted(); else apps.Limiter.Dismissed(DateTimeOffset.Now); };
+        // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
+        speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
         // Rain coming (opt-in): the tray item asks for your city.
         using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
@@ -473,6 +475,12 @@ internal sealed unsafe class App
             pipe.Register("debug-weather", _ => new PipeReply(true, $"on={(weather.On ? "true" : "false")}"));
             pipe.Register("debug-apptime", _ => new PipeReply(true, apps.Describe()));
             pipe.Register("apptime-skip", r => { apps.Skip(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, apps.Describe()); });
+            pipe.Register("say", r =>
+            {
+                var text = r.Args?.TryGetValue("text64", out var t) == true ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)) : "";
+                speech.Say(text);
+                return new PipeReply(true);
+            });
             pipe.Register("comment-now", _ => new PipeReply(apps.Consider(), apps.Describe()));
             pipe.Register("debug-comment", _ => new PipeReply(true,
                 $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));

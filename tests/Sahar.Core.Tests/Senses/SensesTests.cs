@@ -339,3 +339,100 @@ public class ScreenshotKeysUpOnlyTests
         Assert.False(d.Update(0x2C, false));   // once per press
     }
 }
+
+public class ReviewFixTests : IDisposable
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 6, 15, 0, 0, TimeSpan.FromHours(3));
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "sahar-rf-" + Guid.NewGuid().ToString("N"));
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch (IOException) { } }
+
+    [Theory]
+    [InlineData("Hunter2!xyz", true)]
+    [InlineData("aZ9$kq3LmP0w", true)]
+    [InlineData("hello world", false)]
+    [InlineData("https://example.com/Ab1!", false)]
+    [InlineData("password", false)]
+    [InlineData("short1A", false)]
+    public void ClipboardRules_LooksSecret(string text, bool secret) => Assert.Equal(secret, ClipboardRules.LooksSecret(text));
+
+    [Fact]
+    public void ClipboardRules_SecretOnlyFromBrowsers()
+    {
+        Assert.True(ClipboardRules.KeepInMemoryOnly(@"C:\Program Files\Google\Chrome\Application\chrome.exe", "Hunter2!xyz"));
+        Assert.False(ClipboardRules.KeepInMemoryOnly(@"C:\Windows\notepad.exe", "Hunter2!xyz"));
+    }
+
+    [Fact]
+    public void ClipboardHistory_SecretsAreMaskedAndNeverWritten()
+    {
+        var h = new ClipboardHistory(_dir);
+        h.AddText("plain", T0);
+        Assert.True(h.AddText("Hunter2!xyz", T0.AddSeconds(1), secret: true));
+        Assert.True(h.Items[0].Secret);
+        Assert.Equal(["plain"], new ClipboardHistory(_dir).Items.Select(i => i.Text));
+        Assert.DoesNotContain("Hunter2", File.ReadAllText(Path.Combine(_dir, "clipboard.json")));
+    }
+
+    [Fact]
+    public void ClipboardHistory_SameImageTwice_KeptOnce()
+    {
+        var h = new ClipboardHistory(_dir);
+        var dib = new byte[44]; dib[0] = 40; dib[43] = 7;
+        Assert.True(h.AddImage(dib, 1, 1, T0));
+        Assert.False(h.AddImage((byte[])dib.Clone(), 1, 1, T0.AddSeconds(1)));
+        Assert.Single(h.Items);
+    }
+
+    [Fact]
+    public void DownloadRules_EmptyPlaceholderOrPartSibling_NotFinished()
+    {
+        Assert.False(DownloadRules.Settled("movie.mp4", 0, []));
+        Assert.False(DownloadRules.Settled("movie.mp4", 5000, ["movie.mp4.part", "other.txt"]));
+        Assert.False(DownloadRules.Settled("a.zip", 5000, ["a.zip.crdownload"]));
+        Assert.True(DownloadRules.Settled("movie.mp4", 5000, ["movie.mp4", "other.txt"]));
+    }
+
+    [Fact]
+    public void ScreenshotKeys_Reset_ForgetsAStuckWinKey()
+    {
+        var k = new ScreenshotKeys();
+        k.Update(0x5B, true);   // Win down, its up lost on the lock screen
+        k.Reset();
+        k.Update(0x10, true);
+        Assert.False(k.Update(0x53, true));
+    }
+
+    [Fact]
+    public void CommentPicker_EachMilestoneOncePerRun()
+    {
+        var p = new CommentPicker();
+        Assert.NotNull(p.Next("Code.exe", TimeSpan.FromMinutes(60), T0, away: false));
+        Assert.Null(p.Next("Code.exe", TimeSpan.FromMinutes(105), T0.AddMinutes(45), away: false));
+        Assert.Contains("ساعتين", p.Next("Code.exe", TimeSpan.FromMinutes(125), T0.AddMinutes(65), away: false));
+        Assert.Null(p.Next("Code.exe", TimeSpan.FromMinutes(170), T0.AddMinutes(110), away: false));
+        Assert.NotNull(p.Next("chrome.exe", TimeSpan.FromMinutes(61), T0.AddMinutes(200), away: false));   // a new run
+    }
+
+    [Fact]
+    public void CommentPicker_GreetingOnlyInTheMorning_WhenThere_Once()
+    {
+        var p = new CommentPicker();
+        var night = new DateTimeOffset(2026, 11, 7, 0, 1, 0, TimeSpan.FromHours(3));
+        Assert.Null(p.Next(null, TimeSpan.Zero, night, away: false));
+        Assert.Null(p.Next(null, TimeSpan.Zero, night.AddHours(9), away: true));
+        Assert.Equal("صباح الخير ☀️", p.Next(null, TimeSpan.Zero, night.AddHours(9.5), away: false));
+        Assert.Null(p.Next(null, TimeSpan.Zero, night.AddHours(10), away: false));
+        Assert.Equal("صباح الخير ☀️", p.Next(null, TimeSpan.Zero, night.AddDays(1).AddHours(8), away: false));
+    }
+
+    [Fact]
+    public void CommentLimiter_NewDay_BackTo45()
+    {
+        var l = new Sahar.Core.Brain.CommentLimiter();
+        l.Dismissed(T0);
+        l.Dismissed(T0);
+        Assert.True(l.Gap > TimeSpan.FromMinutes(45));
+        l.NewDay();
+        Assert.Equal(TimeSpan.FromMinutes(45), l.Gap);
+    }
+}

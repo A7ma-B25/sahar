@@ -6,6 +6,9 @@ public sealed class ScreenshotKeys
     private const int VkPrintScreen = 0x2C, VkShift = 0x10, VkLShift = 0xA0, VkRShift = 0xA1, VkLWin = 0x5B, VkRWin = 0x5C, VkS = 0x53;
     private bool _win, _shift, _sDown, _printDown;
 
+    /// <summary>Forget held keys (a key-up lost to the lock screen would leave Win "held").</summary>
+    public void Reset() => _win = _shift = _sDown = _printDown = false;
+
     public bool Update(int vk, bool down)
     {
         switch (vk)
@@ -34,6 +37,13 @@ public static class DownloadRules
 
     public static bool IsTemp(string name) =>
         name.StartsWith("~$", StringComparison.Ordinal) || TempEndings.Any(e => name.EndsWith(e, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A file written straight to its name counts once it has content and no browser temp file for it remains
+    /// (Firefox creates an empty placeholder beside its ".part" while downloading).
+    /// </summary>
+    public static bool Settled(string name, long size, IEnumerable<string> siblings) =>
+        size > 0 && !siblings.Any(s => IsTemp(s) && s.StartsWith(name, StringComparison.OrdinalIgnoreCase) && s.Length > name.Length);
 
     public static bool FinishedByRename(string oldName, string newName) => IsTemp(oldName) && !IsTemp(newName);
 }

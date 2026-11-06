@@ -15,6 +15,8 @@ internal sealed unsafe class AppWatch
 {
     private readonly AppTime _time = new();
     private readonly CommentLimiter _limiter = new();
+    private readonly CommentPicker _picker = new();
+    private DateOnly _day = DateOnly.FromDateTime(DateTime.Now);
     private readonly Func<bool> _allowed;
     private readonly Func<bool> _away;
     private readonly Action<string> _say;
@@ -57,9 +59,12 @@ internal sealed unsafe class AppWatch
     /// <summary>A comment, if one fits now (rules, the 45-minute limiter, something worth saying).</summary>
     public bool Consider()
     {
-        if (!_allowed()) return false;
         var now = Now;
-        var line = CommentRules.Pick(_time.Current, _time.Continuous(now), now.Hour, _time.FirstToday(now));
+        var today = DateOnly.FromDateTime(now.Date);
+        if (today != _day) { _day = today; _limiter.NewDay(); }
+        bool away = _away();
+        if (!_allowed() && !away) return false;
+        var line = _picker.Next(_time.Current, _time.Continuous(now), now, away || !_allowed());
         if (line is null || !_limiter.TryComment(now)) return false;
         Log.Write("comment: shown");
         _say(line);

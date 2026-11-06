@@ -25,4 +25,7 @@ public sealed class CommentLimiter
     }
 
     public void Accepted() => Gap = MinGap;
+
+    /// <summary>A new day: back to her normal pace.</summary>
+    public void NewDay() => Gap = MinGap;
 }

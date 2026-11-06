@@ -16,6 +16,34 @@ public static class CommentRules
     }
 }
 
+/// <summary>
+/// What to say next, without repeating: each milestone (1 h, 2 h) once per run on an app, the morning greeting once a
+/// day, only between 5 and 12, and only when you are there to see it.
+/// </summary>
+public sealed class CommentPicker
+{
+    private int _said;               // 0, 1 (an hour) or 2 (two hours) said for the current run
+    private TimeSpan _lastOnIt;
+    private DateOnly? _greeted;
+
+    public string? Next(string? exe, TimeSpan onIt, DateTimeOffset now, bool away)
+    {
+        if (onIt < _lastOnIt) _said = 0;   // a new run
+        _lastOnIt = onIt;
+        if (away) return null;
+        var today = DateOnly.FromDateTime(now.Date);
+        if (_greeted != today && now.Hour is >= 5 and < 12)
+        {
+            _greeted = today;
+            return CommentRules.Pick(null, TimeSpan.Zero, now.Hour, firstToday: true);
+        }
+        int milestone = onIt >= TimeSpan.FromMinutes(120) ? 2 : onIt >= TimeSpan.FromMinutes(60) ? 1 : 0;
+        if (milestone <= _said) return null;
+        _said = milestone;
+        return CommentRules.Pick(exe, onIt, now.Hour, firstToday: false);
+    }
+}
+
 public static class AppNames
 {
     private static readonly Dictionary<string, string> Names = new(StringComparer.Ordinal)

@@ -127,7 +127,7 @@ internal sealed class MenuVisual : IDisposable
             $"M{left + rad} {top} L{left + textW - rad} {top} A{rad} {rad} 0 0 1 {left + textW - rad} {top + pillH} L{left + rad} {top + pillH} A{rad} {rad} 0 0 1 {left + rad} {top} Z")));
         dc.FillGeometry(pill, dc.SolidBrush(new D2DColor(White, 0.92f)));
         dc.Text(item.Label, "Segoe UI", 12 * dpi, 600,
-            new D2DRect { Left = left, Top = top, Right = left + textW, Bottom = top + pillH }, dc.SolidBrush(new D2DColor(Ink)));
+            new D2DRect { Left = left, Top = top, Right = left + textW, Bottom = top + pillH }, dc.SolidBrush(new D2DColor(Ink)), rightToLeft: true);
     }
 
     /// <summary>After a device loss: drawn buttons are gone, draw them again next time.</summary>

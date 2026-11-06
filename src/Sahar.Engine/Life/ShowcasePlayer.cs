@@ -143,7 +143,7 @@ internal sealed class ShowcasePlayer : IDisposable
             var pill = dc.Path(PathData.Parse(FormattableString.Invariant(
                 $"M{left + r} 0 L{left + textW - r} 0 A{r} {r} 0 0 1 {left + textW - r} {h} L{left + r} {h} A{r} {r} 0 0 1 {left + r} 0 Z")));
             dc.FillGeometry(pill, dc.SolidBrush(new D2DColor(White, 0.92f)));
-            dc.Text(text, "Segoe UI", 13 * dpi, 600, new D2DRect { Left = left, Top = 0, Right = left + textW, Bottom = h }, dc.SolidBrush(new D2DColor(Ink)));
+            dc.Text(text, "Segoe UI", 13 * dpi, 600, new D2DRect { Left = left, Top = 0, Right = left + textW, Bottom = h }, dc.SolidBrush(new D2DColor(Ink)), rightToLeft: true);
         });
         _caption!.Brush = _captionSurface.Brushes[_captionSurface.Current];
         var units = SaharVisual.BodyUnits;

@@ -49,7 +49,7 @@ internal sealed class SpeechBubble : IDisposable
                 $"M{1 + r} 1 L{bw - r} 1 A{r} {r} 0 0 1 {bw} {1 + r} L{bw} {bh - r} A{r} {r} 0 0 1 {bw - r} {bh} L{w / 2 + 8 * dpi} {bh} L{w / 2} {h - 1} L{w / 2 - 8 * dpi} {bh} L{1 + r} {bh} A{r} {r} 0 0 1 1 {bh - r} L1 {1 + r} A{r} {r} 0 0 1 {1 + r} 1 Z")));
             dc.FillGeometry(shape, dc.SolidBrush(new D2DColor(White, 0.96f)));
             dc.DrawGeometry(shape, dc.SolidBrush(new D2DColor(Edge)), 1.5f * dpi, dc.StrokeStyle("round"));
-            dc.Text(text, "Segoe UI", 13 * dpi, 600, new D2DRect { Left = 12 * dpi, Top = 2, Right = w - 12 * dpi, Bottom = bh }, dc.SolidBrush(new D2DColor(Ink)));
+            dc.Text(text, "Segoe UI", 13 * dpi, 600, new D2DRect { Left = 12 * dpi, Top = 2, Right = w - 12 * dpi, Bottom = bh }, dc.SolidBrush(new D2DColor(Ink)), rightToLeft: true);
         });
         _visual = c.CreateSpriteVisual();
         _visual.Size = new Vector2(_surface.Size.Width, _surface.Size.Height);

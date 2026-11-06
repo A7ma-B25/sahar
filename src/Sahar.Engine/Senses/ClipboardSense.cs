@@ -36,7 +36,9 @@ internal sealed unsafe class ClipboardSense
         {
             if (Native.GetClipboardSequenceNumber() == _ourSequence) return;   // our own put-back
             if (!Open()) return;
-            bool kept = false;
+            string? copiedText = null, owner = null;
+            (byte[] Bytes, int W, int H)? copiedImage = null;
+            // Only read while the clipboard is open; keep it open as briefly as possible (other apps wait for it).
             try
             {
                 var names = new List<string>();
@@ -58,13 +60,15 @@ internal sealed unsafe class ClipboardSense
                         }
                     }
                 }
-                var owner = Native.WindowProcessPath(Native.GetClipboardOwner());
+                owner = Native.WindowProcessPath(Native.GetClipboardOwner());
                 if (!ClipboardRules.ShouldKeep(names, canInclude, owner)) return;
-                var now = DateTimeOffset.Now;
-                if (text && ReadText() is { } t) kept = _history.AddText(t, now);
-                else if (dib && ReadDib() is { } d) kept = _history.AddImage(d.Bytes, d.W, d.H, now);
+                if (text) copiedText = ReadText();
+                else if (dib) copiedImage = ReadDib();
             }
             finally { Native.CloseClipboard(); }
+            var now = DateTimeOffset.Now;
+            bool kept = copiedText is { } t ? _history.AddText(t, now, secret: ClipboardRules.KeepInMemoryOnly(owner ?? "", t))
+                : copiedImage is { } d && _history.AddImage(d.Bytes, d.W, d.H, now);
             if (kept) Kept?.Invoke();
         }
         catch (Exception e) { Log.Write($"clipboard error: {e.GetType().Name}"); }

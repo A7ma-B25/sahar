@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Sahar.Core.Senses;
 
-public sealed record ClipItem(ClipKind Kind, string? Text, string? ImageFile, int Width, int Height, DateTimeOffset At);
+public sealed record ClipItem(ClipKind Kind, string? Text, string? ImageFile, int Width, int Height, DateTimeOffset At, bool Secret = false);
 
 /// <summary>
 /// The last 20 things you copied (spec §7.2), on this PC only: clipboard.json plus a .bmp per image.
@@ -16,6 +16,7 @@ public sealed class ClipboardHistory
     private readonly string _folder;
     private readonly List<ClipItem> _items;   // oldest first
     private bool _unread;
+    private string? _lastImageHash;
 
     public ClipboardHistory(string folder)
     {
@@ -30,17 +31,20 @@ public sealed class ClipboardHistory
 
     public IReadOnlyList<ClipItem> Items => Enumerable.Reverse(_items).ToList();
 
-    public bool AddText(string text, DateTimeOffset at)
+    public bool AddText(string text, DateTimeOffset at, bool secret = false)
     {
         if (string.IsNullOrWhiteSpace(text) || text.Length > MaxTextChars) return false;
         if (_items.Count > 0 && _items[^1].Text == text) return false;
-        return Add(new ClipItem(ClipboardRules.KindOf(text), text, null, 0, 0, at));
+        return Add(new ClipItem(ClipboardRules.KindOf(text), text, null, 0, 0, at, secret));
     }
 
     /// <param name="dib">The clipboard's CF_DIB bytes (BITMAPINFOHEADER + pixels).</param>
     public bool AddImage(byte[] dib, int w, int h, DateTimeOffset at)
     {
         if (dib.Length == 0 || dib.Length > MaxImageBytes) return false;
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(dib));
+        if (hash == _lastImageHash) return false;   // the same picture again (held Ctrl+C, a remote session re-announcing)
+        _lastImageHash = hash;
         try
         {
             Directory.CreateDirectory(_folder);
@@ -116,7 +120,7 @@ public sealed class ClipboardHistory
         {
             Directory.CreateDirectory(_folder);
             string tmp = FilePath + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(_items, ClipJson.Default.ListClipItem));
+            File.WriteAllText(tmp, JsonSerializer.Serialize(_items.Where(i => !i.Secret).ToList(), ClipJson.Default.ListClipItem));
             if (File.Exists(FilePath)) File.Replace(tmp, FilePath, destinationBackupFileName: null);
             else File.Move(tmp, FilePath);
         }
