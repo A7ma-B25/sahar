@@ -85,6 +85,55 @@ internal struct TRACKMOUSEEVENT
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct LASTINPUTINFO { public uint CbSize; public uint DwTime; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SYSTEM_POWER_STATUS
+{
+    public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag;
+    public uint BatteryLifeTime, BatteryFullLifeTime;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NOTIFYICONDATAW
+{
+    public uint CbSize;
+    public nint HWnd;
+    public uint UID;
+    public uint UFlags;
+    public uint UCallbackMessage;
+    public nint HIcon;
+    public fixed char SzTip[128];
+    public uint DwState;
+    public uint DwStateMask;
+    public fixed char SzInfo[256];
+    public uint UVersion;
+    public fixed char SzInfoTitle[64];
+    public uint DwInfoFlags;
+    public Guid GuidItem;
+    public nint HBalloonIcon;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ICONINFO
+{
+    public int FIcon;
+    public uint XHotspot, YHotspot;
+    public nint HbmMask, HbmColor;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct BITMAPINFOHEADER
+{
+    public uint BiSize;
+    public int BiWidth, BiHeight;
+    public ushort BiPlanes, BiBitCount;
+    public uint BiCompression, BiSizeImage;
+    public int BiXPelsPerMeter, BiYPelsPerMeter;
+    public uint BiClrUsed, BiClrImportant;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct DispatcherQueueOptions
 {
     public int DwSize;
@@ -291,6 +340,72 @@ internal static unsafe partial class Native
 
     [LibraryImport("shell32.dll")]
     public static partial nuint SHAppBarMessage(uint message, APPBARDATA* data);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetWinEventHook(uint min, uint max, nint module, delegate* unmanaged<nint, uint, nint, int, int, uint, uint, void> proc, uint pid, uint tid, uint flags);
+
+    [LibraryImport("user32.dll")]
+    public static partial int UnhookWinEvent(nint hook);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static partial nint GetWindowLongPtr(nint hwnd, int index);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetLastInputInfo(LASTINPUTINFO* info);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial int GetSystemPowerStatus(SYSTEM_POWER_STATUS* status);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial uint GetTickCount();
+
+    [LibraryImport("wtsapi32.dll")]
+    public static partial int WTSRegisterSessionNotification(nint hwnd, uint flags);
+
+    [LibraryImport("wtsapi32.dll")]
+    public static partial int WTSUnRegisterSessionNotification(nint hwnd);
+
+    [LibraryImport("shell32.dll", EntryPoint = "Shell_NotifyIconW")]
+    public static partial int ShellNotifyIcon(uint message, NOTIFYICONDATAW* data);
+
+    [LibraryImport("shell32.dll")]
+    public static partial int SHQueryUserNotificationState(int* state);
+
+    [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW")]
+    public static partial uint RegisterWindowMessage(char* name);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint CreatePopupMenu();
+
+    [LibraryImport("user32.dll", EntryPoint = "AppendMenuW")]
+    public static partial int AppendMenu(nint menu, uint flags, nuint id, char* text);
+
+    [LibraryImport("user32.dll")]
+    public static partial int TrackPopupMenu(nint menu, uint flags, int x, int y, int reserved, nint hwnd, nint rect);
+
+    [LibraryImport("user32.dll")]
+    public static partial int DestroyMenu(nint menu);
+
+    [LibraryImport("user32.dll")]
+    public static partial int SetForegroundWindow(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW")]
+    public static partial int PostMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint CreateIconIndirect(ICONINFO* info);
+
+    [LibraryImport("user32.dll")]
+    public static partial int DestroyIcon(nint icon);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint CreateDIBSection(nint hdc, BITMAPINFOHEADER* info, uint usage, void** bits, nint section, uint offset);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint CreateBitmap(int w, int h, uint planes, uint bitCount, void* bits);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial int DeleteObject(nint obj);
 
     public static POINT CursorPos()
     {

@@ -5,12 +5,14 @@ using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
 using Sahar.Core.Protocol;
 using Sahar.Engine.Diagnostics;
+using Sahar.Core.Brain;
 using Sahar.Core.Motion;
 using Sahar.Engine.Host;
 using Sahar.Engine.Input;
 using Sahar.Engine.Motion;
 using Sahar.Engine.Pipe;
 using Sahar.Engine.Render;
+using Sahar.Engine.Senses;
 
 namespace Sahar.Engine;
 
@@ -86,6 +88,29 @@ internal sealed unsafe class App
             pokeTimer.Stop();
             pokeTimer.Start();
         });
+        // Senses → brain → what she shows.
+        void SetHidden(bool hidden)
+        {
+            _state.Hidden = hidden;
+            input.SetVisible(!hidden);
+            motion.Play(hidden ? MotionKind.FullscreenHide : MotionKind.Wake);
+        }
+        var director = new Director(ui, Express, SetHidden);
+        using var tray = new Tray();
+        tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
+        tray.Quit += () => Native.PostQuitMessage(0);
+        var power = new Power(director.Post);
+        power.Check();
+        tray.PowerChanged += power.Check;
+        var idle = new Idle(director.Post);
+        tray.SessionLocked += locked => idle.SetAway(locked);
+        var idleTimer = ui.CreateTimer();
+        idleTimer.Interval = TimeSpan.FromSeconds(5);
+        idleTimer.Tick += (_, _) => idle.Check();
+        idleTimer.Start();
+        _ = new Network(ui, director.Post);
+        Foreground.Start();
+
         overlay.DisplayChanged += () =>
         {
             sahar.Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top);
@@ -110,6 +135,14 @@ internal sealed unsafe class App
             _state.Expression = preset.Key;
             return new PipeReply(true, State: _state.Snapshot());
         });
+        pipe.OnEvent(r =>
+        {
+            EventKind kind;
+            try { kind = EventNames.Parse(r.Name); }
+            catch (FormatException) { return new PipeReply(false, "unknown event"); }
+            director.Post(kind);
+            return new PipeReply(true, State: _state.Snapshot());
+        });
         pipe.Register("motion", r =>
         {
             if (r.Args is null || !r.Args.TryGetValue("kind", out var name)) return new PipeReply(false, "motion needs 'kind'");
@@ -132,6 +165,7 @@ internal sealed unsafe class App
 
         int code = Loop(ticker);
         Log.Write("message loop ended");
+        Foreground.Stop();
         Native.DestroyWindow(input.Hwnd);
         Native.DestroyWindow(overlay.Hwnd);
         return code;
