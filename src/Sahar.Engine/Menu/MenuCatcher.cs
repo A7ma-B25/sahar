@@ -4,7 +4,8 @@ using Sahar.Engine.Host;
 namespace Sahar.Engine.Menu;
 
 /// <summary>
-/// While the menu is open: an almost invisible (alpha 1) window over the whole virtual screen. It takes the
+/// While the menu is open: an invisible window over the whole virtual screen (no redirection bitmap and nothing
+/// drawn, so it costs no memory, but it still takes the mouse). It takes the
 /// clicks (a button, or "outside" which closes the menu and goes no further), Esc, and closes the menu when
 /// another window becomes active.
 /// </summary>
@@ -20,9 +21,8 @@ internal sealed class MenuCatcher : IWindowHandler
     public MenuCatcher(bool capturable)
     {
         _bounds = Native.VirtualScreen();
-        Hwnd = Win.Create(this, Native.WS_EX_LAYERED | Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW,
+        Hwnd = Win.Create(this, Native.WS_EX_NOREDIRECTIONBITMAP | Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW,
             Native.WS_POPUP, _bounds, "Sahar menu");
-        Native.SetLayeredWindowAttributes(Hwnd, 0, 1, Native.LWA_ALPHA);
         Win.SetCaptureExcluded(Hwnd, !capturable);
     }
 

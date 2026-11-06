@@ -129,5 +129,12 @@ internal sealed class RadialMenu : IDisposable
         catch (Exception e) { Log.Write($"menu error: {e}"); }
     }
 
+    /// <summary>The GPU device was lost: close, and redraw the buttons next time.</summary>
+    public void DeviceLost()
+    {
+        Close();
+        _visual.Forget();
+    }
+
     public void Dispose() => _visual.Dispose();
 }

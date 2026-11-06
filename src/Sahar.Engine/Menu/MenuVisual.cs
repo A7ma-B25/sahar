@@ -21,7 +21,9 @@ internal sealed class MenuVisual : IDisposable
 
     private readonly CompositionHost _host;
     private readonly ContainerVisual _root;
-    private readonly List<(SpriteVisual Visual, SwapSurface Surface)> _buttons = [];
+    private readonly List<SpriteVisual> _buttons = [];
+    // Each button is drawn once per look and DPI, then reused (the menu opens often).
+    private readonly Dictionary<(string Id, string Label, float Dpi), SwapSurface> _drawn = [];
     private readonly ShapeVisual _hover;
     private readonly CompositionEllipseGeometry _hoverGeometry;
     private readonly CompositionSpriteShape _hoverShape;
@@ -51,8 +53,12 @@ internal sealed class MenuVisual : IDisposable
         for (int i = 0; i < slots.Count; i++)
         {
             var item = items[i];
-            var surface = new SwapSurface(_host, size);
-            surface.DrawCurrent(dc => Draw(dc, item, dpi, w, r, pad));
+            if (!_drawn.TryGetValue((item.Id, item.Label, dpi), out var surface))
+            {
+                surface = new SwapSurface(_host, size);
+                surface.DrawCurrent(dc => Draw(dc, item, dpi, w, r, pad));
+                _drawn[(item.Id, item.Label, dpi)] = surface;
+            }
             var v = c.CreateSpriteVisual();
             v.Size = new Vector2(size.Width, size.Height);
             v.Brush = surface.Brushes[surface.Current];
@@ -69,7 +75,7 @@ internal sealed class MenuVisual : IDisposable
             pop.DelayBehavior = AnimationDelayBehavior.SetInitialValueBeforeDelay;
             _root.Children.InsertAtTop(v);
             v.StartAnimation("Scale", pop);
-            _buttons.Add((v, surface));
+            _buttons.Add(v);
         }
         _hover.IsVisible = false;
         _hoverShape.StrokeThickness = 3 * dpi;
@@ -90,11 +96,10 @@ internal sealed class MenuVisual : IDisposable
 
     public void Clear()
     {
-        foreach (var (v, s) in _buttons)
+        foreach (var v in _buttons)
         {
             _root.Children.Remove(v);
             v.Dispose();
-            s.Dispose();
         }
         _buttons.Clear();
         if (_hover.Parent != null) _root.Children.Remove(_hover);
@@ -124,9 +129,17 @@ internal sealed class MenuVisual : IDisposable
             new D2DRect { Left = left, Top = top, Right = left + textW, Bottom = top + pillH }, dc.SolidBrush(new D2DColor(Ink)));
     }
 
-    public void Dispose()
+    /// <summary>After a device loss: drawn buttons are gone, draw them again next time.</summary>
+    public void Forget()
     {
         Clear();
+        foreach (var s in _drawn.Values) s.Dispose();
+        _drawn.Clear();
+    }
+
+    public void Dispose()
+    {
+        Forget();
         _hover.Dispose();
         _root.Dispose();
     }

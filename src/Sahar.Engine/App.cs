@@ -157,7 +157,7 @@ internal sealed unsafe class App
         var dndTool = new DndTool(ui, director);
         var bubble = new TextBubble(_options.Capturable);
         sahar.Rescaled += () => Safe(timerTool.Redraw);
-        host.DeviceLost += () => Safe(timerTool.Redraw);
+        host.DeviceLost += () => Safe(() => { timerTool.Redraw(); menu.DeviceLost(); });
         // Settings: a bad or locked file never stops her (defaults).
         var settings = new SaharSettings();
         try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }

@@ -694,8 +694,15 @@ function Stage-Menu {
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
         Start-Sleep -Milliseconds 600
         Screenshot 'menu-open.png' | Out-Null
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'menu closed' | Out-Null
     }
     Step 'Esc closes it' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'menu open after a right-click' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Menu).open -ne 'true') { throw 'the menu closed by itself' }
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Wait-Menu 'false' 1000 'menu closed by Esc' | Out-Null
     }
@@ -813,7 +820,6 @@ function Stage-Menu {
         Press 'timer'
         Press 'timer-custom'
         Start-Sleep -Milliseconds 400
-        Screenshot 'timer-bubble.png' | Out-Null
         Type-InBubble ([string][char]0x0662) -Enter
         Start-Sleep -Milliseconds 300
         $t = Kv 'debug-timer'
@@ -864,13 +870,72 @@ function Stage-Menu {
         try { Wait-State { param($st) $st.hidden } 4000 'hidden over fullscreen' | Out-Null }
         finally { $w.Kill() }
         Wait-State { param($st) -not $st.hidden } 5000 'back after fullscreen' | Out-Null
-        if ((State).expression -ne 'dnd') { throw "expression after fullscreen: $((State).expression)" }
+        Wait-State { param($st) $st.expression -eq 'dnd' } 4000 'dnd face after fullscreen (after her hello-back face)' | Out-Null
         if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd turned off by fullscreen' }
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'dnd'
         Press 'dnd-off'
     }
+    Step 'a quick note is saved and shown next time' {
+        $notes = Join-Path $env:APPDATA 'Sahar\notes.json'
+        Remove-Item $notes -ErrorAction SilentlyContinue
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        $text = -join ([char[]](0x0627, 0x0634, 0x062A, 0x0631, 0x064A, 0x0020, 0x062E, 0x0628, 0x0632))   # اشتري خبز
+        Type-InBubble $text -Enter
+        Wait-State { param($st) $st.expression -eq 'notification' } 2000 'the note face' | Out-Null
+        if (-not (Test-Path $notes)) { throw 'notes.json not written' }
+        if ((Get-Content $notes -Raw -Encoding UTF8) -notmatch [regex]::Escape($text)) { throw "notes.json: $(Get-Content $notes -Raw)" }
+        Start-Sleep -Seconds 2
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
+        if ($lines[0] -ne $text) { throw "bubble lines: $($lines -join ' | ')" }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Kv 'debug-bubble').open -ne 'false') { throw 'Esc did not close the bubble' }
+        $count = ((Get-Content $notes -Raw -Encoding UTF8) | ConvertFrom-Json).Count
+        if ($count -ne 1) { throw "$count notes after Esc" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        Screenshot 'note-bubble.png' | Out-Null
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Screenshot 'timer-bubble.png' | Out-Null
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+    }
+    Step 'four notes: the bubble shows the last three, newest first' {
+        foreach ($n in 2, 3, 4) {
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            Wait-Menu 'true' 1000 'menu open' | Out-Null
+            Press 'note'
+            Start-Sleep -Milliseconds 300
+            Type-InBubble "note $n" -Enter
+            Start-Sleep -Milliseconds 300
+        }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 300
+        $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
+        if (($lines -join ',') -ne 'note 4,note 3,note 2') { throw "bubble lines: $($lines -join ',')" }
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+    }
     Step 'the menu costs nothing at rest' {
+        Write-Host ("    working set before opening: {0:N1} MB" -f ((State).workingSetBytes / 1MB))
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Start-Sleep -Seconds 10
