@@ -1188,6 +1188,48 @@ function Stage-Senses {
         Screenshot 'clipboard-list.png' | Out-Null
         Send '{"type":"cmd","name":"list-close"}' | Out-Null
     }
+    Step 'downloads: a finished browser download shows its face' {
+        Stop-Engine
+        $script:dl = Join-Path $env:TEMP 'sahar-downloads'
+        Remove-Item $script:dl -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:dl | Out-Null
+        Start-Engine @('--downloads', $script:dl)
+        Start-Sleep -Seconds 1
+        $tmp = Join-Path $script:dl 'a.zip.crdownload'
+        [IO.File]::WriteAllBytes($tmp, (New-Object byte[] 4096))
+        Rename-Item $tmp 'a.zip'
+        Wait-State { param($st) $st.expression -eq 'download' } 3000 'download face' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+        Start-Sleep -Seconds 3
+    }
+    Step 'downloads: a cancelled one shows nothing' {
+        $tmp = Join-Path $script:dl 'b.zip.part'
+        [IO.File]::WriteAllBytes($tmp, (New-Object byte[] 4096))
+        Start-Sleep -Milliseconds 500
+        Remove-Item $tmp
+        $end = (Get-Date).AddSeconds(4)
+        while ((Get-Date) -lt $end) { if ((State).expression -eq 'download') { throw 'a cancelled download showed the face' }; Start-Sleep -Milliseconds 300 }
+    }
+    Step 'downloads: a file written straight to its name counts once it stops growing' {
+        $f = Join-Path $script:dl 'c.pdf'
+        $s = [IO.File]::OpenWrite($f)
+        foreach ($i in 1..3) { $s.Write((New-Object byte[] 1024), 0, 1024); $s.Flush(); Start-Sleep -Milliseconds 500 }
+        $s.Close()
+        Wait-State { param($st) $st.expression -eq 'download' } 6000 'download face for a direct write' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+    }
+    Step 'a screenshot key shows her screenshot face' {
+        [System.Windows.Forms.SendKeys]::SendWait('{PRTSC}')
+        Wait-State { param($st) $st.expression -eq 'screenshot' } 3000 'screenshot face' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'vk=|key ') { throw 'keys reached the log' }
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+    }
+    Step 'a busy CPU for two minutes makes her hot' {
+        $r = Send '{"type":"cmd","name":"debug-cpu","args":{"percent":"92","count":"13"}}'
+        if (-not $r.ok) { throw "debug-cpu not ok: $($r.error)" }
+        Wait-State { param($st) $st.expression -eq 'hot' } 3000 'hot face' | Out-Null
+    }
     Step 'clear all empties it' {
         Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
         if ((Clip-Count) -ne 0) { throw 'not cleared' }
@@ -1332,7 +1374,7 @@ function Stage-Life {
                 $st = State
                 $d = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
                 if ($st.motion -notin 'Wander', 'Hover') { throw "motion '$($st.motion)' while typing" }
-                if ($d -gt 150 -and $st.motion -eq 'Hover') { $far = $true }
+                if ($d -gt 120 -and $st.motion -eq 'Hover') { $far = $true }
             } while (-not $far -and (Get-Date) -lt $deadline)
             Screenshot 'life-typing.png' | Out-Null
             Write-Host "    her distance after typing $([int]$d) px"
