@@ -26,6 +26,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly MotionController _motion;
     private readonly Director _director;
     private readonly Media _media;
+    private readonly CursorRest _cursorRest = new();
+    private bool _cursorResting;
     private readonly DispatcherQueueTimer _timer;
     private readonly Preferences _prefs;
     private readonly Routine _routine;
@@ -120,6 +122,15 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         if (!Enabled) return;
+        var cursor = Native.CursorPos();
+        var body = _motion.Body;
+        _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
+            new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying))
+        {
+            Log.Write("life: the music stopped (or a video is in front), dance ends");
+            _motion.Play(MotionKind.Hover);
+        }
         if (_motion.PerchIsStale()) { _motion.Play(MotionKind.Wander); return; }   // her window moved, resized or closed
         if (Typing) { StepAwayFromTyping(); return; }   // no own actions while you type
 
@@ -152,7 +163,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var forced = _forceNext;
         _forceNext = null;
         var context = new LifeContext(Typing, _media.VideoPlaying, _media.MusicPlaying, away, _director.Hidden, !Resting,
-            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()));
+            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
             : LifeChooser.Choose(context, _prefs.Weight, _rng);
@@ -164,7 +175,7 @@ internal sealed unsafe class LifeDirector : IDisposable
                 _motion.PlayFlight(Enum.GetValues<FlightPattern>()[_rng.Next(Enum.GetValues<FlightPattern>().Length)]);
                 break;
             case LifeAction.Moment:
-                if (!PlayMoment()) return;   // an event face is showing: not now
+                if (!PlayMoment()) { Schedule(now); return; }   // an event face is showing: let this turn pass
                 break;
             default:
                 _motion.Play(action switch

@@ -85,3 +85,49 @@ public class VarietyTests
     [Fact]
     public void Choose_Variety() => Assert.True(Draw(Ctx(), 4000).Count(kv => kv.Value > 0) >= 8);
 }
+
+public class CursorRestTests
+{
+    private static readonly DateTimeOffset T0 = new(2026, 11, 6, 15, 0, 0, TimeSpan.Zero);
+    private static readonly System.Numerics.Vector2 Her = new(1000, 500);
+
+    [Fact]
+    public void Resting_AfterTwoStillSecondsNearHer()
+    {
+        var c = new CursorRest();
+        Assert.False(c.Update(T0, new(1100, 500), Her, 1f));
+        Assert.False(c.Update(T0.AddSeconds(1), new(1100, 500), Her, 1f));
+        Assert.True(c.Update(T0.AddSeconds(2), new(1100, 500), Her, 1f));
+    }
+
+    [Fact]
+    public void NotResting_WhenItMoves()
+    {
+        var c = new CursorRest();
+        c.Update(T0, new(1100, 500), Her, 1f);
+        c.Update(T0.AddSeconds(1), new(1100, 500), Her, 1f);
+        Assert.False(c.Update(T0.AddSeconds(2), new(1150, 500), Her, 1f));
+        Assert.False(c.Update(T0.AddSeconds(3), new(1150, 500), Her, 1f));
+        Assert.True(c.Update(T0.AddSeconds(4), new(1150, 500), Her, 1f));
+    }
+
+    [Fact]
+    public void NotResting_WhenFarFromHer_ScaledByDpi()
+    {
+        var c = new CursorRest();
+        c.Update(T0, new(1400, 500), Her, 1f);
+        Assert.False(c.Update(T0.AddSeconds(3), new(1400, 500), Her, 1f));   // 400 px at 100 %: too far
+        var d = new CursorRest();
+        d.Update(T0, new(1400, 500), Her, 1.5f);
+        Assert.True(d.Update(T0.AddSeconds(3), new(1400, 500), Her, 1.5f));  // 400 px at 150 % is 267 DIP
+    }
+
+    [Fact]
+    public void TinyJitter_StillCountsAsResting()
+    {
+        var c = new CursorRest();
+        c.Update(T0, new(1100, 500), Her, 1f);
+        c.Update(T0.AddSeconds(1), new(1102, 501), Her, 1f);
+        Assert.True(c.Update(T0.AddSeconds(2), new(1101, 500), Her, 1f));
+    }
+}

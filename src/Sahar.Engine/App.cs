@@ -241,6 +241,12 @@ internal sealed unsafe class App
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("show", _ => { director.HideFor(TimeSpan.Zero); return new PipeReply(true, State: _state.Snapshot()); });
+            pipe.Register("debug-media", r =>
+            {
+                bool On(string key) => r.Args?.TryGetValue(key, out var v) == true && v == "true";
+                media.Simulate(On("playing"), On("video"), On("browser"), On("front"));
+                return new PipeReply(true, lifeDirector.Describe());
+            });
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {
