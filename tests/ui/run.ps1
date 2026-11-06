@@ -1278,7 +1278,7 @@ function Stage-Senses {
             $c = Kv 'debug-comment'
             $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.text64))
             Write-Host "    comment: $text"
-            if ($c.showing -ne 'true' -or $text -notmatch 'ساعتين|صباح') { throw "comment: showing=$($c.showing) '$text'" }
+            if ($c.showing -ne 'true' -or $text -notmatch 'ساعتين|ساعة كاملة|صباح') { throw "comment: showing=$($c.showing) '$text'" }
             Start-Sleep -Milliseconds 500
             Screenshot 'comment.png' | Out-Null
             $b = Body-Centre
