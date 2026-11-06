@@ -54,6 +54,10 @@ internal sealed class MotionController
     public event Action? HiddenAway;
     /// <summary>The user grabbed her (mouse or pipe).</summary>
     public event Action? DragStarted;
+    /// <summary>Her goodbye (motion 19) has finished: she is gone.</summary>
+    public event Action? GoodbyeDone;
+    /// <summary>While she rests and the pointer moves: its distance to her body, in DIPs (for "shy", motion 17).</summary>
+    public event Action<float>? PointerNear;
     private bool _throwNext;
     private Vector2? _home;
     /// <summary>Sitting or sleeping: no idle bob.</summary>
@@ -111,7 +115,15 @@ internal sealed class MotionController
             case MotionKind.Dance: Reset(k); StartDance(); break;
             case MotionKind.Breathe: Reset(k); StartBreathe(); break;
             case MotionKind.OrbitCursor: Reset(k); StartOrbitCursor(); break;
-            default: return false;   // the rest arrive in later plans
+            case MotionKind.FollowCursor: Reset(k); StartFollowCursor(); break;
+            case MotionKind.HideBehindWindow: Reset(k); StartHideBehindWindow(); break;
+            case MotionKind.Shy: Reset(k); StartShy(); break;
+            case MotionKind.StartupEntry: Reset(k); StartStartupEntry(); break;
+            case MotionKind.Goodbye: Reset(k); StartGoodbye(); break;
+            case MotionKind.HopIcons: Reset(k); StartHopIcons(); break;
+            case MotionKind.Attention: Reset(k); StartAttention(); break;
+            case MotionKind.NapOnIcon: Reset(k); StartCorner(sleep: true, along: 1f / 3); break;
+            default: return false;
         }
         UpdateTicker();
         return true;
@@ -316,6 +328,12 @@ internal sealed class MotionController
         _eyeClock += dt;
         if (_sinceCursorMoved > 0.5f || _eyeClock < 0.033f) return;
         _eyeClock = 0;
+        if (PointerNear is { } near)
+        {
+            var b = Body;
+            float dx = MathF.Max(0, MathF.Max(b.X - cursor.X, cursor.X - b.Right)), dy = MathF.Max(0, MathF.Max(b.Y - cursor.Y, cursor.Y - b.Bottom));
+            near(MathF.Sqrt(dx * dx + dy * dy) / _v.DpiScale);
+        }
         var eyes = _v.Position + new Vector2(150, 154) * _v.Scale;
         var d = cursor - eyes;
         float len = d.Length();
@@ -463,11 +481,11 @@ internal sealed class MotionController
 
     // ---------- 8 SleepInCorner / 10 FullscreenHide ----------
 
-    private void StartCorner(bool sleep)
+    private void StartCorner(bool sleep, float along = 1f)
     {
         if (!sleep) _home ??= TopLeft;
         HoldStill();
-        var target = PerchTopLeft(1f);
+        var target = PerchTopLeft(along);
         _step = Travel(target, sleep ? 2f : 0.5f, Smooth, done: () =>
         {
             var c = _v.Root.Compositor;
@@ -716,6 +734,285 @@ internal sealed class MotionController
                 return true;
             };
         });
+    }
+
+
+    // ---------- 13 FollowCursor ----------
+
+    /// <summary>Flies after the pointer, gently and a little behind it (never onto it), for 6 s.</summary>
+    private void StartFollowCursor()
+    {
+        float dip = Monitor.DpiScale, t = 0, tilt = 0;
+        _v.Root.CenterPoint = PivotBodyCentre;
+        _face(Eyes.Happy, Mouth.Smile, 6f);
+        _step = dt =>
+        {
+            t += dt;
+            var p = Native.CursorPos();
+            var cursor = new Vector2(p.X, p.Y);
+            var away = Centre - cursor;
+            var dir = away.Length() < 1 ? -Vector2.UnitX : Vector2.Normalize(away);
+            var target = cursor + dir * 90 * dip - BodySize / 2;   // her centre stays 90 DIP behind the pointer
+            var move = (target - TopLeft) * MathF.Min(1, dt * 2.5f);
+            float max = 260 * dip * dt;
+            if (move.Length() > max) move = Vector2.Normalize(move) * max;
+            TopLeft = Clamp(TopLeft + move);
+            tilt += (Math.Clamp(move.X / MathF.Max(dt, 1e-3f) / (300 * dip), -1, 1) * TiltDegrees - tilt) * MathF.Min(1, dt * 6);
+            _v.Root.RotationAngleInDegrees = tilt;
+            if (t < 6f) return true;
+            _step = null;
+            Play(MotionKind.Hover);
+            return _step != null;
+        };
+    }
+
+    // ---------- 14 HideBehindWindow ----------
+
+    /// <summary>Slips behind the edge of the window in front (her far side clipped away) and peeks out twice.</summary>
+    private unsafe void StartHideBehindWindow()
+    {
+        nint fg = Native.GetForegroundWindow();
+        RECT r;
+        if (fg == 0 || Win.Own.Contains(fg) || fg == Native.GetShellWindow() || Native.IsWindowVisible(fg) == 0 ||
+            Native.IsIconic(fg) != 0 || Native.IsZoomed(fg) != 0 || Native.GetWindowRect(fg, &r) == 0 ||
+            Native.ClassName(fg) is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd")
+        {
+            Play(MotionKind.PeekTaskbar);   // no window to hide behind: the taskbar will do
+            return;
+        }
+        var work = Monitor.WorkF;
+        var size = BodySize;
+        bool fromLeft = r.Left - work.X >= size.X || r.Right + size.X > work.Right;   // she stands left of the window's left edge
+        float edgeX = fromLeft ? r.Left : r.Right;
+        float y = Math.Clamp(r.Top + (r.Bottom - r.Top) * 0.4f - size.Y / 2, work.Y, work.Bottom - size.Y);
+        float sign = fromLeft ? -1 : 1;   // outward
+        Vector2 At(float outFraction) => new(fromLeft ? edgeX - size.X * outFraction : edgeX - size.X * (1 - outFraction), y);
+        var outside = Clamp(At(1.15f));
+        var hidden = At(0.15f);
+        var peek = At(0.55f);
+        var clip = _v.Root.Compositor.CreateInsetClip();
+        void Clip()
+        {
+            var p = _v.Position;
+            float canvasW = _v.CanvasPx.Width;
+            clip.LeftInset = clip.RightInset = 0;
+            if (fromLeft) clip.RightInset = MathF.Max(0, p.X + canvasW - edgeX);
+            else clip.LeftInset = MathF.Max(0, edgeX - p.X);
+        }
+        _v.Root.Clip = clip;
+        Clip();
+        _v.Root.CenterPoint = PivotBodyCentre;
+        _face(Eyes.Look, Mouth.Smile, 7f);
+        _v.Face.Container.Offset = new Vector3(sign * 3 * _v.Scale, 0, 0);
+        _step = Travel(hidden, 1.2f, Smooth, _ => Clip(), done: () =>
+            _step = Travel(peek, 0.5f, EaseOut, _ => Clip(), done: () =>
+                Wait(1f, () => _step = Travel(hidden, 0.5f, EaseIn, _ => Clip(), done: () =>
+                    Wait(0.6f, () => _step = Travel(peek, 0.5f, EaseOut, _ => Clip(), done: () =>
+                        Wait(1f, () => _step = Travel(outside, 1f, Smooth, _ => Clip(), done: () =>
+                        {
+                            _v.Root.Clip = null;
+                            Play(MotionKind.Hover);
+                        }))))))));
+    }
+
+    // ---------- 17 Shy ----------
+
+    /// <summary>The pointer came too close too often: she blushes, shrinks a little and drifts away from it.</summary>
+    private void StartShy()
+    {
+        var p = Native.CursorPos();
+        var away = Centre - new Vector2(p.X, p.Y);
+        var dir = away.Length() < 1 ? Vector2.UnitX : Vector2.Normalize(away);
+        var c = _v.Root.Compositor;
+        var shrink = c.CreateVector3KeyFrameAnimation();
+        shrink.InsertKeyFrame(0.2f, new Vector3(0.94f, 0.94f, 1));
+        shrink.InsertKeyFrame(0.8f, new Vector3(0.94f, 0.94f, 1));
+        shrink.InsertKeyFrame(1f, Vector3.One);
+        shrink.Duration = TimeSpan.FromSeconds(2.5);
+        _v.Character.StartAnimation("Scale", shrink);
+        _face(Eyes.Half, Mouth.Smile, 2.5f);
+        _step = Travel(Clamp(TopLeft + dir * 120 * Monitor.DpiScale), 0.8f, EaseOut,
+            done: () => Wait(1.7f, () => Play(MotionKind.Hover)));
+    }
+
+    // ---------- 18 StartupEntry ----------
+
+    /// <summary>The PC just started: she flies in from the nearest side of the screen and waves hello.</summary>
+    private void StartStartupEntry()
+    {
+        var home = TopLeft;
+        var work = Monitor.WorkF;
+        bool fromRight = Centre.X > work.X + work.Width / 2;
+        TopLeft = new Vector2(fromRight ? work.Right + 10 : work.X - BodySize.X - 10, home.Y);
+        _v.Root.CenterPoint = PivotBodyCentre;
+        _v.Root.RotationAngleInDegrees = fromRight ? -TiltDegrees : TiltDegrees;
+        _step = Travel(home, 1.6f, EaseOut, frame: t => _v.Root.RotationAngleInDegrees = (fromRight ? -TiltDegrees : TiltDegrees) * (1 - t),
+            done: () =>
+            {
+                Wave(10f, 1.2f);
+                _face(Eyes.Happy, Mouth.Grin, 2f);
+                Wait(1.3f, () => Play(MotionKind.Hover));
+            });
+    }
+
+    private void Wave(float degrees, float seconds)
+    {
+        var c = _v.Root.Compositor;
+        var wave = c.CreateScalarKeyFrameAnimation();
+        wave.InsertKeyFrame(0.25f, degrees);
+        wave.InsertKeyFrame(0.5f, -degrees);
+        wave.InsertKeyFrame(0.75f, degrees);
+        wave.InsertKeyFrame(1f, 0f);
+        wave.Duration = TimeSpan.FromSeconds(seconds);
+        _v.Character.CenterPoint = new Vector3(BodyOffset.X + BodySize.X / 2, BodyOffset.Y + BodySize.Y, 0);
+        _v.Character.StartAnimation("RotationAngleInDegrees", wave);
+    }
+
+    // ---------- 19 Goodbye ----------
+
+    /// <summary>Waves with her leaf, then turns into small stars and is gone (raises <see cref="GoodbyeDone"/>).</summary>
+    private void StartGoodbye()
+    {
+        HoldStill();
+        Wave(12f, 1f);
+        _face(Eyes.Happy, Mouth.Smile, 2f);
+        Wait(1f, () =>
+        {
+            var c = _v.Root.Compositor;
+            _v.Root.CenterPoint = PivotBodyCentre;
+            var shrink = c.CreateVector3KeyFrameAnimation();
+            shrink.InsertKeyFrame(1f, Vector3.Zero);
+            shrink.Duration = TimeSpan.FromMilliseconds(800);
+            var batch = c.CreateScopedBatch(CompositionBatchTypes.Animation);
+            _v.Root.StartAnimation("Scale", shrink);
+            var sparkles = Sparkles(c);
+            batch.End();
+            batch.Completed += (_, _) =>
+            {
+                foreach (var v in sparkles) { _v.Host.Root.Children.Remove(v); v.Dispose(); }
+                if (Current == MotionKind.Goodbye) GoodbyeDone?.Invoke();
+            };
+        });
+    }
+
+    /// <summary>Eight small stars flying out of her body and fading (overlay coordinates, so they don't shrink with her).</summary>
+    private List<ShapeVisual> Sparkles(Compositor c)
+    {
+        var list = new List<ShapeVisual>();
+        float dip = Monitor.DpiScale, r = 3 * dip;
+        var origin = Centre - _v.Origin;
+        for (int i = 0; i < 8; i++)
+        {
+            var g = c.CreateEllipseGeometry();
+            g.Radius = new Vector2(r);
+            g.Center = new Vector2(r);
+            var shape = c.CreateSpriteShape(g);
+            shape.FillBrush = c.CreateColorBrush(i % 2 == 0 ? Windows.UI.Color.FromArgb(255, 0xFF, 0xD9, 0x8A) : Windows.UI.Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
+            var v = c.CreateShapeVisual();
+            v.Size = new Vector2(2 * r);
+            v.Shapes.Add(shape);
+            v.Offset = new Vector3(origin - new Vector2(r), 0);
+            _v.Host.Root.Children.InsertAtTop(v);
+            float a = i * MathF.PI / 4;
+            var fly = c.CreateVector3KeyFrameAnimation();
+            fly.InsertKeyFrame(1f, new Vector3(origin + new Vector2(MathF.Cos(a), MathF.Sin(a)) * 60 * dip - new Vector2(r), 0));
+            fly.Duration = TimeSpan.FromMilliseconds(800);
+            v.StartAnimation("Offset", fly);
+            var fade = c.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1f, 0f);
+            fade.Duration = TimeSpan.FromMilliseconds(800);
+            v.StartAnimation("Opacity", fade);
+            list.Add(v);
+        }
+        return list;
+    }
+
+    // ---------- 20 HopIcons ----------
+
+    /// <summary>Four light hops along the taskbar toward the middle, squishing on each landing.</summary>
+    private void StartHopIcons()
+    {
+        var m = Monitor;
+        var (bar, edge, _) = Taskbar.Get(m.Handle);
+        float dip = m.DpiScale, along = Math.Clamp(AlongBar(), 0.1f, 0.9f);
+        var start = PerchTopLeft(along);
+        bool horizontal = edge is not (Edge.Left or Edge.Right);
+        var work = m.WorkF;
+        float toward = horizontal
+            ? (start.X + BodySize.X / 2 < work.X + work.Width / 2 ? 1 : -1)
+            : (start.Y + BodySize.Y / 2 < work.Y + work.Height / 2 ? 1 : -1);
+        var step = (horizontal ? new Vector2(48, 0) : new Vector2(0, 48)) * dip * toward;
+        var up = edge switch { Edge.Top => Vector2.UnitY, Edge.Left => Vector2.UnitX, Edge.Right => -Vector2.UnitX, _ => -Vector2.UnitY } * 24 * dip;
+        HoldStill();
+        int hop = 0;
+        void Next()
+        {
+            if (hop == 4) { Play(MotionKind.Hover); return; }
+            var from = TopLeft;
+            var to = Clamp(start + step * (hop + 1));
+            hop++;
+            float t = 0;
+            _step = dt =>
+            {
+                t = MathF.Min(1, t + dt / 0.45f);
+                TopLeft = Vector2.Lerp(from, to, t) + up * MathF.Sin(MathF.PI * t);
+                if (t < 1) return true;
+                Squash(horizontal: false);
+                Wait(0.15f, Next);
+                return true;
+            };
+        }
+        _step = Travel(start, 0.8f, EaseIn, done: Next);
+    }
+
+    // ---------- 23 Attention ----------
+
+    /// <summary>For something that needs you: she comes a little toward the middle and sends out three soft rings of light.</summary>
+    private void StartAttention()
+    {
+        var home = TopLeft;
+        var work = Monitor.WorkF;
+        var middle = new Vector2(work.X + work.Width / 2, work.Y + work.Height / 2) - BodySize / 2;
+        var near = Clamp(Vector2.Lerp(home, middle, 0.25f));
+        var c = _v.Root.Compositor;
+        var centre = BodyOffset + BodySize / 2;
+        float radius = BodySize.X / 2;
+        var rings = new List<ShapeVisual>();
+        for (int i = 0; i < 3; i++)
+        {
+            var g = c.CreateEllipseGeometry();
+            g.Center = centre;
+            g.Radius = new Vector2(radius);
+            var shape = c.CreateSpriteShape(g);
+            shape.StrokeBrush = c.CreateColorBrush(Windows.UI.Color.FromArgb(255, 0xB9, 0xB0, 0xFF));
+            shape.StrokeThickness = 3 * Monitor.DpiScale;
+            var v = c.CreateShapeVisual();
+            v.Size = new Vector2(_v.CanvasPx.Width, _v.CanvasPx.Height);
+            v.CenterPoint = new Vector3(centre, 0);
+            v.Shapes.Add(shape);
+            v.Opacity = 0;
+            _v.Root.Children.InsertAtBottom(v);
+            var grow = c.CreateVector3KeyFrameAnimation();
+            grow.InsertKeyFrame(0f, Vector3.One);
+            grow.InsertKeyFrame(1f, new Vector3(2.2f, 2.2f, 1));
+            grow.Duration = TimeSpan.FromMilliseconds(900);
+            grow.DelayTime = TimeSpan.FromMilliseconds(600 + 300 * i);
+            var fade = c.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(0f, 0.6f);
+            fade.InsertKeyFrame(1f, 0f);
+            fade.Duration = TimeSpan.FromMilliseconds(900);
+            fade.DelayTime = grow.DelayTime;
+            v.StartAnimation("Scale", grow);
+            v.StartAnimation("Opacity", fade);
+            rings.Add(v);
+        }
+        _face(Eyes.Open, Mouth.O, 3f);
+        void Done()
+        {
+            foreach (var v in rings) { _v.Root.Children.Remove(v); v.Dispose(); }
+        }
+        _step = Travel(near, 0.6f, Smooth, done: () =>
+            Wait(2.2f, () => { Done(); _step = Travel(home, 0.6f, Smooth, done: () => Play(MotionKind.Hover)); }));
     }
 
     /// <summary>Runs <paramref name="then"/> after a pause (on the motion clock).</summary>

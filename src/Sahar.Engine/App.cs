@@ -176,7 +176,19 @@ internal sealed unsafe class App
         tray.ActivityChosen += level => Safe(() => SetActivity(level));
         tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
         tray.ShowNow += () => director.HideFor(TimeSpan.Zero);
-        tray.Quit += () => Native.PostQuitMessage(0);
+        // Quit from the tray: she waves goodbye and turns into stars first (motion 19), then the app ends.
+        var quitTimer = ui.CreateTimer();
+        quitTimer.IsRepeating = false;
+        quitTimer.Interval = TimeSpan.FromSeconds(2.5);
+        quitTimer.Tick += (_, _) => Native.PostQuitMessage(0);
+        motion.GoodbyeDone += () => { if (quitTimer.IsRunning) Native.PostQuitMessage(0); };
+        tray.Quit += () => Safe(() =>
+        {
+            menu.Close();
+            if (_state.Hidden) { Native.PostQuitMessage(0); return; }
+            motion.Play(MotionKind.Goodbye);
+            quitTimer.Start();
+        });
         var power = new Power(director.Post);
         power.Check();
         tray.PowerChanged += () => Safe(() => { power.Check(); host.CheckDevice(); });
@@ -246,15 +258,19 @@ internal sealed unsafe class App
                 case "dnd-on": dndTool.TurnOn(null); break;
                 case "dnd-off": dndTool.TurnOff(); break;
                 case "play":
-                    MotionKind[] picks = [MotionKind.Wander, MotionKind.CelebrateLoop, MotionKind.PlayWithMoon, MotionKind.Curious, MotionKind.OrbitCursor];
-                    int pick = playRng.Next(picks.Length + 1);
-                    if (pick == picks.Length)
+                    var picks = Showcase.PlayPicks;
+                    int pick = playRng.Next(picks.Count + 1);
+                    if (pick == picks.Count)
                         motion.PlayFlight(Enum.GetValues<FlightPattern>()[playRng.Next(Enum.GetValues<FlightPattern>().Length)], force: true);
                     else motion.Play(picks[pick]);
                     break;
             }
         });
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
+        tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
+        // The PC just started (or a test says so): she flies in and says hello (motion 18).
+        if (_options.SimulateBoot || Environment.TickCount64 < (long)TimeSpan.FromMinutes(5).TotalMilliseconds)
+            ui.TryEnqueue(() => Safe(() => { Log.Write("hello: the PC just started"); motion.Play(MotionKind.StartupEntry); }));
         Foreground.Start();
 
         void OnDisplayChanged()

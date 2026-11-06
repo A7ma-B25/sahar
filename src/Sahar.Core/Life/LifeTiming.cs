@@ -6,7 +6,7 @@ namespace Sahar.Core.Life;
 public enum LifeAction
 {
     None, Wander, PeekTaskbar, PerchWindow, CelebrateLoop, SleepInCorner,
-    Flight, PlayWithMoon, Curious, Dance, Breathe, OrbitCursor, Moment,
+    Flight, PlayWithMoon, Curious, Dance, Breathe, OrbitCursor, Moment, FollowCursor, HideBehindWindow, HopIcons,
 }
 
 /// <summary>How long until her next own action, by activity level (spec §6).</summary>

@@ -27,6 +27,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly Director _director;
     private readonly Media _media;
     private readonly CursorRest _cursorRest = new();
+    private readonly ShyDetector _shy = new();
+    private readonly AttentionPacer _attention = new();
     private bool _cursorResting;
     private string? _waiting;
     private readonly DispatcherQueueTimer _timer;
@@ -83,6 +85,13 @@ internal sealed unsafe class LifeDirector : IDisposable
             _prefs.DecayDays(_lastDecay.DayNumber - last.DayNumber);
         Schedule(DateTimeOffset.Now);
         motion.DragStarted += OnDragStarted;
+        motion.PointerNear += distanceDip =>
+        {
+            if (!Enabled || Paused || _motion.Current is not (MotionKind.Hover or MotionKind.EyesFollow)) return;
+            if (!_shy.Update(DateTimeOffset.Now, distanceDip, clicked: false)) return;
+            Log.Write("life: Shy (the pointer kept coming close)");
+            _motion.Play(MotionKind.Shy);
+        };
         motion.ExtraAvoid = () => Typing ? TypingAvoid() : [];
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -128,6 +137,13 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
         if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
+        // Something needs you (Claude asks, the timer is done, a reminder): she draws your eye, paced.
+        if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye)
+            && _attention.ShouldPlay(_director.CurrentKey, now, DndOn()))
+        {
+            Log.Write($"life: Attention for '{_director.CurrentKey}'");
+            _motion.Play(MotionKind.Attention);
+        }
         if (!Enabled || Paused) return;
         var cursor = Native.CursorPos();
         var body = _motion.Body;
@@ -146,13 +162,13 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (away && !_sleepingForAway && Resting && !_director.Hidden)
         {
             _sleepingForAway = true;
-            _motion.Play(MotionKind.SleepInCorner);
+            _motion.Play(_rng.Next(2) == 0 ? MotionKind.SleepInCorner : MotionKind.NapOnIcon);   // corner, or her favourite icon
             return;
         }
         if (!away && _sleepingForAway)
         {
             _sleepingForAway = false;
-            if (_motion.Current == MotionKind.SleepInCorner) _motion.Play(MotionKind.Wake);
+            if (_motion.Current is MotionKind.SleepInCorner or MotionKind.NapOnIcon) _motion.Play(MotionKind.Wake);
             Schedule(now);
             return;
         }
@@ -216,6 +232,9 @@ internal sealed unsafe class LifeDirector : IDisposable
                     LifeAction.Dance => MotionKind.Dance,
                     LifeAction.Breathe => MotionKind.Breathe,
                     LifeAction.OrbitCursor => MotionKind.OrbitCursor,
+                    LifeAction.FollowCursor => MotionKind.FollowCursor,
+                    LifeAction.HideBehindWindow => MotionKind.HideBehindWindow,
+                    LifeAction.HopIcons => MotionKind.HopIcons,
                     _ => MotionKind.SleepInCorner,
                 });
                 break;
@@ -294,6 +313,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     /// <summary>A poke shortly after one of her own actions: she learns you liked it.</summary>
     public void OnPoked()
     {
+        _shy.Update(DateTimeOffset.Now, 0, clicked: true);
         if (_memory.TakeForFeedback(DateTimeOffset.Now) is { } a) _prefs.Liked(a);   // once per action
     }
 
