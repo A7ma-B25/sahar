@@ -4,7 +4,7 @@ namespace Sahar.Core.Senses;
 public sealed class ScreenshotKeys
 {
     private const int VkPrintScreen = 0x2C, VkShift = 0x10, VkLShift = 0xA0, VkRShift = 0xA1, VkLWin = 0x5B, VkRWin = 0x5C, VkS = 0x53;
-    private bool _win, _shift, _sDown;
+    private bool _win, _shift, _sDown, _printDown;
 
     public bool Update(int vk, bool down)
     {
@@ -12,7 +12,12 @@ public sealed class ScreenshotKeys
         {
             case VkLWin or VkRWin: _win = down; return false;
             case VkShift or VkLShift or VkRShift: _shift = down; return false;
-            case VkPrintScreen: return down;
+            case VkPrintScreen:
+                // Print Screen often reports only its key-up: count a press once, on whichever comes first.
+                if (down) { bool first = !_printDown; _printDown = true; return first; }
+                bool upOnly = !_printDown;
+                _printDown = false;
+                return upOnly;
             case VkS:
                 bool fire = down && !_sDown && _win && _shift;
                 _sDown = down;

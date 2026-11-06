@@ -1220,6 +1220,8 @@ function Stage-Senses {
     }
     Step 'a screenshot key shows her screenshot face' {
         [System.Windows.Forms.SendKeys]::SendWait('{PRTSC}')
+        Start-Sleep -Milliseconds 300
+        Write-Host "    Print Screen key events seen: $((Kv 'debug-keys').printScreen)"
         Wait-State { param($st) $st.expression -eq 'screenshot' } 3000 'screenshot face' | Out-Null
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'vk=|key ') { throw 'keys reached the log' }
@@ -1249,12 +1251,15 @@ function Stage-Senses {
     Step 'no comment while you type' {
         $w = Start-TestWindow 'typing'
         try {
-            Send '{"type":"cmd","name":"apptime-skip","args":{"minutes":"125"}}' | Out-Null
             $end = (Get-Date).AddSeconds(2)
             while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('abc '); Start-Sleep -Milliseconds 150 }
             $r = Send '{"type":"cmd","name":"comment-now"}'
             if ($r.ok) { throw 'she commented while you typed' }
             Start-Sleep -Seconds 4   # typing ends
+            & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # the test window in front again
+            Start-Sleep -Milliseconds 500
+            Write-Host "    app in front: $((Kv 'debug-apptime').app)"
+            Send '{"type":"cmd","name":"apptime-skip","args":{"minutes":"125"}}' | Out-Null
             $r = Send '{"type":"cmd","name":"comment-now"}'
             if (-not $r.ok) { throw "no comment after a long session: $($r.error)" }
             $c = Kv 'debug-comment'

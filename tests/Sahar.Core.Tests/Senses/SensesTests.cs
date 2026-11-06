@@ -325,3 +325,17 @@ public class CommentRulesTests
         Assert.False(PrivacyLists.IsPrivateWindow("Inbox - Outlook"));
     }
 }
+
+public class ScreenshotKeysUpOnlyTests
+{
+    [Fact]
+    public void ScreenshotKeys_PrintScreenUpOnly_StillCounts()
+    {
+        // Print Screen often reports only its key-up.
+        var k = new ScreenshotKeys();
+        Assert.True(k.Update(0x2C, false));
+        var d = new ScreenshotKeys();
+        Assert.True(d.Update(0x2C, true));
+        Assert.False(d.Update(0x2C, false));   // once per press
+    }
+}

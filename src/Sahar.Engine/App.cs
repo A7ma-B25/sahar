@@ -239,8 +239,10 @@ internal sealed unsafe class App
         // Downloads, screenshot keys, a busy CPU (spec §8.1).
         using var downloads = new Downloads(ui, director.Post, _options.DownloadsDir);
         var screenshotKeys = new ScreenshotKeys();
+        int printScreenSeen = 0;   // test diagnostics: a count, never which keys
         tray.KeyChanged += (vk, down) => Safe(() =>
         {
+            if (vk == 0x2C) printScreenSeen++;
             if (!screenshotKeys.Update(vk, down)) return;
             Log.Write("screenshot: keys pressed");
             director.Post(EventKind.Screenshot);
@@ -474,6 +476,7 @@ internal sealed unsafe class App
             pipe.Register("comment-now", _ => new PipeReply(apps.Consider(), apps.Describe()));
             pipe.Register("debug-comment", _ => new PipeReply(true,
                 $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));
+            pipe.Register("debug-keys", _ => new PipeReply(true, $"printScreen={printScreenSeen}"));
             pipe.Register("debug-cpu", r => { cpu.Simulate(Arg(r, "percent"), (int)Arg(r, "count")); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines}"));
             pipe.Register("list-close", _ => { listBubble.Close(); return new PipeReply(true); });
