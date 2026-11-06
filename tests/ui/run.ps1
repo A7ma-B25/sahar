@@ -597,6 +597,14 @@ function Stage-Perf {
         Write-Host ("    cpu over 20 s: {0:N2} % of the machine ({1:N0} ms on {2} cores)" -f $pct, $used, [Environment]::ProcessorCount)
         if ($pct -ge 0.5) { Write-Host '::warning::engine CPU at rest is over 0.5 % on the runner (software rendering)' }
     }
+    Step 'the log never grows past 1 MB' {
+        $r = Send '{"type":"cmd","name":"debug-log-fill","args":{"kb":"1200"}}'
+        if (-not $r.ok) { throw "debug-log-fill not ok: $($r.error)" }
+        $size = (Get-Item (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log')).Length
+        Write-Host ("    engine.log after writing 1.2 MB: {0:N0} KB" -f ($size / 1KB))
+        if ($size -gt 1MB) { throw "engine.log is $size bytes" }
+        if (-not ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Tail 5) -match 'fill')) { throw 'the newest lines were not kept' }
+    }
     Stop-Engine
 }
 
@@ -634,6 +642,9 @@ function Stage-Life {
         $kinds.Remove('None')
         Write-Host "    kinds: $(($kinds.Keys | Sort-Object) -join ', ')"
         if ($kinds.Count -lt 6) { throw "only $($kinds.Count) kinds" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        $named = @($kinds.Keys | Where-Object { $log -match "life: $_" })
+        if ($named.Count -lt $kinds.Count) { throw "the log names only $($named -join ', ') of her actions" }
     }
     Step 'music from a browser in front: headphones, no big moves' {
         $r = Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"true","front":"true"}}'
