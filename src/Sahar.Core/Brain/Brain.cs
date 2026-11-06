@@ -32,7 +32,7 @@ public sealed class Brain
         {
             if (best is null) { best = a; continue; }
             int pa = EventPriorities.Of(a.Kind), pb = EventPriorities.Of(best.Kind);
-            if (pa > pb || (pa == pb && a.Seq > best.Seq)) best = a;
+            if (pa > pb || (pa == pb && a.Seq < best.Seq)) best = a;   // only a more important event interrupts
         }
         var quiet = _quiet != QuietReason.None;
         return new BrainOutput(

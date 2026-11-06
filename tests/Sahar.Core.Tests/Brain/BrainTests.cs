@@ -53,6 +53,19 @@ public class BrainTests
     }
 
     [Fact]
+    public void EqualPriority_Waits()
+    {
+        var b = new B();
+        b.Post(EventKind.Screenshot, At(0));
+        b.Post(EventKind.ClipboardCopied, At(0.2));
+        Assert.Equal("screenshot", b.Tick(At(0.3)).ExpressionKey);
+        b.Post(EventKind.Screenshot, At(9), TimeSpan.FromSeconds(1));
+        b.Post(EventKind.ClipboardCopied, At(9.1));
+        Assert.Equal("screenshot", b.Tick(At(9.5)).ExpressionKey);
+        Assert.Equal("copied", b.Tick(At(10.2)).ExpressionKey);
+    }
+
+    [Fact]
     public void Music_Returns_After_Permission()
     {
         var b = new B();

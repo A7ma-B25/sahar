@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -130,6 +130,49 @@ function Assert-BodyInWork($st, [string]$what) {
         throw "$what body ($($st.x),$($st.y) $($st.width)x$($st.height)) is not inside the work area $Work"
     }
 }
+
+function Post([string]$name) {
+    $r = Send ('{"type":"event","name":"' + $name + '"}')
+    if (-not $r.ok) { throw "event $name not ok: $($r.error)" }
+    $r
+}
+
+function Wait-State([scriptblock]$cond, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do {
+        $st = State
+        if (& $cond $st) { return $st }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    throw "$what not seen within $ms ms (expression '$($st.expression)', hidden $($st.hidden))"
+}
+
+# A window in its own process: 'borderless' covers the whole monitor (like a game), 'maximized' has a caption.
+function Start-TestWindow([string]$kind) {
+    $script = @"
+Add-Type -AssemblyName System.Windows.Forms
+`$f = New-Object System.Windows.Forms.Form
+`$f.Text = 'Sahar test $kind'
+`$f.BackColor = 'DarkSlateBlue'
+if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$true }
+`$f.WindowState = 'Maximized'
+`$f.Add_Shown({ `$f.Activate() })
+[System.Windows.Forms.Application]::Run(`$f)
+"@
+    $p = Start-Process -FilePath 'pwsh' -ArgumentList '-NoProfile', '-Command', $script -PassThru
+    Start-Sleep -Milliseconds 1500
+    $p
+}
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class Shell {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+    public static void TaskbarCreated() { PostMessage((IntPtr)0xFFFF, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero); }
+}
+"@
 
 function Save-Log {
     $log = Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'
@@ -317,6 +360,62 @@ function Stage-Motion {
     Stop-Engine
 }
 
+function Stage-Events {
+    Step 'start engine' { Start-Engine }
+    Step 'unknown event is rejected' {
+        $r = Send '{"type":"event","name":"no.such.event"}'
+        if ($r.ok) { throw 'unknown event answered ok' }
+    }
+    Step 'claude.permission shows at once' {
+        $r = Post 'claude.permission'
+        if ($r.state.expression -ne 'claude-permission') { throw "expression is '$($r.state.expression)'" }
+    }
+    Step 'permission interrupts music, then music comes back' {
+        Start-Sleep -Milliseconds 8500
+        Post 'music' | Out-Null
+        $r = Post 'claude.permission'
+        if ($r.state.expression -ne 'claude-permission') { throw "expression is '$($r.state.expression)'" }
+        Start-Sleep -Milliseconds 8500
+        Wait-State { param($st) $st.expression -eq 'music' } 1500 'music after the permission expired' | Out-Null
+    }
+    Step 'an equally important event waits' {
+        Post 'screenshot' | Out-Null
+        $r = Post 'clipboard.copied'
+        if ($r.state.expression -ne 'screenshot') { throw "expression is '$($r.state.expression)'" }
+        Post 'music.stop' | Out-Null
+    }
+    Step 'a borderless window covering the screen hides her' {
+        $script:win = Start-TestWindow 'borderless'
+        try {
+            Wait-State { param($st) $st.hidden } 1000 'hidden' | Out-Null
+            Screenshot 'events-fullscreen.png' | Out-Null
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+        Wait-State { param($st) -not $st.hidden } 2000 'shown again' | Out-Null
+    }
+    Step 'a maximized window does not hide her' {
+        $script:win = Start-TestWindow 'maximized'
+        try {
+            Start-Sleep -Milliseconds 1000
+            if ((State).hidden) { throw 'hidden behind a maximized window' }
+            Screenshot 'events-maximized.png' | Out-Null
+        }
+        finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'tray icon comes back after TaskbarCreated' {
+        [Shell]::TaskbarCreated()
+        Start-Sleep -Milliseconds 1000
+        $found = $false
+        foreach ($surface in 'system-tray', 'system-tray-overflow') {
+            $json = (& agent-desktop snapshot --surface $surface -i --compact 2>&1) -join "`n"
+            Set-Content -Path (Join-Path $Out "tray-$surface.json") -Value $json
+            if ($json -match 'Sahar') { $found = $true; Write-Host "    found in $surface" }
+        }
+        if (-not $found) { throw 'no "Sahar" in the system tray or its overflow' }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -325,6 +424,7 @@ try {
             'idle' { Stage-Idle }
             'gallery' { Stage-Gallery }
             'motion' { Stage-Motion }
+            'events' { Stage-Events }
         }
     }
 }
