@@ -388,6 +388,7 @@ internal sealed partial class MotionController
         root.Scale = new Vector3(0.92f, 1.1f, 1);
         _samples.Clear();
         _shake.Reset();
+        _shakeDpi = Monitor.DpiScale;
         _dragClock = 0;
         var prevVelocity = Vector2.Zero;
         _express("dragged", false);

@@ -586,6 +586,14 @@ function Stage-Motion {
         if ((Kv 'debug-shake').sulking -ne 'false') { throw 'three pokes did not end the sulk' }
         if ($said -ne 'خلص سامحتك 💜') { throw "making up said '$said'" }
     }
+    Step 'a sulk left alone ends after 20 s and her angry face goes' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+        Send '{"type":"cmd","name":"shake","args":{"swings":"6","force":"angry"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'angry' } 1500 'the angry face' | Out-Null
+        [Mouse]::Move(5, 5)
+        Wait-State { param($st) $st.expression -ne 'angry' } 24000 'the angry face going after the sulk' | Out-Null
+        if ((Kv 'debug-shake').sulking -ne 'false') { throw 'still sulking after 20 s' }
+    }
     Stop-Engine
 }
 

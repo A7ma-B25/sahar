@@ -155,9 +155,11 @@ internal sealed unsafe class LifeDirector : IDisposable
                 (_forceTypeAlong || TypeAlongPolicy.Should(now, _lastTypeAlong, _rng.NextDouble())))
             {
                 _forceTypeAlong = false;
-                _lastTypeAlong = now;
-                Log.Write("life: TypeAlong");
-                _motion.TypeAlong(() => Typing);
+                if (_motion.TypeAlong(() => Typing))
+                {
+                    _lastTypeAlong = now;
+                    Log.Write("life: TypeAlong");
+                }
             }
         }
         // Her routine follows life: a test machine's own clock (CI runs at night too) never posts it into other stages.

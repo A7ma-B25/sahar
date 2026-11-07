@@ -167,17 +167,20 @@ internal sealed partial class MotionController
         });
     }
 
-    /// <summary>"بتكتب معك": while you type she sits beside your window's bottom corner and taps along (max 20 s).</summary>
-    public void TypeAlong(Func<bool> typing)
+    /// <summary>"بتكتب معك": while you type she sits beside your window's bottom corner and taps along (max 20 s).
+    /// False when there is no room beside the window (maximized, full width): she never taps next to your text.</summary>
+    public bool TypeAlong(Func<bool> typing)
     {
+        if (BesideWindow(bottom: true) is null) return false;
         Reset(MotionKind.TypeAlong);
         StartTypeAlong(typing);
         UpdateTicker();
+        return true;
     }
 
     private void StartTypeAlong(Func<bool> typing)
     {
-        var spot = BesideWindow(bottom: true) ?? TopLeft;
+        if (BesideWindow(bottom: true) is not { } spot) { Play(MotionKind.Hover); return; }
         HoldStill();
         _v.Root.CenterPoint = PivotBottom;
         _step = Travel(spot, 0.9f, Smooth, done: () =>
@@ -205,14 +208,17 @@ internal sealed partial class MotionController
     /// <summary>Three hops along the top of the front window (or along the taskbar when there is none).</summary>
     private void StartHopWindows()
     {
+        // Only where she could sit (WindowPerch's rules: a normal window with room above it on its own monitor).
         var (hwnd, w, _, perchable) = ForegroundInfo.Current();
-        if (!perchable || hwnd == 0 || w.Right - w.Left < 300) { StartHopIcons(); return; }
-        float dip = Monitor.DpiScale;
-        float y = w.Top - BodySize.Y + 6 * dip;
-        float span = w.Right - w.Left - BodySize.X - 40 * dip;
+        if (!perchable || hwnd == 0 || w.Right - w.Left < 300 || WindowPerch() is not { } perch) { StartHopIcons(); return; }
+        var wm = Monitors.At(new Vector2((w.Left + w.Right) / 2f, (w.Top + w.Bottom) / 2f));
+        float dip = wm.DpiScale;
+        var work = wm.WorkF;
+        float y = perch.Y;
+        float left = Math.Max(work.X, w.Left + 20 * dip), right = Math.Min(work.Right - BodySize.X, w.Right - BodySize.X - 20 * dip);
+        if (right - left < 150 * dip) { StartHopIcons(); return; }
         bool rightward = Centre.X < (w.Left + w.Right) / 2f;
-        var spots = Enumerable.Range(0, 4)
-            .Select(i => Clamp(new Vector2(w.Left + 20 * dip + span * (rightward ? i / 3f : 1 - i / 3f), y))).ToList();
+        var spots = Enumerable.Range(0, 4).Select(i => new Vector2(left + (right - left) * (rightward ? i / 3f : 1 - i / 3f), y)).ToList();
         HoldStill();
         int hop = 1;
         void Next()

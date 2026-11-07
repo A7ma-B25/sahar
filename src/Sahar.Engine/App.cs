@@ -311,17 +311,19 @@ internal sealed unsafe class App
         // Angry, she sulks for 20 s: the pointer coming near makes her drift away, a click says "هِم!", the third
         // gentle poke (or a face that needs you) makes up.
         var shakes = new List<DateTimeOffset>();
+        var sulk = new Sulk();
+        var sulkTimer = ui.CreateTimer();   // one timer, kept alive; each sulk knows its own number
+        sulkTimer.IsRepeating = false;
+        int sulkTimerGen = 0;
+        sulkTimer.Tick += (_, _) => Safe(() => { if (sulk.TimerFired(sulkTimerGen)) SulkOver("time"); });
         ShakeReaction? forcedReaction = null;
-        DateTimeOffset sulkUntil = DateTimeOffset.MinValue, lastDrift = DateTimeOffset.MinValue;
-        int sulkPokes = 0;
-        bool Sulking() => DateTimeOffset.UtcNow < sulkUntil;
-        void EndSulk(bool madeUp)
+        var lastDrift = DateTimeOffset.MinValue;
+        bool Sulking() => sulk.Active(DateTimeOffset.UtcNow);
+        void SulkOver(string why)
         {
-            if (!Sulking()) return;
-            sulkUntil = DateTimeOffset.MinValue;
-            Log.Write($"shake: sulk over ({(madeUp ? "made up" : "time")})");
-            Express("", false);
-            if (madeUp) { speech.Say("خلص سامحتك 💜"); Express("poked", true); }
+            Log.Write($"shake: sulk over ({why})");
+            Express("", false);   // her angry face goes
+            if (why == "made up") { speech.Say("خلص سامحتك 💜"); Express("poked", true); }
         }
         motion.ShakeReact = strength =>
         {
@@ -336,21 +338,20 @@ internal sealed unsafe class App
         {
             Log.Write($"shake: {r} (strength {strength})");
             if (r != ShakeReaction.Angry) return;
-            sulkUntil = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
-            sulkPokes = 0;
-            var end = ui.CreateTimer();
-            end.IsRepeating = false;
-            end.Interval = TimeSpan.FromSeconds(20.5);
-            end.Tick += (_, _) => Safe(() => EndSulk(madeUp: false));
-            end.Start();
+            int gen = sulk.Start(DateTimeOffset.UtcNow);
+            sulkTimer.Stop();
+            sulkTimer.Interval = Sulk.Length;
+            sulkTimerGen = gen;
+            sulkTimer.Start();
         });
         sulkPoke = () =>
         {
-            if (!Sulking()) return false;
-            if (++sulkPokes >= 3) { EndSulk(madeUp: true); return true; }
-            speech.Say("هِم! 😤");
-            motion.Squish();
-            return true;
+            switch (sulk.Poke())
+            {
+                case SulkPoke.NotSulking: return false;
+                case SulkPoke.MadeUp: SulkOver("made up"); return true;
+                default: speech.Say("هِم! 😤"); motion.Squish(); return true;
+            }
         };
         motion.PointerNear += d => Safe(() =>
         {
@@ -360,7 +361,7 @@ internal sealed unsafe class App
         });
         lifeDirector.Sulking = Sulking;
         motion.Sulking = Sulking;
-        director.NeedsYou += () => Safe(() => EndSulk(madeUp: false));
+        director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
 
         // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
         // agree with you. Skipped answers are fine; closing the name bubble asks again next start.
@@ -628,7 +629,7 @@ internal sealed unsafe class App
                 return new PipeReply(true);
             });
             pipe.Register("debug-shake", _ => new PipeReply(true,
-                $"last={motion.LastReaction} sulking={(Sulking() ? "true" : "false")} pokes={sulkPokes} motion={motion.Current}"));
+                $"last={motion.LastReaction} sulking={(Sulking() ? "true" : "false")} pokes={sulk.Pokes} motion={motion.Current}"));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
             pipe.Register("tray-pick", r =>
             {

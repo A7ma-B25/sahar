@@ -23,7 +23,11 @@ internal sealed partial class MotionController
     /// <summary>The last reaction played (test diagnostics).</summary>
     public ShakeReaction LastReaction { get; private set; }
 
-    private void FeedShake(double seconds, Vector2 cursor) => _shake.Add(seconds, cursor.X / Monitor.DpiScale);
+    private float _shakeDpi = 1f;
+
+    /// <summary>The cursor in DIPs of the monitor the drag started on: crossing to a monitor with another DPI never
+    /// looks like a swing back.</summary>
+    private void FeedShake(double seconds, Vector2 cursor) => _shake.Add(seconds, cursor.X / _shakeDpi);
 
     /// <summary>On release: a shake becomes a reaction instead of a throw.</summary>
     private bool ReactToShake()
