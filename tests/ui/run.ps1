@@ -1776,7 +1776,7 @@ function Stage-Prayer {
         $first = ((Text64 $l.lines64) -split "`n")[0]
         $button = Text64 $l.button64
         Send '{"type":"cmd","name":"list-close"}' | Out-Null
-        if ($first -ne $copied) { throw "the copied text changed in the list: '$first'" }
+        if ($first -ne "📄 $copied") { throw "the copied text changed in the list: '$first'" }
         if ($button -ne 'امسحي الكل') { throw "her button to a woman: '$button'" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'Sami') { throw 'the name is in engine.log' }
