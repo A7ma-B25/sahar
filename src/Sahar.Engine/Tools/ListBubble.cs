@@ -29,6 +29,9 @@ internal sealed unsafe class ListBubble : IWindowHandler
 
     public bool IsOpen => _hwnd != 0;
     public int Lines { get; private set; }
+    /// <summary>Test mode: what it shows (lines joined by newlines, the button).</summary>
+    public string Text { get; private set; } = "";
+    public string ButtonText { get; private set; } = "";
 
     public void Show(RectF body, string title, IReadOnlyList<string> lines, string buttonText, Action<int> pick, Action action)
     {
@@ -59,6 +62,8 @@ internal sealed unsafe class ListBubble : IWindowHandler
         foreach (var line in lines)
             fixed (char* l = line) Native.SendMessage(_list, LB_ADDSTRING, 0, (nint)l);
         Lines = lines.Count;
+        Text = string.Join('\n', lines);
+        ButtonText = buttonText;
         top += listH + (int)(8 * dpi);
         _button = Child("BUTTON", buttonText, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 0, pad, top, inner, buttonH, IdButton);
 
@@ -86,6 +91,7 @@ internal sealed unsafe class ListBubble : IWindowHandler
         if (_font != 0) Native.DeleteObject(_font);
         _hwnd = _list = _title = _button = _font = 0;
         Lines = 0;
+        Text = ButtonText = "";
         _pick = null;
         _action = null;
         Log.Write("list: closed");

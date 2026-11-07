@@ -17,7 +17,7 @@ internal sealed class Director
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
     private string _lastKey = "idle";
-    private bool _hidden, _fullscreen, _dnd, _cameraMic;
+    private bool _hidden, _fullscreen, _dnd, _cameraMic, _adhan;
     private DateTimeOffset _hiddenUntil;
 
     public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden)
@@ -71,11 +71,21 @@ internal sealed class Director
         ApplyQuiet();
     }
 
-    public bool Quiet => _fullscreen || _dnd || _cameraMic;
+    /// <summary>The minutes after a prayer's time: quiet (no comments, no sounds, small things only).</summary>
+    public void SetAdhan(bool on)
+    {
+        if (on == _adhan) return;
+        _adhan = on;
+        ApplyQuiet();
+    }
+
+    public bool Adhan => _adhan;
+
+    public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan;
 
     private void ApplyQuiet() =>
         _brain.SetQuiet((_fullscreen ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None) |
-            (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None));
+            (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None) | (_adhan ? QuietReason.Adhan : QuietReason.None));
 
     /// <summary>"Hide 1 h" from the tray; <see cref="TimeSpan.Zero"/> shows her again (tray click).</summary>
     public void HideFor(TimeSpan span)

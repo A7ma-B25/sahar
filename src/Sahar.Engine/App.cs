@@ -136,6 +136,7 @@ internal sealed unsafe class App
             if (dismissSpeech()) return;   // a click on her closes her comment (and she'll comment less)
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
+            if (dismissDirector?.CurrentKey == "reminder") dismissDirector.End(EventKind.Reminder);
             Express("poked", true);
             life?.OnPoked();
         }, () =>
@@ -257,12 +258,14 @@ internal sealed unsafe class App
         lifeDirector.CameraMicOn = () => cameraMic.InUse;
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
         using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
+        bool reminderSpeaking = false;
         var apps = new AppWatch(ui,
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => director.CurrentKey == "sleep",
-            say: line => speech.Say(line));
+            say: line => { reminderSpeaking = false; speech.Say(line); });
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
-        speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
+        // A prayer reminder is not a comment: ignoring it changes nothing.
+        speech.Ended += _ => { if (reminderSpeaking) reminderSpeaking = false; else apps.Limiter.Dismissed(DateTimeOffset.Now); };
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
         // Rain coming (opt-in): the tray item asks for your city.
         using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
@@ -297,7 +300,11 @@ internal sealed unsafe class App
             }
             else AskCity("شو مدينتك؟ (للمطر بس)");
         });
-        tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); });
+        // 🕌 Prayer times: the city search is the weather's (same stub in tests).
+        using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
+            line => { reminderSpeaking = true; speech.Say(line); }, () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
+        lifeDirector.AdhanOn = () => director.Adhan;
+        tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
         using var show = new ShowcasePlayer(ui, motion, sahar, key => Express(key, false), () => Express("", false));
         menu.OpenChanged += open =>
@@ -332,6 +339,7 @@ internal sealed unsafe class App
                 case "timer-cancel": timerTool.Cancel(); break;
                 case "note": notes.Open(); break;
                 case "clipboard": clipboardTool.Open(); break;
+                case "prayer": prayer.Open(); break;
                 case "timer-custom":
                     bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
                     {
@@ -486,7 +494,23 @@ internal sealed unsafe class App
                 $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));
             pipe.Register("debug-keys", _ => new PipeReply(true, $"printScreen={printScreenSeen}"));
             pipe.Register("debug-cpu", r => { cpu.Simulate(Arg(r, "percent"), (int)Arg(r, "count")); return new PipeReply(true, State: _state.Snapshot()); });
-            pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines}"));
+            pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines} " +
+                $"lines64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(listBubble.Text))} button64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(listBubble.ButtonText))}"));
+            pipe.Register("list-pick", r =>
+            {
+                if (!listBubble.IsOpen) return new PipeReply(false, "no list");
+                listBubble.PickLine((int)Arg(r, "index"));
+                return new PipeReply(true);
+            });
+            pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
+            pipe.Register("prayer-at", r =>
+            {
+                if (r.Args is null || !r.Args.TryGetValue("at", out var at) ||
+                    !DateTimeOffset.TryParse(at, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var when))
+                    return new PipeReply(false, "prayer-at needs 'at' (ISO 8601)");
+                prayer.SetClock(when);
+                return new PipeReply(true, prayer.Describe());
+            });
             pipe.Register("list-close", _ => { listBubble.Close(); return new PipeReply(true); });
             pipe.Register("showcase", r =>
             {

@@ -107,6 +107,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     public Func<bool> DndOn { get; set; } = () => false;
     /// <summary>The camera or microphone is in use: only small things too.</summary>
     public Func<bool> CameraMicOn { get; set; } = () => false;
+    /// <summary>The minutes after a prayer's time: small things only, and no drawing your eye.</summary>
+    public Func<bool> AdhanOn { get; set; } = () => false;
 
     /// <summary>Her menu is open (or a show is running): no own actions.</summary>
     public bool Paused { get; set; }
@@ -136,12 +138,13 @@ internal sealed unsafe class LifeDirector : IDisposable
         _routine.Tick(now, sinceInput < TimeSpan.FromMinutes(1));
         bool typing = _typing.Update(now, _sinceKeyboard());
         if (typing != Typing) { Typing = typing; TypingChanged?.Invoke(typing); }
-        if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
-        if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
+        // Her routine follows life: a test machine's own clock (CI runs at night too) never posts it into other stages.
+        if (Enabled && _routine.TakeBreakDue()) _director.Post(EventKind.Break);
+        if (Enabled && _routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         // Something needs you (Claude asks, the timer is done, a reminder): she draws your eye, paced.
         if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye)
-            && _attention.ShouldPlay(_director.CurrentKey, now, DndOn()))
+            && _attention.ShouldPlay(_director.CurrentKey, now, DndOn() || AdhanOn()))
         {
             Log.Write($"life: Attention for '{_director.CurrentKey}'");
             _motion.Play(MotionKind.Attention);
@@ -151,7 +154,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
             new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
-        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn() || CameraMicOn()))
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn() || CameraMicOn() || AdhanOn()))
         {
             Log.Write("life: the music stopped (or a video is in front), dance ends");
             _motion.Play(MotionKind.Hover);
@@ -188,7 +191,7 @@ internal sealed unsafe class LifeDirector : IDisposable
 
         var forced = _forceNext;
         _forceNext = null;
-        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn() || CameraMicOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
+        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn() || CameraMicOn() || AdhanOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
             now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
