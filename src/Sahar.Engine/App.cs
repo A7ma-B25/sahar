@@ -522,7 +522,8 @@ internal sealed unsafe class App
             {
                 int surah = (int)Arg(r, "surah");
                 if (surah is < 1 or > 114) return new PipeReply(false, "surah 1–114");
-                quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter);
+                Func<IRecitation>? fake = r.Args?.ContainsKey("fake") == true ? () => new FakeRecitation(ui, TimeSpan.FromSeconds(Arg(r, "fake"))) : null;
+                quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter, fake);
                 return new PipeReply(true, quran.Describe());
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));

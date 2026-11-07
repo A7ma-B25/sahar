@@ -1059,7 +1059,7 @@ function Stage-Menu {
         $c = Body-Centre
         foreach ($b in $m.buttons) {
             $d = [math]::Sqrt([math]::Pow($b.x - $c[0], 2) + [math]::Pow($b.y - $c[1], 2))
-            if ($d -gt 320) { throw "button $($b.id) is $([int]$d) px from her" }
+            if ($d -gt 560) { throw "button $($b.id) is $([int]$d) px from her" }   # nine buttons: a corner's quarter ring reaches ~525 px
         }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Start-Sleep -Seconds 2
@@ -1634,7 +1634,8 @@ function Stage-Prayer {
         Stop-Engine
         Start-Engine @('--weather-stub', $script:px, '--quran-base', 'http://127.0.0.1:9/')
         Send '{"type":"cmd","name":"quran-play","args":{"surah":"1","reciter":"ar.alafasy"}}' | Out-Null
-        $deadline = (Get-Date).AddSeconds(10)
+        # A refused connection or a hang: either way she gives up within 15 s, once.
+        $deadline = (Get-Date).AddSeconds(25)
         do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'failed' -and (Get-Date) -lt $deadline)
         if ($q.playing -ne 'false' -or $q.state -ne 'failed') { throw "quran: playing=$($q.playing) state=$($q.state)" }
         $c = Kv 'debug-comment'
@@ -1642,20 +1643,16 @@ function Stage-Prayer {
         if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the failure' }
         if ((State).expression -eq 'quran') { throw 'the quran face stayed after the failure' }
     }
+    # CI's Windows Server has no MP3 decoder (SourceNotSupported), so these steps use a stand-in player ("fake" seconds);
+    # real playback is a manual check (README-test-build.txt).
     Step 'Quran: playing pauses the dance, is quiet and wears its face' {
         Stop-Engine
-        $script:qx = Join-Path $env:TEMP 'sahar-quran'
-        Remove-Item $script:qx -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path (Join-Path $script:qx 'ar.alafasy'), (Join-Path $script:qx 'ar.husary') | Out-Null
-        Copy-Item (Join-Path $PSScriptRoot 'assets\silence-30s.mp3') (Join-Path $script:qx 'ar.alafasy\112.mp3')
-        Copy-Item (Join-Path $PSScriptRoot 'assets\silence-2s.mp3') (Join-Path $script:qx 'ar.husary\113.mp3')
-        $base = ([Uri]((Resolve-Path $script:qx).Path + '\')).AbsoluteUri
-        Start-Engine @('--weather-stub', $script:px, '--quran-base', $base)
+        Start-Engine @('--weather-stub', $script:px)
         Pose-Body 900 450 | Out-Null
         Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
         Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Dance"}}' | Out-Null
         Wait-State { param($st) $st.motion -eq 'Dance' } 3000 'dancing to the music' | Out-Null
-        Send '{"type":"cmd","name":"quran-play","args":{"surah":"112","reciter":"ar.alafasy"}}' | Out-Null
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"112","reciter":"ar.alafasy","fake":"30"}}' | Out-Null
         $deadline = (Get-Date).AddSeconds(8)
         do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'playing' -and (Get-Date) -lt $deadline)
         if ($q.playing -ne 'true' -or $q.state -ne 'playing' -or $q.surah -ne '112') { throw "quran: playing=$($q.playing) state=$($q.state) surah=$($q.surah)" }
@@ -1699,7 +1696,7 @@ function Stage-Prayer {
         Send '{"type":"cmd","name":"list-close"}' | Out-Null
     }
     Step 'Quran: the end of the surah brings her back' {
-        Send '{"type":"cmd","name":"quran-play","args":{"surah":"113","reciter":"ar.husary"}}' | Out-Null
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"113","reciter":"ar.husary","fake":"2"}}' | Out-Null
         $deadline = (Get-Date).AddSeconds(12)
         do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'ended' -and (Get-Date) -lt $deadline)
         if ($q.playing -ne 'false' -or $q.state -ne 'ended') { throw "quran: playing=$($q.playing) state=$($q.state)" }
