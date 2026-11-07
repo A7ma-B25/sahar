@@ -1544,6 +1544,24 @@ function Text64([string]$b64) { [Text.Encoding]::UTF8.GetString([Convert]::FromB
 
 function Stage-Prayer {
     $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+    Step 'the clean version removes old data once' {
+        Stop-Engine
+        $roaming = Join-Path $env:APPDATA 'Sahar'
+        New-Item -ItemType Directory -Force -Path $roaming | Out-Null
+        Remove-Item (Join-Path $roaming 'data-version') -ErrorAction SilentlyContinue
+        '["old note"]' | Set-Content (Join-Path $roaming 'notes.json')
+        'x' | Set-Content (Join-Path $roaming 'clip-old.bmp')
+        Start-Engine
+        if (Test-Path (Join-Path $roaming 'notes.json')) { throw 'old notes survived the clean start' }
+        if (Test-Path (Join-Path $roaming 'clip-old.bmp')) { throw 'an old clipboard image survived' }
+        if ((Get-Content (Join-Path $roaming 'data-version') -Raw).Trim() -ne '2') { throw 'no data-version marker' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'clean start: old data removed') { throw 'the clean start is not in the log' }
+        Stop-Engine
+        '["kept"]' | Set-Content (Join-Path $roaming 'notes.json')
+        Start-Engine
+        if (-not (Test-Path (Join-Path $roaming 'notes.json'))) { throw 'the second start wiped again' }
+    }
     Step 'start engine with a stubbed city search' {
         Stop-Engine
         Remove-Item $settings -ErrorAction SilentlyContinue

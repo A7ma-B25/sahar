@@ -21,8 +21,11 @@ internal static class Program
 
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Sahar.Engine", out bool first);
         if (!first) return ExitAlreadyRunning;
+        // The clean version: old test builds' data goes once, before the log opens.
+        bool cleaned = Sahar.Core.Settings.CleanStart.Run(Sahar.Core.Settings.CleanStart.RoamingFolder, Log.Folder);
         Log.Start();
         Log.Write($"start {CoreInfo.Version} args [{string.Join(' ', args)}] on {Environment.OSVersion}");
+        if (cleaned) Log.Write("clean start: old data removed");
         try
         {
             int code = new App(EngineOptions.Parse(args)).Run();
