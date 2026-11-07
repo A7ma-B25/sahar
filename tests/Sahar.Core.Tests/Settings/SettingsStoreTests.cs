@@ -66,4 +66,27 @@ public sealed class SettingsStoreTests : IDisposable
         SettingsStore.Save(nested, new SaharSettings());
         Assert.True(File.Exists(nested));
     }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"activity\": \"calm\"}")]
+    [InlineData("{\"version\": 1, \"weatherCity\": \"X\", \"weatherLatitude\": 1.5}")]
+    public void Load_OldFileMissingNewerSettings_KeepsTheirDefaults(string json)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"sahar-old-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, json);
+            var s = SettingsStore.Load(path);
+            var d = new SaharSettings();
+            Assert.Equal(d.PrayerReminderMinutes, s.PrayerReminderMinutes);   // 10, not 0 (the 0.6.0 one-minute reminder)
+            Assert.Equal(d.QuranReciter, s.QuranReciter);
+            Assert.Equal(d.Volume, s.Volume);
+            Assert.Equal(d.Size, s.Size);
+            Assert.Equal(d.Sound, s.Sound);
+            Assert.Equal(d.AwarenessEnabled, s.AwarenessEnabled);
+            Assert.NotNull(s.BlockedApps);
+        }
+        finally { File.Delete(path); }
+    }
 }
