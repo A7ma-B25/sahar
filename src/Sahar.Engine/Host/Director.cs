@@ -1,4 +1,5 @@
 using Sahar.Core.Brain;
+using Sahar.Engine.Diagnostics;
 using Sahar.Engine.Senses;
 using Windows.System;
 using BrainCore = Sahar.Core.Brain.Brain;
@@ -111,6 +112,8 @@ internal sealed class Director
         bool fs = _debounce.Update(FullscreenWatcher.Check(), DateTimeOffset.UtcNow);
         if (fs == _fullscreen) return;
         _fullscreen = fs;
+        // Why she hid: the window class only (never a title), so "she vanished over X" can be traced.
+        Log.Write(fs ? $"fullscreen: hiding ({FullscreenWatcher.ForegroundClass()})" : "fullscreen: back");
         ApplyQuiet();
     }
 

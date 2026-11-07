@@ -14,8 +14,10 @@ public static class Fullscreen
     ];
 
     /// <summary>A borderless, non-shell window that covers the whole monitor.</summary>
-    public static bool IsFullscreen(RectI window, RectI monitor, string windowClass, bool hasCaption) =>
-        !hasCaption
+    /// <param name="maximized">A maximized window is never fullscreen, even one with no caption covering the
+    /// monitor (a browser with the taskbar auto-hidden).</param>
+    public static bool IsFullscreen(RectI window, RectI monitor, string windowClass, bool hasCaption, bool maximized = false) =>
+        !hasCaption && !maximized
         && Array.IndexOf(ShellClasses, windowClass) < 0
         && window.Left <= monitor.Left && window.Top <= monitor.Top
         && window.Right >= monitor.Right && window.Bottom >= monitor.Bottom;

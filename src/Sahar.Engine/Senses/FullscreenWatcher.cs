@@ -25,8 +25,11 @@ internal static unsafe class FullscreenWatcher
         var m = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
         bool caption = (Native.GetWindowLongPtr(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
         return $"fg 0x{fg:X} class '{Native.ClassName(fg)}' rect {r.Left},{r.Top},{r.Right},{r.Bottom} " +
-               $"monitor {m.Bounds} caption {caption} own {Win.Own.Contains(fg)} quns {state} => {Check()}";
+               $"monitor {m.Bounds} caption {caption} maximized {Native.IsZoomed(fg) != 0} own {Win.Own.Contains(fg)} quns {state} => {Check()}";
     }
+
+    /// <summary>The foreground window's class (never its title), for the log when she hides.</summary>
+    public static string ForegroundClass() => Native.ClassName(Native.GetForegroundWindow());
 
     public static bool Check()
     {
@@ -40,6 +43,6 @@ internal static unsafe class FullscreenWatcher
         if (Native.GetWindowRect(fg, &r) == 0) return false;
         var monitor = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
         bool hasCaption = (Native.GetWindowLongPtr(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
-        return Fullscreen.IsFullscreen(Monitors.ToRect(r), monitor.Bounds, Native.ClassName(fg), hasCaption);
+        return Fullscreen.IsFullscreen(Monitors.ToRect(r), monitor.Bounds, Native.ClassName(fg), hasCaption, Native.IsZoomed(fg) != 0);
     }
 }
