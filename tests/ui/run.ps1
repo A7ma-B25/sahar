@@ -1667,6 +1667,9 @@ function Stage-Prayer {
         Start-Sleep -Seconds 3
         if ((State).motion -eq 'Dance') { throw 'she danced during the Quran' }
         # Listening without touching the PC is not being away: no sleepy face, no nap in the corner.
+        # (The music stops first: a playing song outranks "away" in her brain and would hide the case.)
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
         Post 'user.away' | Out-Null
         Start-Sleep -Seconds 3
         $st = State
