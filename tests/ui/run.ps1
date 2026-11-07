@@ -1625,10 +1625,15 @@ function Stage-Prayer {
         $deadline = (Get-Date).AddSeconds(3)
         do { Start-Sleep -Milliseconds 200; $c = Kv 'debug-comment' } while ($c.showing -ne 'true' -and (Get-Date) -lt $deadline)
         if ((Text64 $c.text64) -ne 'ما في شي عم يشتغل') { throw "music bubble: '$(Text64 $c.text64)'" }
+        $gap = (Kv 'debug-apptime').gapMinutes
         Send '{"type":"cmd","name":"menu-press","args":{"id":"music-toggle"}}' | Out-Null
         Start-Sleep -Milliseconds 300
         if ((Menu).open -ne 'false') { throw 'the menu stayed open after a control' }
         if (-not (State)) { throw 'no state after a control with nothing playing' }
+        # Her tool lines are not comments: letting them time out never makes her comment less.
+        Start-Sleep -Seconds 9
+        if ((Kv 'debug-comment').showing -ne 'false') { throw 'the music bubble did not go away' }
+        if ((Kv 'debug-apptime').gapMinutes -ne $gap) { throw "the comment gap grew from $gap to $((Kv 'debug-apptime').gapMinutes) minutes" }
     }
     Step 'Quran: no network gives a gentle message and no stuck playing' {
         Stop-Engine
@@ -1661,6 +1666,13 @@ function Stage-Prayer {
         if ((Kv 'debug-life').quiet -ne 'true') { throw 'life is not quiet during the Quran' }
         Start-Sleep -Seconds 3
         if ((State).motion -eq 'Dance') { throw 'she danced during the Quran' }
+        # Listening without touching the PC is not being away: no sleepy face, no nap in the corner.
+        Post 'user.away' | Out-Null
+        Start-Sleep -Seconds 3
+        $st = State
+        if ($st.expression -ne 'quran') { throw "face during the Quran while 'away': $($st.expression)" }
+        if ($st.motion -in 'SleepInCorner', 'NapOnIcon') { throw "she went to nap during the Quran ($($st.motion))" }
+        Post 'user.back' | Out-Null
     }
     Step 'Quran: the listen ring offers stop, and stop restores her' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
