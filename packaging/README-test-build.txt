@@ -1,8 +1,18 @@
-سَحَر · Sahar — نسخة تجريبية 0.6.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.7.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.6.0
-------------------
+شو الجديد بـ 0.7.0 — النسخة النضيفة
+-----------------------------------
+- أول ما تشغّلها بتمسح كل شي خلّفته النسخ القديمة (الإعدادات، الملاحظات، الحافظة، السجل) وبتبلّش من الصفر. مرة وحدة بس.
+  بعد التشغيل احذف مجلدات النسخ القديمة يلي فكّيتها بإيدك.
+- تعارف: بتسلّم عليك وبتسألك شو بدها تناديك، وإذا انت شب ولا بنت. كلامها معك بيصير حسب جوابك ("اكتب" / "اكتبي")،
+  وبتقلك "صباح الخير" باسمك. اسمك ما بينكتب بالسجل.
+- تذكير الصلاة رجع قبل 10 دقايق (بـ 0.6.0 كان يطلع قبل دقيقة إذا عندك إعدادات قديمة).
+- ما عادت تختفي فوق المتصفح المكبّر (كانت تحسبه ملء شاشة إذا شريط المهام مخفي تلقائياً). بتختفي بس مع ملء الشاشة الحقيقي،
+  والسجل بيكتب نوع الشباك يلي اختفت فوقه لنعرف السبب إذا صارت مرة تانية.
+
+من 0.6.0
+--------
 - 🕌 أوقات الصلاة بالقائمة: أول مرة بتسألك عن مدينتك، وبعدين بتفرجيك الصلاة الجاية وقديش باقي، وأوقات اليوم الست.
   بتنحسب على جهازك بلا نت، على توقيت الجهاز. طريقة الحساب بتختارها من السطر "طريقة الحساب" (أم القرى افتراضياً،
   رابطة العالم الإسلامي، المصرية، كراتشي، أمريكا الشمالية). "المدينة: … — غيّر" لتغيّر المدينة.
@@ -58,7 +68,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.6.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.7.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -114,11 +124,21 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.6.0 (Windows)
+Sahar — test build 0.7.0 (Windows)
 ==================================
 
-What's new in 0.6.0
--------------------
+What's new in 0.7.0 — the clean version
+---------------------------------------
+- Its first start removes everything older test builds left (settings, notes, clipboard, log) and starts fresh, once.
+  Delete the folders of old builds you unzipped yourself.
+- Hello: she greets you and asks what to call you and whether you are a man or a woman; her Arabic then addresses you
+  the right way ("اكتب" / "اكتبي") and her good morning uses your name. Your name never reaches the log.
+- The prayer reminder is 10 minutes before again (0.6.0 gave it 1 minute before with an older settings file).
+- She no longer vanishes over a maximized browser (it counted as fullscreen with an auto-hidden taskbar); she hides only
+  for real fullscreen, and the log names the window class she hid over.
+
+From 0.6.0
+----------
 - 🕌 Prayer times in her menu: the first time she asks your city, then shows the next prayer, the time left, and today's six times.
   Computed on your PC, offline, in your PC's time zone. Pick the method from the "طريقة الحساب" line (Umm al-Qura by default,
   Muslim World League, Egyptian, Karachi, North America); "المدينة: … — غيّر" changes the city.
@@ -174,7 +194,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.6.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.7.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
