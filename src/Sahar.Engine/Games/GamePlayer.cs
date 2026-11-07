@@ -316,7 +316,7 @@ internal sealed class GamePlayer : IDisposable
         _hidden = false;
         _hinted = false;
         if (_round > HideSeek.Rounds) return;
-        State = $"counting {_round}";
+        State = $"counting-{_round}";
         _say(Sahar.Core.Settings.Address.ToYou("غمّض عيونك… 🙈"));
     }
 
@@ -331,7 +331,7 @@ internal sealed class GamePlayer : IDisposable
         _motion.GameMoveTo(spot);
         _hidden = true;
         _roundClock = 0;
-        State = $"hidden {_round}";
+        State = $"hidden-{_round}";
     }
 
     private void HideClick(Vector2 p)
@@ -350,7 +350,7 @@ internal sealed class GamePlayer : IDisposable
         _say(Sahar.Core.Settings.Address.ToYou(found ? "لقيتني! 😆" : "هون كنت! 😜"));
         _express(found ? "poked" : "celebrate", true);
         _roundClock = -2f;   // a short pause before the next round's counting
-        State = found ? $"found {_round}" : $"gave up {_round}";
+        State = found ? $"found-{_round}" : $"gaveup-{_round}";
         if (_round >= HideSeek.Rounds) { _round++; return; }
         NextRoundSoon();
     }
@@ -415,7 +415,7 @@ internal sealed class GamePlayer : IDisposable
                     if (_moveT >= 1)
                     {
                         Score++;
-                        State = $"fetched {Score}";
+                        State = $"fetched-{Score}";
                         _ballState = BallState.Ready;   // she lets it drop near you
                         if (Score >= Ball.Fetches) return false;
                     }

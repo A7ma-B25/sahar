@@ -1921,8 +1921,8 @@ function Stage-Games {
     Step 'hide and seek: she hides at an edge, a click on what shows finds her' {
         Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek"}}' | Out-Null
         $deadline = (Get-Date).AddSeconds(4)
-        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden 1' -and (Get-Date) -lt $deadline)
-        if ($g.state -ne 'hidden 1') { throw "not hidden: $($g.state)" }
+        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden-1' -and (Get-Date) -lt $deadline)
+        if ($g.state -ne 'hidden-1') { throw "not hidden: $($g.state)" }
         $x = [int]$g.x; $y = [int]$g.y; $w = [int]$g.w; $h = [int]$g.h
         $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
         $l = [Math]::Max($x, $work.Left); $t = [Math]::Max($y, $work.Top); $r = [Math]::Min($x + $w, $work.Right); $b = [Math]::Min($y + $h, $work.Bottom)
@@ -1931,18 +1931,18 @@ function Stage-Games {
         Screenshot 'game-hide.png' | Out-Null
         $px = [int](($l + $r) / 2); $py = [int](($t + $b) / 2)
         Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$px`",`"y`":`"$py`"}}" | Out-Null
-        if ((Game).state -ne 'found 1') { throw "not found: $((Game).state)" }
+        if ((Game).state -ne 'found-1') { throw "not found: $((Game).state)" }
         if ((Text64 (Kv 'debug-comment').text64) -ne 'لقيتني! 😆') { throw "found line: '$(Text64 (Kv 'debug-comment').text64)'" }
         # Round 2 with the real mouse: her own input window must not take the click from the game.
         $deadline = (Get-Date).AddSeconds(8)
-        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden 2' -and (Get-Date) -lt $deadline)
-        if ($g.state -ne 'hidden 2') { throw "round 2 not hidden: $($g.state)" }
+        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden-2' -and (Get-Date) -lt $deadline)
+        if ($g.state -ne 'hidden-2') { throw "round 2 not hidden: $($g.state)" }
         $x = [int]$g.x; $y = [int]$g.y; $w = [int]$g.w; $h = [int]$g.h
         $l = [Math]::Max($x, 0); $t = [Math]::Max($y, 0); $r = [Math]::Min($x + $w, $work.Right); $b = [Math]::Min($y + $h, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Bottom)
         $xy = '{0},{1}' -f [int](($l + $r) / 2), [int](($t + $b) / 2)
         & agent-desktop --headed mouse-click --xy $xy | Out-Null
         Start-Sleep -Milliseconds 300
-        if ((Game).state -ne 'found 2') { throw "a real click on her did not find her: $((Game).state) (clicked $xy)" }
+        if ((Game).state -ne 'found-2') { throw "a real click on her did not find her: $((Game).state) (clicked $xy)" }
         Send '{"type":"cmd","name":"game-stop"}' | Out-Null
         if ((Text64 (Kv 'debug-comment').text64) -notmatch '^لقيتني بـ \d+ ثانية بالمعدل') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
     }
