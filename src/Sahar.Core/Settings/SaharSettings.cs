@@ -43,6 +43,10 @@ public sealed record SaharSettings
     /// <summary>📖 The reciter chosen and the surah played last (shown first).</summary>
     public string QuranReciter { get; set; } = "ar.alafasy";
     public int? QuranLastSurah { get; set; }
+    /// <summary>Who she talks to (asked on the first start): her words agree with it, and she uses your name.</summary>
+    public string? UserName { get; set; }
+    public Gender UserGender { get; set; } = Gender.Unknown;
+    public bool HelloDone { get; set; }
     public bool UpdateCheckEnabled { get; set; } = true;
     public SeasonalIcon Seasonal { get; set; } = SeasonalIcon.Auto;
 }

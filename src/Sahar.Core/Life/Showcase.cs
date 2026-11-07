@@ -27,7 +27,7 @@ public static class Showcase
         "موسيقى", "Claude شغال", "Claude بيطلب إذن", "Claude خلّص", "المؤقت خلص", "هدف / احتفال", "مطر أو تنبيه طقس",
         "بطارية ضعيفة", "عم تشحن", "تنزيل أو نسخ ملفات", "نوم", "رجعت", "إشعار جديد", "لا تزعجني", "الإنترنت انقطع",
         "الإنترنت رجع", "لقطة شاشة", "نسخت شي", "تذكير بموعد", "صار في خطأ", "الجهاز سخن", "كبست عليها", "سحبتها",
-        "وقت استراحة", "سهرانين بعد نص الليل",
+        "وقت استراحة", "سهرانين بعد نص الليل", "قرآن",
     ];
 
     private static readonly Dictionary<FlightPattern, string> FlightNames = new()
@@ -75,7 +75,7 @@ public static class Showcase
         foreach (var e in ExpressionCatalog.All)
         {
             if (e.Key == "idle") continue;
-            var name = e.Id is >= 1 and <= 25 ? ExpressionNames[e.Id - 1] : e.Key;
+            var name = e.Id is >= 1 and <= 26 ? ExpressionNames[e.Id - 1] : e.Key;
             steps.Add(new(ShowcaseKind.Expression, e.Key, $"تعبير {e.Id} · {name}", 2.5f));
         }
         return steps;

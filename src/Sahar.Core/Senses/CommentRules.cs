@@ -5,9 +5,9 @@ public static class CommentRules
 {
     public static bool Allowed(bool typing, bool quiet, bool menuOpen, bool hidden) => !typing && !quiet && !menuOpen && !hidden;
 
-    public static string? Pick(string? exe, TimeSpan onIt, int hour, bool firstToday)
+    public static string? Pick(string? exe, TimeSpan onIt, int hour, bool firstToday, string? name = null)
     {
-        if (firstToday && hour is >= 5 and < 12) return "صباح الخير ☀️";
+        if (firstToday && hour is >= 5 and < 12) return name is null ? "صباح الخير ☀️" : $"صباح الخير يا {name} ☀️";
         if (exe is null) return null;
         var app = AppNames.Friendly(exe);
         if (onIt >= TimeSpan.FromMinutes(120)) return app is null ? "صار لك ساعتين على نفس البرنامج، كيف ماشي؟" : $"صار لك ساعتين على {app}، كيف ماشي؟";
@@ -35,7 +35,7 @@ public sealed class CommentPicker
         if (_greeted != today && now.Hour is >= 5 and < 12)
         {
             _greeted = today;
-            return CommentRules.Pick(null, TimeSpan.Zero, now.Hour, firstToday: true);
+            return CommentRules.Pick(null, TimeSpan.Zero, now.Hour, firstToday: true, Settings.Address.Name);
         }
         int milestone = onIt >= TimeSpan.FromMinutes(120) ? 2 : onIt >= TimeSpan.FromMinutes(60) ? 1 : 0;
         if (milestone <= _said) return null;

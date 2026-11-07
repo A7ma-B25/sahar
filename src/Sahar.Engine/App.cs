@@ -173,6 +173,8 @@ internal sealed unsafe class App
         var settings = new SaharSettings();
         try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
         catch (Exception e) { Log.Write($"settings not loaded: {e.Message}"); }
+        Address.You = settings.UserGender;   // her words agree with who she talks to
+        Address.Name = settings.UserName;
         using var tray = new Tray { Activity = settings.Activity };
         void SetActivity(ActivityLevel level)
         {
@@ -302,6 +304,40 @@ internal sealed unsafe class App
         using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
             line => speech.Say(line), () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
+
+        // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
+        // agree with you. Skipped answers are fine; closing the name bubble asks again next start.
+        void StartHello()
+        {
+            Log.Write("hello: asking who you are");
+            speech.Say("أهلين! أنا سَحَر 🌙");
+            bubble.Show(motion.Body, "شو بدك ناديك؟ (اسمك)", [], text => Safe(() =>
+            {
+                var name = Address.CleanName(text);
+                ui.TryEnqueue(() => Safe(() => listBubble.Show(motion.Body, "انت شب ولا بنت؟", ["شب 👦", "بنت 👧"], "ما بدي قول",
+                    i => ui.TryEnqueue(() => Safe(() => FinishHello(name, i switch { 0 => Gender.Male, 1 => Gender.Female, _ => Gender.Unknown }))),
+                    () => ui.TryEnqueue(() => Safe(() => FinishHello(name, Gender.Unknown))))));
+            }));
+        }
+
+        void FinishHello(string? name, Gender you)
+        {
+            settings = settings with { UserName = name, UserGender = you, HelloDone = true };
+            SaveSettings();
+            Address.You = you;
+            Address.Name = name;
+            Log.Write($"hello: done ({you})");   // never the name (spec §14)
+            speech.Say(name is null ? "تشرفنا 💜" : $"تشرفنا يا {name} 💜");
+        }
+
+        if (!_options.TestMode && !settings.HelloDone)
+        {
+            var helloTimer = ui.CreateTimer();
+            helloTimer.IsRepeating = false;
+            helloTimer.Interval = TimeSpan.FromSeconds(4);
+            helloTimer.Tick += (_, _) => Safe(StartHello);
+            helloTimer.Start();
+        }
         var music = new MusicTool(ui, media, line => speech.Say(line));
         using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => speech.Say(line),
             () => settings, s => { settings = s; SaveSettings(); }, _options.QuranBase);
@@ -525,6 +561,7 @@ internal sealed unsafe class App
                 return new PipeReply(true, quran.Describe());
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));
+            pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>

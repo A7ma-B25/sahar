@@ -50,6 +50,7 @@ internal sealed unsafe class TextBubble : IWindowHandler
     public void Show(RectF body, string title, IReadOnlyList<string> below, Action<string> onEnter)
     {
         Close();
+        title = Sahar.Core.Settings.Address.ToYou(title);   // her words agree with who she talks to
         var centre = new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2);
         var monitor = Monitors.At(centre);
         float dpi = monitor.DpiScale;

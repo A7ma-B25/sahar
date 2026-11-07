@@ -124,6 +124,7 @@ internal sealed class ShowcasePlayer : IDisposable
     /// <summary>A white pill with the step's name, under her (above her near the bottom of the screen); it follows her.</summary>
     private void Caption(string text)
     {
+        text = Sahar.Core.Settings.Address.ToYou(text);
         var c = _v.Root.Compositor;
         float dpi = _v.DpiScale, w = 260 * dpi, h = 28 * dpi;
         var size = new SizeI((int)MathF.Ceiling(w), (int)MathF.Ceiling(h));

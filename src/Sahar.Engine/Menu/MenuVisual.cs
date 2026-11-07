@@ -52,7 +52,7 @@ internal sealed class MenuVisual : IDisposable
         var size = new SizeI((int)MathF.Ceiling(w), (int)MathF.Ceiling(h));
         for (int i = 0; i < slots.Count; i++)
         {
-            var item = items[i];
+            var item = items[i] with { Label = Sahar.Core.Settings.Address.ToYou(items[i].Label) };   // her words agree with who she talks to
             if (!_drawn.TryGetValue((item.Id, item.Label, dpi), out var surface))
             {
                 surface = new SwapSurface(_host, size);

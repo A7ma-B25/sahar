@@ -1745,6 +1745,29 @@ function Stage-Prayer {
         if ($q.playing -ne 'false' -or $q.state -ne 'ended') { throw "quran: playing=$($q.playing) state=$($q.state)" }
         if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the surah ended' }
     }
+    Step 'the first hello asks your name and whether you are a man or a woman; her words follow' {
+        Send '{"type":"cmd","name":"hello-new"}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $b = Kv 'debug-bubble'
+        if ($b.open -ne 'true' -or (Text64 $b.title64) -notmatch 'شو بدك ناديك') { throw "no name question: '$(Text64 $b.title64)'" }
+        Type-InBubble 'Sami' -Enter
+        $deadline = (Get-Date).AddSeconds(4)
+        do { Start-Sleep -Milliseconds 200; $l = Kv 'debug-list' } while ($l.open -ne 'true' -and (Get-Date) -lt $deadline)
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 2 -or (Text64 $l.lines64) -notmatch 'بنت') { throw "no man/woman question (open=$($l.open))" }
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"1"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $raw = Get-Content $settings -Raw
+        if ($raw -notmatch '"userGender"\s*:\s*"female"' -or $raw -notmatch '"userName"\s*:\s*"Sami"' -or $raw -notmatch '"helloDone"\s*:\s*true') { throw "not saved: $raw" }
+        if ((Text64 (Kv 'debug-comment').text64) -ne 'تشرفنا يا Sami 💜') { throw "greeting: '$(Text64 (Kv 'debug-comment').text64)'" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        $title = Text64 (Kv 'debug-bubble').title64
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        if ($title -ne 'اكتبي ملاحظة…') { throw "the note bubble to a woman: '$title'" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'Sami') { throw 'the name is in engine.log' }
+    }
     Step 'the city never reaches the log' {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'Damascus') { throw 'the city name is in engine.log' }

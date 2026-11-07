@@ -149,9 +149,9 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 Native.AppendMenu(levels, MF_STRING | (level == Activity ? MF_CHECKED : 0), (nuint)(CmdActivity + (int)level), t);
         fixed (char* activity = "نشاطها / Activity")
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
-        fixed (char* folder = "افتح مجلد سَحَر / Open Sahar folder")
-        fixed (char* show = ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves")
-        fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — وقّف / Weather: {city} — off" : "الطقس… / Weather…")
+        fixed (char* folder = Sahar.Core.Settings.Address.ToYou("افتح مجلد سَحَر / Open Sahar folder"))
+        fixed (char* show = Sahar.Core.Settings.Address.ToYou(ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves"))
+        fixed (char* weather = Sahar.Core.Settings.Address.ToYou(WeatherCity is { } city ? $"الطقس: {city} — وقّف / Weather: {city} — off" : "الطقس… / Weather…"))
         fixed (char* quit = "إغلاق / Quit")
         {
             Native.AppendMenu(menu, MF_STRING, CmdShow, show);
