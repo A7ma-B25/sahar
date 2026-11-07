@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -744,7 +744,7 @@ function Stage-Menu {
         [Mouse]::Click($c[0], $c[1], $true)
         $m = Wait-Menu 'true' 2000 'menu open after a right-click'
         $ids = ($m.buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if ($ids -ne 'timer,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
         Start-Sleep -Milliseconds 600
         Screenshot 'menu-open.png' | Out-Null
@@ -1180,7 +1180,7 @@ function Stage-Senses {
     Step 'the menu has the clipboard button and its list' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         $ids = ((Menu).buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if ($ids -ne 'timer,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
         Press 'clipboard'
         Start-Sleep -Milliseconds 500
         $l = Kv 'debug-list'
@@ -1540,6 +1540,86 @@ function Stage-Life {
     Stop-Engine
 }
 
+function Text64([string]$b64) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64)) }
+
+function Stage-Prayer {
+    $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+    Step 'start engine with a stubbed city search' {
+        Stop-Engine
+        Remove-Item $settings -ErrorAction SilentlyContinue
+        $script:px = Join-Path $env:TEMP 'sahar-prayer'
+        Remove-Item $script:px -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:px | Out-Null
+        '{"results":[{"name":"Damascus","latitude":33.51,"longitude":36.29}]}' | Set-Content (Join-Path $script:px 'geocode.json')
+        Start-Engine @('--weather-stub', $script:px)
+        Pose-Body 900 450 | Out-Null
+    }
+    Step 'the first press asks the city, then shows the next prayer and six times' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"prayer"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $b = Kv 'debug-bubble'
+        if ($b.open -ne 'true' -or (Text64 $b.title64) -notmatch 'مدينت') { throw "no city question (open=$($b.open))" }
+        Type-InBubble 'Damascus' -Enter
+        $deadline = (Get-Date).AddSeconds(5)
+        do { Start-Sleep -Milliseconds 200; $l = Kv 'debug-list' } while ($l.open -ne 'true' -and (Get-Date) -lt $deadline)
+        if ($l.open -ne 'true') { throw 'the prayer list did not open' }
+        $lines = (Text64 $l.lines64) -split "`n"
+        if ($lines.Count -ne 8) { throw "list lines: $($lines.Count)" }
+        if ($lines[0] -notmatch '^الجاية: ') { throw "first line: $($lines[0])" }
+        foreach ($name in 'الفجر', 'الشروق', 'الظهر', 'العصر', 'المغرب', 'العشاء') {
+            if (-not ($lines | Where-Object { $_ -match "^$name — \d\d:\d\d$" })) { throw "no time line for $name" }
+        }
+        if ($lines[7] -notmatch 'طريقة الحساب: أم القرى') { throw "method line: $($lines[7])" }
+        if ((Text64 $l.button64) -notmatch 'Damascus') { throw "city button: $(Text64 $l.button64)" }
+        if ((Get-Content $settings -Raw) -notmatch '"prayerCity"\s*:\s*"Damascus"') { throw 'city not saved' }
+    }
+    Step 'the method line opens the methods and a pick is saved' {
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"7"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 5) { throw "methods list: open=$($l.open) lines=$($l.lines)" }
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"1"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Get-Content $settings -Raw) -notmatch '"prayerMethod"\s*:\s*"muslimWorldLeague"') { throw "method not saved: $(Get-Content $settings -Raw)" }
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or (Text64 $l.lines64) -notmatch 'رابطة العالم الإسلامي') { throw 'the prayer list did not come back with the new method' }
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'ten minutes before Asr: the reminder face and words' {
+        $p = Kv 'debug-prayer'
+        $script:asr = [DateTimeOffset]::Parse($p.asr, [Globalization.CultureInfo]::InvariantCulture)
+        $at = $script:asr.AddMinutes(-9.5).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Wait-State { param($st) $st.expression -eq 'reminder' } 5000 'reminder face' | Out-Null
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'بعد 10 دقايق العصر') { throw "reminder words: '$(Text64 $c.text64)'" }
+        if ((Kv 'debug-prayer').next -ne 'Asr') { throw 'next prayer is not Asr' }
+    }
+    Step 'at Asr: quiet for the adhan, small things only' {
+        $at = $script:asr.AddSeconds(5).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-prayer').quiet -ne 'true') { throw 'no adhan quiet' }
+        if ((Kv 'debug-life').quiet -ne 'true') { throw 'life is not quiet' }
+        if ((State).expression -eq 'reminder') { throw 'the reminder face stayed into the adhan' }
+        $r = Send '{"type":"cmd","name":"comment-now"}'
+        if ($r.ok) { throw 'a comment during the adhan' }
+    }
+    Step 'six minutes later the quiet ends' {
+        $at = $script:asr.AddMinutes(6).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-prayer').quiet -ne 'false') { throw 'still quiet' }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'life still quiet' }
+    }
+    Step 'the city never reaches the log' {
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'Damascus') { throw 'the city name is in engine.log' }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -1553,6 +1633,7 @@ try {
             'life' { Stage-Life }
             'menu' { Stage-Menu }
             'senses' { Stage-Senses }
+            'prayer' { Stage-Prayer }
         }
     }
 }

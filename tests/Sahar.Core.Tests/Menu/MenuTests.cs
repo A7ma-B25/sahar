@@ -75,8 +75,8 @@ public class MenuTests
     }
 
     [Fact]
-    public void MenuItems_Main_IsExactlyTheSixWorkingButtons() =>
-        Assert.Equal(["timer", "note", "clipboard", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
+    public void MenuItems_Main_IsExactlyTheWorkingButtons() =>
+        Assert.Equal(["timer", "prayer", "note", "clipboard", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
 
     [Fact]
     public void MenuItems_Options_TimerRunning_OffersCancel()

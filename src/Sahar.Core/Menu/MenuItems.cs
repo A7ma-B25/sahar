@@ -7,13 +7,14 @@ public sealed record MenuItem(string Id, string Emoji, string Label);
 
 /// <summary>
 /// The radial menu's buttons (spec §7.1). Only the ones that work so far are shown (the user's choice,
-/// 2026-11-06): Claude, listening, prayer and settings join when their plans land.
+/// 2026-11-06): Claude, listening and settings join when their plans land.
 /// </summary>
 public static class MenuItems
 {
     public static IReadOnlyList<MenuItem> Main { get; } =
     [
         new("timer", "⏱️", "مؤقت"),
+        new("prayer", "🕌", "أوقات الصلاة"),
         new("note", "📝", "ملاحظة سريعة"),
         new("clipboard", "📋", "الحافظة"),
         new("activity", "🌗", "مستوى نشاطها"),

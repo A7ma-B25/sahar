@@ -1,3 +1,5 @@
+using Sahar.Core.Prayer;
+
 namespace Sahar.Core.Settings;
 
 public enum UiLanguage { Auto, Arabic, English }
@@ -29,6 +31,13 @@ public sealed record SaharSettings
     public string? WeatherCity { get; init; }
     public double? WeatherLatitude { get; init; }
     public double? WeatherLongitude { get; init; }
+    /// <summary>The city typed for prayer times (🕌), where it is, and how times are calculated (spec §7.1).</summary>
+    public string? PrayerCity { get; init; }
+    public double? PrayerLatitude { get; init; }
+    public double? PrayerLongitude { get; init; }
+    public PrayerMethod PrayerMethod { get; init; } = PrayerMethod.UmmAlQura;
+    public bool PrayerHanafiAsr { get; init; }
+    public int PrayerReminderMinutes { get; init; } = 10;
     public bool UpdateCheckEnabled { get; init; } = true;
     public SeasonalIcon Seasonal { get; init; } = SeasonalIcon.Auto;
 }
