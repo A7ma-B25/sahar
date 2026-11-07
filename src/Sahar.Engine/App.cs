@@ -128,11 +128,13 @@ internal sealed unsafe class App
         Director? dismissDirector = null;
         Action<bool>? stopShow = null;
         Func<bool> dismissSpeech = () => false;
+        Func<bool> sulkPoke = () => false;
         Func<bool> showRunning = () => false;
         _ = new InputController(input, motion, () =>
         {
             // A click during her show stops it.
             if (showRunning()) { stopShow?.Invoke(false); return; }
+            if (sulkPoke()) return;        // sulking: "هِم!", or the third poke makes up
             if (dismissSpeech()) return;   // a click on her closes her comment (and she'll comment less)
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
@@ -304,6 +306,61 @@ internal sealed unsafe class App
         using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
             line => speech.Say(line), () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
+
+        // Shaken while dragged (0.8): dizzy, sick, or angry — angry is more likely if you did it again within 5 minutes.
+        // Angry, she sulks for 20 s: the pointer coming near makes her drift away, a click says "هِم!", the third
+        // gentle poke (or a face that needs you) makes up.
+        var shakes = new List<DateTimeOffset>();
+        ShakeReaction? forcedReaction = null;
+        DateTimeOffset sulkUntil = DateTimeOffset.MinValue, lastDrift = DateTimeOffset.MinValue;
+        int sulkPokes = 0;
+        bool Sulking() => DateTimeOffset.UtcNow < sulkUntil;
+        void EndSulk(bool madeUp)
+        {
+            if (!Sulking()) return;
+            sulkUntil = DateTimeOffset.MinValue;
+            Log.Write($"shake: sulk over ({(madeUp ? "made up" : "time")})");
+            Express("", false);
+            if (madeUp) { speech.Say("خلص سامحتك 💜"); Express("poked", true); }
+        }
+        motion.ShakeReact = strength =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            shakes.RemoveAll(t => now - t > TimeSpan.FromMinutes(5));
+            var r = forcedReaction ?? ShakeMood.Pick(strength, shakes.Count, Random.Shared.NextDouble());
+            forcedReaction = null;
+            shakes.Add(now);
+            return r;
+        };
+        motion.Shaken += (r, strength) => Safe(() =>
+        {
+            Log.Write($"shake: {r} (strength {strength})");
+            if (r != ShakeReaction.Angry) return;
+            sulkUntil = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+            sulkPokes = 0;
+            var end = ui.CreateTimer();
+            end.IsRepeating = false;
+            end.Interval = TimeSpan.FromSeconds(20.5);
+            end.Tick += (_, _) => Safe(() => EndSulk(madeUp: false));
+            end.Start();
+        });
+        sulkPoke = () =>
+        {
+            if (!Sulking()) return false;
+            if (++sulkPokes >= 3) { EndSulk(madeUp: true); return true; }
+            speech.Say("هِم! 😤");
+            motion.Squish();
+            return true;
+        };
+        motion.PointerNear += d => Safe(() =>
+        {
+            if (!Sulking() || d > 70 || DateTimeOffset.UtcNow - lastDrift < TimeSpan.FromSeconds(1.5)) return;
+            lastDrift = DateTimeOffset.UtcNow;
+            motion.DriftAway();
+        });
+        lifeDirector.Sulking = Sulking;
+        motion.Sulking = Sulking;
+        director.NeedsYou += () => Safe(() => EndSulk(madeUp: false));
 
         // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
         // agree with you. Skipped answers are fine; closing the name bubble asks again next start.
@@ -562,6 +619,16 @@ internal sealed unsafe class App
                 return new PipeReply(true, quran.Describe());
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));
+            pipe.Register("shake", r =>
+            {
+                // A drag shaken with N swings (fed to the same detector as a real drag), then released.
+                if (r.Args?.TryGetValue("force", out var f) == true && Enum.TryParse<ShakeReaction>(f, true, out var forced)) forcedReaction = forced;
+                int swings = r.Args?.ContainsKey("swings") == true ? (int)Arg(r, "swings") : 6;
+                motion.TestShake(swings);
+                return new PipeReply(true);
+            });
+            pipe.Register("debug-shake", _ => new PipeReply(true,
+                $"last={motion.LastReaction} sulking={(Sulking() ? "true" : "false")} pokes={sulkPokes} motion={motion.Current}"));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
             pipe.Register("tray-pick", r =>
             {

@@ -541,6 +541,49 @@ function Stage-Motion {
         if ($after.expression -eq 'dragged') { throw 'still showing dragged after release' }
         Assert-BodyInWork $after 'after drag'
     }
+    Step 'a few slow swings are not a shake' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+        Send '{"type":"cmd","name":"shake","args":{"swings":"3"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $k = Kv 'debug-shake'
+        if ($k.last -ne 'None' -or (State).motion -in 'Dizzy', 'Angry') { throw "three swings made a reaction: $($k.last)" }
+    }
+    Step 'shaken: dizzy, then back to normal' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+        Send '{"type":"cmd","name":"shake","args":{"swings":"6","force":"dizzy"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'dizzy' -and $st.motion -eq 'Dizzy' } 1500 'the dizzy face' | Out-Null
+        Screenshot 'shake-dizzy.png' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Hover' -and $st.expression -ne 'dizzy' } 6000 'back to normal after dizzy' | Out-Null
+        Assert-BodyInWork (State) 'after dizzy'
+    }
+    Step 'shaken hard: sick, a drop, then a little embarrassed' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+        Send '{"type":"cmd","name":"shake","args":{"swings":"10","force":"sick"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'sick' } 3000 'the sick face' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Screenshot 'shake-sick.png' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Hover' } 6000 'back to normal after sick' | Out-Null
+    }
+    Step 'shaken again: angry and sulking; "هِم!" then three pokes make up' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+        Send '{"type":"cmd","name":"shake","args":{"swings":"6","force":"angry"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'angry' } 1500 'the angry face' | Out-Null
+        Screenshot 'shake-angry.png' | Out-Null
+        if ((Kv 'debug-shake').sulking -ne 'true') { throw 'not sulking after an angry shake' }
+        Wait-State { param($st) $st.motion -eq 'Hover' } 4000 'resting while sulking' | Out-Null
+        if ((State).expression -ne 'angry') { throw 'the angry face did not stay while sulking' }
+        for ($i = 1; $i -le 3; $i++) {
+            $st = State
+            $xy = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+            & agent-desktop --headed mouse-click --xy $xy | Out-Null
+            Start-Sleep -Milliseconds 300
+            $said = Text64 (Kv 'debug-comment').text64
+            Start-Sleep -Milliseconds 900   # she may drift away from the pointer while sulking
+            if ($i -lt 3 -and $said -ne 'هِم! 😤') { throw "poke $i while sulking said '$said'" }
+        }
+        if ((Kv 'debug-shake').sulking -ne 'false') { throw 'three pokes did not end the sulk' }
+        if ($said -ne 'خلص سامحتك 💜') { throw "making up said '$said'" }
+    }
     Stop-Engine
 }
 

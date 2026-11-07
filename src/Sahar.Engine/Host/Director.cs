@@ -93,6 +93,9 @@ internal sealed class Director
 
     public bool Quran => _quran;
 
+    /// <summary>A face that needs you appeared (timer done, a reminder, Claude asking).</summary>
+    public event Action? NeedsYou;
+
     public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan || _quran;
 
     private void ApplyQuiet() =>
@@ -126,6 +129,7 @@ internal sealed class Director
         {
             _lastKey = key;
             _express(key);
+            if (Sahar.Core.Life.AttentionPacer.NeedsYou(key)) NeedsYou?.Invoke();
         }
         bool hidden = output.Hidden || now < _hiddenUntil;
         if (hidden != _hidden)

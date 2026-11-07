@@ -114,6 +114,8 @@ internal sealed unsafe class LifeDirector : IDisposable
 
     /// <summary>Her menu is open (or a show is running): no own actions.</summary>
     public bool Paused { get; set; }
+    /// <summary>She is sulking after an angry shake: no moves of her own until it passes.</summary>
+    public Func<bool> Sulking { get; set; } = () => false;
 
     public ActivityLevel Level
     {
@@ -151,7 +153,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             Log.Write($"life: Attention for '{_director.CurrentKey}'");
             _motion.Play(MotionKind.Attention);
         }
-        if (!Enabled || Paused) return;
+        if (!Enabled || Paused || Sulking()) return;
         var cursor = Native.CursorPos();
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),

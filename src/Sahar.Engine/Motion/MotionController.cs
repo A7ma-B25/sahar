@@ -15,7 +15,7 @@ namespace Sahar.Engine.Motion;
 /// <see cref="Ticker"/>, which stops as soon as she rests; everything else is a compositor animation.
 /// Positions are her body's top-left in screen pixels.
 /// </summary>
-internal sealed class MotionController
+internal sealed partial class MotionController
 {
     public const float ThrowSpeed = 300f;       // px/s: release faster than this throws her
     public const float TiltDegrees = 8f;
@@ -123,6 +123,8 @@ internal sealed class MotionController
             case MotionKind.HopIcons: Reset(k); StartHopIcons(); break;
             case MotionKind.Attention: Reset(k); StartAttention(); break;
             case MotionKind.NapOnIcon: Reset(k); StartCorner(sleep: true, along: 1f / 3); break;
+            case MotionKind.Dizzy: Reset(k); StartDizzy(sick: false); break;
+            case MotionKind.Angry: Reset(k); StartAngry(); break;
             default: return false;
         }
         UpdateTicker();
@@ -162,7 +164,7 @@ internal sealed class MotionController
     /// <summary>A motion owns her body's scale (Breathe, Shy) until it ends or is interrupted.</summary>
     public bool BodyScaleBusy { get; private set; }
 
-    private readonly List<ShapeVisual> _rings = [];
+    private readonly List<ShapeVisual> _rings = [];   // her little shapes (rings, a drop): removed when a motion ends
 
     private void RemoveRings()
     {
@@ -382,6 +384,7 @@ internal sealed class MotionController
         var root = _v.Root;
         root.Scale = new Vector3(0.92f, 1.1f, 1);
         _samples.Clear();
+        _shake.Reset();
         _dragClock = 0;
         var prevVelocity = Vector2.Zero;
         _express("dragged", false);
@@ -394,6 +397,7 @@ internal sealed class MotionController
             root.CenterPoint = PivotLeaf;
             _moveCanvasTo(cursor - new Vector2(PivotLeaf.X, PivotLeaf.Y));
             _samples.Add((_dragClock, cursor));
+            FeedShake(_dragClock, cursor);
             _samples.RemoveAll(s => _dragClock - s.T > 0.1);
             var velocity = Velocity();
             var accel = (velocity - prevVelocity) / dt;
@@ -424,6 +428,7 @@ internal sealed class MotionController
         root.Scale = Vector3.One;
         root.RotationAngleInDegrees = 0;
         TopLeft = Clamp(TopLeft);
+        if (ReactToShake()) return;   // shaken: dizzy, sick or angry instead of a throw
         if (v.Length() > ThrowSpeed) Play(MotionKind.Throw, v);
         else if (Monitor.Work.Bottom - (TopLeft.Y + BodySize.Y) < 120 * Monitor.DpiScale) Play(MotionKind.LandAndSit);
         else Play(MotionKind.Hover);
