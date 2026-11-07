@@ -1,8 +1,22 @@
-سَحَر · Sahar — نسخة تجريبية 0.5.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.6.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.5.0
+شو الجديد بـ 0.6.0
 ------------------
+- 🕌 أوقات الصلاة بالقائمة: أول مرة بتسألك عن مدينتك، وبعدين بتفرجيك الصلاة الجاية وقديش باقي، وأوقات اليوم الست.
+  بتنحسب على جهازك بلا نت، على توقيت الجهاز. طريقة الحساب بتختارها من السطر "طريقة الحساب" (أم القرى افتراضياً،
+  رابطة العالم الإسلامي، المصرية، كراتشي، أمريكا الشمالية). "المدينة: … — غيّر" لتغيّر المدينة.
+  قبل كل صلاة بـ 10 دقايق بتذكّرك (وجّ التذكير، بتلفت انتباهك، وبتقول "بعد 10 دقايق العصر" مثلاً).
+  وقت الأذان بتهدى 5 دقايق: لا تعليقات ولا حركات كبيرة. ما في صوت أذان بهالنسخة.
+  اسم المدينة بيروح لـ Open-Meteo مرة وحدة لنعرف مكانها، وما بينكتب بالسجل.
+- 🎧 الاستماع بالقائمة:
+  🎵 موسيقى: ⏮️ السابق، ⏯️ تشغيل/إيقاف، ⏭️ التالي لأي برنامج عم يشغّل (سبوتيفاي، يوتيوب…)، وفقاعتها بتقول شو عم يشتغل.
+  📖 قرآن: 114 سورة (آخر وحدة سمعتها أول شي) و6 قرّاء (العفاسي، عبد الباسط، الحصري، المنشاوي، المعيقلي، السديس).
+  وقت تشغّل القرآن بتوقّف الموسيقى، وبتلبس السماعات وبتغمض عيونها وبتهدى: لا رقص ولا تعليقات. لتوقفه: 🎧 ← ⏹️ وقّف القرآن.
+  التلاوات من islamic.network (alquran.cloud)، ومسموحة للاستماع الشخصي. إذا ما في نت بتقلك "ما قدرت شغّل التلاوة هلق".
+
+من 0.5.0
+--------
 - 📋 الحافظة بالقائمة: آخر 20 شي نسخته (نص، رابط، صورة). كبسة على وحدة بترجّعها للحافظة، و"امسح الكل" بيمسح.
   ما بتحفظ شي من برامج كلمات السر يلي على الجهاز، ولا شي معلّم إنو خاص. وإذا نسخت شي بيشبه كلمة سر من المتصفح
   (متل إضافات كلمات السر)، بتبيّنه "🔒 ••••••" وما بتكتبه على الجهاز أبداً. كل شي بيضل على جهازك.
@@ -44,7 +58,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.5.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.6.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -86,7 +100,11 @@
 - "لا تزعجني" تبع ويندوز (Focus Assist) ما إلو طريقة رسمية لنعرفه، فاستعمل "لا تزعجني" تبعها من قائمتها.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
-بهالنسخة لسا ما في: الأصوات، الإعدادات، الصلاة، الاستماع، وربط Claude. هدول بالخطط الجاية.
+- 🕌 قارن أوقات مدينتك مع جامعك، واستنى تذكير صلاة حقيقي (10 دقايق قبل).
+- 🎵 شغّل أغنية بسبوتيفاي وجرّب ⏮️ ⏯️ ⏭️ من قائمتها، وشوف إذا الفقاعة بتقول اسم الأغنية.
+- 📖 شغّل سورة والسماعات بأذنيك وأغنية شغالة: لازم توقف الأغنية وتبلش التلاوة، وسَحَر تهدى. وبآخر السورة بترجع عادي.
+
+بهالنسخة لسا ما في: الأصوات، الإعدادات، وربط Claude. هدول بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -96,11 +114,26 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.5.0 (Windows)
+Sahar — test build 0.6.0 (Windows)
 ==================================
 
-What's new in 0.5.0
+What's new in 0.6.0
 -------------------
+- 🕌 Prayer times in her menu: the first time she asks your city, then shows the next prayer, the time left, and today's six times.
+  Computed on your PC, offline, in your PC's time zone. Pick the method from the "طريقة الحساب" line (Umm al-Qura by default,
+  Muslim World League, Egyptian, Karachi, North America); "المدينة: … — غيّر" changes the city.
+  10 minutes before each prayer she reminds you (the reminder face, she draws your eye, and says e.g. "بعد 10 دقايق العصر").
+  At the adhan she stays quiet for 5 minutes: no comments, no big moves. No adhan sound in this build.
+  Your city goes to Open-Meteo once to find where it is, and never reaches the log.
+- 🎧 Listening in her menu:
+  🎵 Music: ⏮️ previous, ⏯️ play/pause, ⏭️ next for whatever app plays (Spotify, YouTube…); her bubble says what is playing.
+  📖 Quran: 114 surahs (the last one you heard first) and 6 reciters (Alafasy, Abdul Basit, Al-Husary, Al-Minshawi, Maher
+  Al-Muaiqly, As-Sudais). Starting it pauses your music; she wears headphones, closes her eyes and goes quiet: no dance, no
+  comments. To stop: 🎧 → ⏹️ وقّف القرآن. Recitations stream from islamic.network (alquran.cloud), free for personal listening.
+  With no internet she says "ما قدرت شغّل التلاوة هلق".
+
+From 0.5.0
+----------
 - 📋 Clipboard in her menu: the last 20 things you copied (text, links, images). Click one to copy it again; "Clear all".
   Nothing from password-manager apps or content marked private is kept. A password-looking copy from a browser (password
   extensions) shows as "🔒 ••••••" and is never written to disk. Everything stays on your PC.
@@ -141,7 +174,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.5.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.6.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -182,7 +215,12 @@ Manual checks (GitHub cannot test these)
 - Windows' own "Do not disturb" (Focus Assist) has no official way to be read; use her own "Do not disturb" in her menu.
 - After two hours of non-stop work: the break face ☕.
 
-Not in this build yet: sounds, settings, prayer times, listening and the Claude link (later plans).
+- 🕌 Compare your city's times with your mosque, and wait for a real prayer reminder (10 minutes before).
+- 🎵 Play a song in Spotify and try ⏮️ ⏯️ ⏭️ from her menu; the bubble should name the song.
+- 📖 Play a surah with headphones on while a song plays: the song pauses, the recitation starts, Sahar goes quiet,
+  and at the end of the surah she is back to normal.
+
+Not in this build yet: sounds, settings and the Claude link (later plans).
 
 If something goes wrong
 -----------------------
