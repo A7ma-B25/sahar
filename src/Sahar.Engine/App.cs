@@ -261,7 +261,7 @@ internal sealed unsafe class App
         var apps = new AppWatch(ui,
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => director.CurrentKey == "sleep",
-            say: line => speech.Say(line, comment: true));
+            say: line => speech.Say(line, comment: true), ownComments: !_options.TestMode);
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };

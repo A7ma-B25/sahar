@@ -22,7 +22,9 @@ internal sealed unsafe class AppWatch
     private readonly Action<string> _say;
     private TimeSpan _skip;   // test mode: a fake clock offset
 
-    public AppWatch(DispatcherQueue ui, Func<bool> allowed, Func<bool> away, Action<string> say)
+    /// <param name="ownComments">False on a test machine: its real clock (a morning hello) must never talk over other
+    /// tests; there only the pipe's comment-now makes her comment.</param>
+    public AppWatch(DispatcherQueue ui, Func<bool> allowed, Func<bool> away, Action<string> say, bool ownComments = true)
     {
         _allowed = allowed;
         _away = away;
@@ -30,7 +32,7 @@ internal sealed unsafe class AppWatch
         Foreground.Changed += () => Safe(Front);
         var t = ui.CreateTimer();
         t.Interval = TimeSpan.FromMinutes(1);
-        t.Tick += (_, _) => Safe(() => { if (_away()) _time.Away(Now); else Front(); Consider(); });
+        t.Tick += (_, _) => Safe(() => { if (_away()) _time.Away(Now); else Front(); if (ownComments) Consider(); });
         t.Start();
         Front();
     }
