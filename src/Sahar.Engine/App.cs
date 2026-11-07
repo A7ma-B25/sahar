@@ -258,14 +258,12 @@ internal sealed unsafe class App
         lifeDirector.CameraMicOn = () => cameraMic.InUse;
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
         using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
-        bool reminderSpeaking = false;
         var apps = new AppWatch(ui,
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => director.CurrentKey == "sleep",
-            say: line => { reminderSpeaking = false; speech.Say(line); });
+            say: line => speech.Say(line, comment: true));
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
-        // A prayer reminder is not a comment: ignoring it changes nothing.
-        speech.Ended += _ => { if (reminderSpeaking) reminderSpeaking = false; else apps.Limiter.Dismissed(DateTimeOffset.Now); };
+        speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
         // Rain coming (opt-in): the tray item asks for your city.
         using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
@@ -302,10 +300,10 @@ internal sealed unsafe class App
         });
         // 🕌 Prayer times: the city search is the weather's (same stub in tests).
         using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
-            line => { reminderSpeaking = true; speech.Say(line); }, () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
+            line => speech.Say(line), () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
-        var music = new MusicTool(ui, media, line => { reminderSpeaking = false; speech.Say(line); });
-        using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => { reminderSpeaking = false; speech.Say(line); },
+        var music = new MusicTool(ui, media, line => speech.Say(line));
+        using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => speech.Say(line),
             () => settings, s => { settings = s; SaveSettings(); }, _options.QuranBase);
         quran.PlayingChanged += on => Safe(() => director.SetQuran(on));
         menu.QuranPlaying = () => quran.Playing;
@@ -496,7 +494,7 @@ internal sealed unsafe class App
             pipe.Register("say", r =>
             {
                 var text = r.Args?.TryGetValue("text64", out var t) == true ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)) : "";
-                speech.Say(text);
+                speech.Say(text, comment: true);
                 return new PipeReply(true);
             });
             pipe.Register("comment-now", _ => new PipeReply(apps.Consider(), apps.Describe()));

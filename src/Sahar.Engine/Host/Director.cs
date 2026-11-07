@@ -118,7 +118,7 @@ internal sealed class Director
     {
         var now = DateTimeOffset.UtcNow;
         var output = _brain.Tick(now);
-        var key = _quran && output.ExpressionKey is "idle" or "music" ? "quran" : output.ExpressionKey;   // music is paused for it
+        var key = QuranFace.Over(output.ExpressionKey, _quran);
         if (key != _lastKey)
         {
             _lastKey = key;

@@ -20,8 +20,10 @@ internal sealed class SpeechBubble : IDisposable
 
     public string? Text { get; private set; }
     public bool Showing => Text != null;
-    /// <summary>It went away by itself (true) or was clicked away (false).</summary>
+    /// <summary>A comment ended: it went away by itself (true) or was clicked away (false). Her tool lines
+    /// (a reminder, what is playing, a Quran error) are not comments and raise nothing.</summary>
     public event Action<bool>? Ended;
+    private bool _comment;
 
     public SpeechBubble(DispatcherQueue ui, SaharVisual v, Func<RectF> body)
     {
@@ -33,10 +35,11 @@ internal sealed class SpeechBubble : IDisposable
         _hide.Tick += (_, _) => End(timedOut: true);
     }
 
-    public void Say(string text)
+    public void Say(string text, bool comment = false)
     {
         Remove();
         Text = text;
+        _comment = comment;
         var c = _v.Root.Compositor;
         float dpi = _v.DpiScale, w = 260 * dpi, h = 52 * dpi;
         _surface = new SwapSurface(_v.Host, new SizeI((int)MathF.Ceiling(w), (int)MathF.Ceiling(h)));
@@ -86,7 +89,7 @@ internal sealed class SpeechBubble : IDisposable
     {
         _hide.Stop();
         Remove();
-        Ended?.Invoke(timedOut);
+        if (_comment) Ended?.Invoke(timedOut);
     }
 
     private void Remove()
