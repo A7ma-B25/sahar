@@ -86,8 +86,12 @@ internal sealed class RadialMenu : IDisposable
         Pressed?.Invoke(id);
     }
 
+    /// <summary>A second ring opened (the 🎵 ring shows what is playing).</summary>
+    public event Action<string>? RingOpened;
+
     private void Show(string ring, IReadOnlyList<MenuItem> items)
     {
+        if (ring != "main") RingOpened?.Invoke(ring);
         Ring = ring;
         _items = items;
         var body = _body();

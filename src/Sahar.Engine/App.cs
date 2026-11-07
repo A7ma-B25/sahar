@@ -304,6 +304,8 @@ internal sealed unsafe class App
         using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
             line => { reminderSpeaking = true; speech.Say(line); }, () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
+        var music = new MusicTool(ui, media, line => { reminderSpeaking = false; speech.Say(line); });
+        menu.RingOpened += ring => Safe(() => { if (ring == "music") music.SayNowPlaying(); });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
         using var show = new ShowcasePlayer(ui, motion, sahar, key => Express(key, false), () => Express("", false));
@@ -340,6 +342,7 @@ internal sealed unsafe class App
                 case "note": notes.Open(); break;
                 case "clipboard": clipboardTool.Open(); break;
                 case "prayer": prayer.Open(); break;
+                case "music-prev" or "music-toggle" or "music-next": music.Press(id); break;
                 case "timer-custom":
                     bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
                     {
@@ -502,6 +505,7 @@ internal sealed unsafe class App
                 listBubble.PickLine((int)Arg(r, "index"));
                 return new PipeReply(true);
             });
+            pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>
             {

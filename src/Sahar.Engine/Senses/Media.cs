@@ -66,6 +66,77 @@ internal sealed class Media
         Apply(music, video, browser, browser && BrowserInFront());
     }
 
+    /// <summary>The session the 🎵 controls act on: one that is playing, else Windows' current one.</summary>
+    private GlobalSystemMediaTransportControlsSession? Session()
+    {
+        if (_manager is null || _simulated) return null;
+        try
+        {
+            foreach (var session in _manager.GetSessions())
+                if (session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing) return session;
+            return _manager.GetCurrentSession();
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media session failed: {e.Message}");
+            return null;
+        }
+    }
+
+    public bool HasSession => Session() is not null;
+
+    /// <summary>The title and artist of what plays (shown in her bubble, never logged); null with nothing to show.</summary>
+    public async Task<(string Title, string Artist)?> NowPlayingAsync()
+    {
+        if (Session() is not { } session) return null;
+        try
+        {
+            var p = await session.TryGetMediaPropertiesAsync().AsTask();
+            return string.IsNullOrWhiteSpace(p?.Title) ? null : (p.Title, p.Artist ?? "");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media properties failed: {e.GetType().Name}");
+            return null;
+        }
+    }
+
+    /// <summary>⏮️ ⏯️ ⏭️ on the session; false when there is none or the app refuses.</summary>
+    public async Task<bool> ControlAsync(MusicControl control)
+    {
+        if (Session() is not { } session) return false;
+        try
+        {
+            return control switch
+            {
+                MusicControl.Previous => await session.TrySkipPreviousAsync().AsTask(),
+                MusicControl.Next => await session.TrySkipNextAsync().AsTask(),
+                _ => await session.TryTogglePlayPauseAsync().AsTask(),
+            };
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media control failed: {e.GetType().Name}");
+            return false;
+        }
+    }
+
+    /// <summary>Pauses every playing session (before the Quran starts).</summary>
+    public async Task PauseAllAsync()
+    {
+        if (_manager is null || _simulated) return;
+        try
+        {
+            foreach (var session in _manager.GetSessions())
+                if (session.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                    await session.TryPauseAsync().AsTask();
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media pause failed: {e.GetType().Name}");
+        }
+    }
+
     /// <summary>Test mode: pretend something is playing (real sessions are ignored from then on).</summary>
     public void Simulate(bool playing, bool video, bool browser, bool browserInFront)
     {
@@ -95,3 +166,5 @@ internal sealed class Media
     /// Discord, Slack…) share Chromium's class but are not browsers.</summary>
     private static bool BrowserInFront() => MediaEdges.IsBrowserProcess(Native.WindowProcessPath(Native.GetForegroundWindow()));
 }
+
+internal enum MusicControl { Previous, Toggle, Next }

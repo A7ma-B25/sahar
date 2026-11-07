@@ -76,7 +76,14 @@ public class MenuTests
 
     [Fact]
     public void MenuItems_Main_IsExactlyTheWorkingButtons() =>
-        Assert.Equal(["timer", "prayer", "note", "clipboard", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
+        Assert.Equal(["timer", "listen", "prayer", "note", "clipboard", "activity", "dnd", "hide", "play"], MenuItems.Main.Select(i => i.Id));
+
+    [Fact]
+    public void MenuItems_Options_Listen_MusicAndQuran()
+    {
+        Assert.Equal(["music", "quran", "back"], MenuItems.Options("listen", false, false, ActivityLevel.Medium).Select(i => i.Id));
+        Assert.Equal(["music-prev", "music-toggle", "music-next", "back"], MenuItems.Options("music", false, false, ActivityLevel.Medium).Select(i => i.Id));
+    }
 
     [Fact]
     public void MenuItems_Options_TimerRunning_OffersCancel()

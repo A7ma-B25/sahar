@@ -744,7 +744,7 @@ function Stage-Menu {
         [Mouse]::Click($c[0], $c[1], $true)
         $m = Wait-Menu 'true' 2000 'menu open after a right-click'
         $ids = ($m.buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
         Start-Sleep -Milliseconds 600
         Screenshot 'menu-open.png' | Out-Null
@@ -1180,7 +1180,7 @@ function Stage-Senses {
     Step 'the menu has the clipboard button and its list' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         $ids = ((Menu).buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
         Press 'clipboard'
         Start-Sleep -Milliseconds 500
         $l = Kv 'debug-list'
@@ -1612,6 +1612,23 @@ function Stage-Prayer {
         Start-Sleep -Milliseconds 500
         if ((Kv 'debug-prayer').quiet -ne 'false') { throw 'still quiet' }
         if ((Kv 'debug-life').quiet -ne 'false') { throw 'life still quiet' }
+    }
+    Step 'listening: music and Quran, then the music controls and what is playing' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'music,quran,back') { throw "listen ring: $ids" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"music"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'music-prev,music-toggle,music-next,back') { throw "music ring: $ids" }
+        if ((Kv 'debug-music').session -ne 'false') { throw 'a media session on the test machine' }
+        $deadline = (Get-Date).AddSeconds(3)
+        do { Start-Sleep -Milliseconds 200; $c = Kv 'debug-comment' } while ($c.showing -ne 'true' -and (Get-Date) -lt $deadline)
+        if ((Text64 $c.text64) -ne 'ما في شي عم يشتغل') { throw "music bubble: '$(Text64 $c.text64)'" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"music-toggle"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Menu).open -ne 'false') { throw 'the menu stayed open after a control' }
+        if (-not (State)) { throw 'no state after a control with nothing playing' }
     }
     Step 'the city never reaches the log' {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
