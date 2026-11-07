@@ -360,6 +360,7 @@ internal sealed unsafe class App
             motion.DriftAway();
         });
         lifeDirector.Sulking = Sulking;
+        lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
 

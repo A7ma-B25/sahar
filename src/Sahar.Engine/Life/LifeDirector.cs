@@ -119,6 +119,9 @@ internal sealed unsafe class LifeDirector : IDisposable
     private DateTimeOffset? _lastTypeAlong;
     private bool _forceTypeAlong;
 
+    /// <summary>False on a test machine: typing tests must not get a random type-along (only a forced one).</summary>
+    public bool RandomTypeAlong { get; set; } = true;
+
     /// <summary>Test mode: the next time you start typing she types along.</summary>
     public void ForceTypeAlong() => _forceTypeAlong = true;
 
@@ -152,7 +155,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             TypingChanged?.Invoke(typing);
             // "بتكتب معك": sometimes, when you start typing, she sits beside your window and taps along.
             if (typing && Enabled && !Paused && !Sulking() && Resting && !_director.Hidden && !_director.Quiet &&
-                (_forceTypeAlong || TypeAlongPolicy.Should(now, _lastTypeAlong, _rng.NextDouble())))
+                (_forceTypeAlong || (RandomTypeAlong && TypeAlongPolicy.Should(now, _lastTypeAlong, _rng.NextDouble()))))
             {
                 _forceTypeAlong = false;
                 if (_motion.TypeAlong(() => Typing))
