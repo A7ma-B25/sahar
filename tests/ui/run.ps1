@@ -1630,6 +1630,81 @@ function Stage-Prayer {
         if ((Menu).open -ne 'false') { throw 'the menu stayed open after a control' }
         if (-not (State)) { throw 'no state after a control with nothing playing' }
     }
+    Step 'Quran: no network gives a gentle message and no stuck playing' {
+        Stop-Engine
+        Start-Engine @('--weather-stub', $script:px, '--quran-base', 'http://127.0.0.1:9/')
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"1","reciter":"ar.alafasy"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(10)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'failed' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'false' -or $q.state -ne 'failed') { throw "quran: playing=$($q.playing) state=$($q.state)" }
+        $c = Kv 'debug-comment'
+        if ((Text64 $c.text64) -ne 'ما قدرت شغّل التلاوة هلق') { throw "message: '$(Text64 $c.text64)'" }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the failure' }
+        if ((State).expression -eq 'quran') { throw 'the quran face stayed after the failure' }
+    }
+    Step 'Quran: playing pauses the dance, is quiet and wears its face' {
+        Stop-Engine
+        $script:qx = Join-Path $env:TEMP 'sahar-quran'
+        Remove-Item $script:qx -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:qx 'ar.alafasy'), (Join-Path $script:qx 'ar.husary') | Out-Null
+        Copy-Item (Join-Path $PSScriptRoot 'assets\silence-30s.mp3') (Join-Path $script:qx 'ar.alafasy\112.mp3')
+        Copy-Item (Join-Path $PSScriptRoot 'assets\silence-2s.mp3') (Join-Path $script:qx 'ar.husary\113.mp3')
+        $base = ([Uri]((Resolve-Path $script:qx).Path + '\')).AbsoluteUri
+        Start-Engine @('--weather-stub', $script:px, '--quran-base', $base)
+        Pose-Body 900 450 | Out-Null
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Dance"}}' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Dance' } 3000 'dancing to the music' | Out-Null
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"112","reciter":"ar.alafasy"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(8)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'playing' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'true' -or $q.state -ne 'playing' -or $q.surah -ne '112') { throw "quran: playing=$($q.playing) state=$($q.state) surah=$($q.surah)" }
+        Wait-State { param($st) $st.motion -ne 'Dance' } 4000 'the dance ending for the Quran' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'quran' } 2000 'the quran face' | Out-Null
+        if ((Kv 'debug-life').quiet -ne 'true') { throw 'life is not quiet during the Quran' }
+        Start-Sleep -Seconds 3
+        if ((State).motion -eq 'Dance') { throw 'she danced during the Quran' }
+    }
+    Step 'Quran: the listen ring offers stop, and stop restores her' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'quran-stop,music,back') { throw "listen ring while playing: $ids" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran-stop"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-quran').playing -ne 'false') { throw 'still playing after stop' }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after stop' }
+        if ((State).expression -eq 'quran') { throw 'the quran face stayed after stop' }
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+    }
+    Step 'Quran: the surah list puts the last one first, and the reciter can change' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $l = Kv 'debug-list'
+        $lines = (Text64 $l.lines64) -split "`n"
+        if ($l.open -ne 'true' -or $lines.Count -ne 115) { throw "surah list: open=$($l.open) lines=$($lines.Count)" }
+        if ($lines[0] -notmatch 'الإخلاص' -or $lines[1] -notmatch 'الفاتحة' -or $lines[114] -notmatch 'الناس') { throw "list order: $($lines[0]) / $($lines[1]) / $($lines[114])" }
+        if ((Text64 $l.button64) -ne 'القارئ: مشاري العفاسي') { throw "reciter button: $(Text64 $l.button64)" }
+        Send '{"type":"cmd","name":"list-button"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $l = Kv 'debug-list'
+        if ([int]$l.lines -ne 6) { throw "reciter list lines: $($l.lines)" }
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"2"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Get-Content $settings -Raw) -notmatch '"quranReciter"\s*:\s*"ar.husary"') { throw 'reciter not saved' }
+        $l = Kv 'debug-list'
+        if ((Text64 $l.button64) -notmatch 'الحصري') { throw "reciter button after the pick: $(Text64 $l.button64)" }
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'Quran: the end of the surah brings her back' {
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"113","reciter":"ar.husary"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(12)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'ended' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'false' -or $q.state -ne 'ended') { throw "quran: playing=$($q.playing) state=$($q.state)" }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the surah ended' }
+    }
     Step 'the city never reaches the log' {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'Damascus') { throw 'the city name is in engine.log' }

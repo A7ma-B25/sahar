@@ -305,6 +305,11 @@ internal sealed unsafe class App
             line => { reminderSpeaking = true; speech.Say(line); }, () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
         var music = new MusicTool(ui, media, line => { reminderSpeaking = false; speech.Say(line); });
+        using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => { reminderSpeaking = false; speech.Say(line); },
+            () => settings, s => { settings = s; SaveSettings(); }, _options.QuranBase);
+        quran.PlayingChanged += on => Safe(() => director.SetQuran(on));
+        menu.QuranPlaying = () => quran.Playing;
+        lifeDirector.QuranOn = () => quran.Playing;
         menu.RingOpened += ring => Safe(() => { if (ring == "music") music.SayNowPlaying(); });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
@@ -343,6 +348,8 @@ internal sealed unsafe class App
                 case "clipboard": clipboardTool.Open(); break;
                 case "prayer": prayer.Open(); break;
                 case "music-prev" or "music-toggle" or "music-next": music.Press(id); break;
+                case "quran": quran.Open(); break;
+                case "quran-stop": quran.Stop(); break;
                 case "timer-custom":
                     bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
                     {
@@ -505,6 +512,20 @@ internal sealed unsafe class App
                 listBubble.PickLine((int)Arg(r, "index"));
                 return new PipeReply(true);
             });
+            pipe.Register("list-button", _ =>
+            {
+                if (!listBubble.IsOpen) return new PipeReply(false, "no list");
+                listBubble.PressButton();
+                return new PipeReply(true);
+            });
+            pipe.Register("quran-play", r =>
+            {
+                int surah = (int)Arg(r, "surah");
+                if (surah is < 1 or > 114) return new PipeReply(false, "surah 1–114");
+                quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter);
+                return new PipeReply(true, quran.Describe());
+            });
+            pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>

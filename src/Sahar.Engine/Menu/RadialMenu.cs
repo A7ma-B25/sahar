@@ -24,6 +24,7 @@ internal sealed class RadialMenu : IDisposable
 
     public Func<bool> TimerRunning { get; set; } = () => false;
     public Func<bool> DndOn { get; set; } = () => false;
+    public Func<bool> QuranPlaying { get; set; } = () => false;
     public Func<ActivityLevel> Level { get; set; } = () => ActivityLevel.Medium;
 
     public bool IsOpen { get; private set; }
@@ -79,7 +80,7 @@ internal sealed class RadialMenu : IDisposable
     {
         if (!IsOpen) return;
         if (id == "back") { Show("main", MenuItems.Main); return; }
-        var options = MenuItems.Options(id, TimerRunning(), DndOn(), Level());
+        var options = MenuItems.Options(id, TimerRunning(), DndOn(), Level(), QuranPlaying());
         if (options.Count > 0) { Show(id, options); return; }
         Log.Write($"menu: {id}");
         Close();

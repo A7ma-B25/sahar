@@ -17,7 +17,7 @@ internal sealed class Director
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
     private string _lastKey = "idle";
-    private bool _hidden, _fullscreen, _dnd, _cameraMic, _adhan;
+    private bool _hidden, _fullscreen, _dnd, _cameraMic, _adhan, _quran;
     private DateTimeOffset _hiddenUntil;
 
     public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden)
@@ -81,11 +81,23 @@ internal sealed class Director
 
     public bool Adhan => _adhan;
 
-    public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan;
+    /// <summary>The Quran is playing: quiet, and her resting face is the quran face (events still show above it).</summary>
+    public void SetQuran(bool on)
+    {
+        if (on == _quran) return;
+        _quran = on;
+        ApplyQuiet();
+        Tick();
+    }
+
+    public bool Quran => _quran;
+
+    public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan || _quran;
 
     private void ApplyQuiet() =>
         _brain.SetQuiet((_fullscreen ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None) |
-            (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None) | (_adhan ? QuietReason.Adhan : QuietReason.None));
+            (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None) | (_adhan ? QuietReason.Adhan : QuietReason.None) |
+        (_quran ? QuietReason.Quran : QuietReason.None));
 
     /// <summary>"Hide 1 h" from the tray; <see cref="TimeSpan.Zero"/> shows her again (tray click).</summary>
     public void HideFor(TimeSpan span)
@@ -106,10 +118,11 @@ internal sealed class Director
     {
         var now = DateTimeOffset.UtcNow;
         var output = _brain.Tick(now);
-        if (output.ExpressionKey != _lastKey)
+        var key = _quran && output.ExpressionKey is "idle" or "music" ? "quran" : output.ExpressionKey;   // music is paused for it
+        if (key != _lastKey)
         {
-            _lastKey = output.ExpressionKey;
-            _express(output.ExpressionKey);
+            _lastKey = key;
+            _express(key);
         }
         bool hidden = output.Hidden || now < _hiddenUntil;
         if (hidden != _hidden)

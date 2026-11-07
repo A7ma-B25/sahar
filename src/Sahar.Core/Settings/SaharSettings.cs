@@ -38,6 +38,9 @@ public sealed record SaharSettings
     public PrayerMethod PrayerMethod { get; init; } = PrayerMethod.UmmAlQura;
     public bool PrayerHanafiAsr { get; init; }
     public int PrayerReminderMinutes { get; init; } = 10;
+    /// <summary>📖 The reciter chosen and the surah played last (shown first).</summary>
+    public string QuranReciter { get; init; } = "ar.alafasy";
+    public int? QuranLastSurah { get; init; }
     public bool UpdateCheckEnabled { get; init; } = true;
     public SeasonalIcon Seasonal { get; init; } = SeasonalIcon.Auto;
 }

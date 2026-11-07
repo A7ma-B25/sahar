@@ -284,5 +284,16 @@
   "orbTop": "#6E58C9",
   "orbBottom": "#2A1C66",
   "extras": "Stars"
+ },
+ {
+  "id": 26,
+  "key": "quran",
+  "mood": "Calm",
+  "eyes": "Closed",
+  "mouth": "Smile",
+  "orbGlyph": "📖",
+  "orbTop": "#5FB38A",
+  "orbBottom": "#1F5A3E",
+  "extras": "Headphones"
  }
 ]

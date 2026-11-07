@@ -153,6 +153,14 @@ internal sealed unsafe class ListBubble : IWindowHandler
         pick?.Invoke(index);
     }
 
+    /// <summary>Test mode: presses the button as a click would.</summary>
+    public void PressButton()
+    {
+        var action = _action;
+        Close();
+        action?.Invoke();
+    }
+
     /// <summary>Test mode: picks a line as a click would.</summary>
     public void PickLine(int index)
     {

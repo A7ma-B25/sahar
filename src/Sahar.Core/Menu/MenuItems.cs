@@ -27,7 +27,7 @@ public static class MenuItems
     public static MenuItem Back { get; } = new("back", "↩️", "رجوع");
 
     /// <summary>The second ring a button opens; empty for buttons that act at once.</summary>
-    public static IReadOnlyList<MenuItem> Options(string id, bool timerRunning, bool dndOn, ActivityLevel level) => id switch
+    public static IReadOnlyList<MenuItem> Options(string id, bool timerRunning, bool dndOn, ActivityLevel level, bool quranPlaying = false) => id switch
     {
         "timer" when timerRunning => [new("timer-cancel", "⏹️", "وقّف المؤقت"), Back],
         "timer" =>
@@ -42,6 +42,7 @@ public static class MenuItems
             Level("activity-lively", "☀️", "نشيطة", level == ActivityLevel.Lively),
             Back,
         ],
+        "listen" when quranPlaying => [new("quran-stop", "⏹️", "وقّف القرآن"), new("music", "🎵", "موسيقى"), Back],
         "listen" => [new("music", "🎵", "موسيقى"), new("quran", "📖", "قرآن"), Back],
         "music" =>
         [
