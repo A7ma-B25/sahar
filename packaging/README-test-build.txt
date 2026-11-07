@@ -1,8 +1,18 @@
-سَحَر · Sahar — نسخة تجريبية 0.8.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.9.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.8.0 — ردّات فعل وحركات حيّة
-------------------------------------------
+شو الجديد بـ 0.9.0 — الألعاب 🎮
+-------------------------------
+"العبي" بالقائمة صار فيها:
+- 🏃 الحقني: 45 ثانية، بتهرب من الماوس، وكل ما تكبس عليها بتمسكها نقطة.
+- 🙈 غمّضلي: بتتخبّى بطرف الشاشة وبيبيّن شي صغير منها، وبعد 20 ثانية بتلمعلك. 3 جولات، وبتقلك بكم ثانية لقيتها بالمعدل.
+- ⚽ الطابة: امسك الطابة بالماوس واشلفها، بتنط بالشاشة، وسحورة بتجيبها وبترجّعلك ياها (5 مرات).
+- ⭐ لقط النجوم: 40 ثانية، النجوم بتنزل وسحورة بتلحق الماوس تحت لتلقطهن.
+- 🎲 حركة عشوائية (متل "العبي" القديمة، مع الحركات الجديدة).
+وقت اللعبة الماوس للعبة بس: Esc أو كبسة يمين بتوقفها، وبالآخر بتقلك النتيجة.
+
+من 0.8.0 — ردّات فعل وحركات حيّة
+--------------------------------
 - إذا سحبتها وهزّيتها يمين وشمال بسرعة:
   😵 بتدوخ (عيون دوّامات ونجوم حول راسها)، أو 🤢 إذا الهزّة قوية بتستفرغ بشكل كرتوني وبعدين بتستحي،
   أو 😠 بتعصّب (حمرا وبخار) وبتزعل 20 ثانية: بتبعد عن الماوس، وإذا كبست عليها بتقلك "هِم! 😤"،
@@ -83,7 +93,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.8.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.9.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -139,11 +149,18 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.8.0 (Windows)
+Sahar — test build 0.9.0 (Windows)
 ==================================
 
-What's new in 0.8.0 — reactions and living moves
-------------------------------------------------
+What's new in 0.9.0 — games 🎮
+-----------------------------
+"العبي" in her menu now offers: 🏃 chase (45 s, she runs from the pointer, a click catches her), 🙈 hide and seek
+(she hides at an edge with a bit showing, a hint after 20 s, 3 rounds, your average time), ⚽ ball (grab and flick it,
+it bounces, she fetches it back, 5 times), ⭐ star catch (40 s, she follows the pointer along the bottom), and 🎲 a
+random move. During a game the mouse is the game's: Esc or a right-click stops it; she tells you the score.
+
+From 0.8.0 — reactions and living moves
+---------------------------------------
 - Drag her and shake her left and right quickly: 😵 she gets dizzy (spiral eyes, stars), 🤢 after a hard shake she is
   sick in a cartoon way and then a little embarrassed, or 😠 she gets angry (red, steam) and sulks for 20 s: she keeps
   away from the pointer, a click gets "هِم! 😤", and the third gentle poke makes up 💜. Shake her again within 5 minutes
@@ -221,7 +238,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.8.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.9.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".

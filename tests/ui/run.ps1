@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -879,6 +879,9 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Press 'play'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'game-chase,game-hide,game-ball,game-stars,play-random,back') { throw "play ring: $ids" }
+        Press 'play-random'
         Wait-Menu 'false' 1000 'menu closed after play' | Out-Null
         Wait-State { param($st) $st.motion -notin 'Hover', 'EyesFollow' } 1500 'a move' | Out-Null
         Start-Sleep -Seconds 9
@@ -1878,6 +1881,108 @@ function Stage-Prayer {
     Stop-Engine
 }
 
+function Game { Kv 'debug-game' }
+
+function Stage-Games {
+    Step 'start engine' {
+        Stop-Engine
+        Remove-Item (Join-Path $env:APPDATA 'Sahar\settings.json') -ErrorAction SilentlyContinue
+        Start-Engine
+        Pose-Body 600 350 | Out-Null
+    }
+    Step 'play opens the games; a game takes the mouse and Esc or stop ends it with the score' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'play'
+        Press 'game-chase'
+        $g = Game
+        if ($g.running -ne 'true' -or $g.kind -ne 'Chase') { throw "no chase game: $($g.running) $($g.kind)" }
+        if ((State).motion -ne 'Game') { throw "motion during the game: $((State).motion)" }
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        if ((Game).running -ne 'false') { throw 'still running after stop' }
+        if ((Text64 (Kv 'debug-comment').text64) -ne 'ولا مرة مسكتني 😜') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+        Wait-State { param($st) $st.motion -eq 'Hover' } 2000 'back to hovering' | Out-Null
+    }
+    Step 'chase: she runs from the pointer and a click on her counts' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $g = Game
+        $cx = [int]$g.x + [int]$g.w / 2; $cy = [int]$g.y + [int]$g.h / 2
+        [Mouse]::Move($cx - 50, $cy)
+        Start-Sleep -Milliseconds 700
+        $g2 = Game
+        if ([Math]::Abs([int]$g2.x - [int]$g.x) + [Math]::Abs([int]$g2.y - [int]$g.y) -lt 60) { throw "she did not run away ($($g.x),$($g.y) -> $($g2.x),$($g2.y))" }
+        Screenshot 'game-chase.png' | Out-Null
+        $hx = [int]$g2.x + [int]$g2.w / 2; $hy = [int]$g2.y + [int]$g2.h / 2
+        Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$hx`",`"y`":`"$hy`"}}" | Out-Null
+        if ((Game).score -ne '1') { throw "score after a catch: $((Game).score)" }
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        if ((Text64 (Kv 'debug-comment').text64) -ne 'مسكتني مرة وحدة! 🏆') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+    }
+    Step 'hide and seek: she hides at an edge, a click on what shows finds her' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(4)
+        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden 1' -and (Get-Date) -lt $deadline)
+        if ($g.state -ne 'hidden 1') { throw "not hidden: $($g.state)" }
+        $x = [int]$g.x; $y = [int]$g.y; $w = [int]$g.w; $h = [int]$g.h
+        $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $l = [Math]::Max($x, $work.Left); $t = [Math]::Max($y, $work.Top); $r = [Math]::Min($x + $w, $work.Right); $b = [Math]::Min($y + $h, $work.Bottom)
+        $shown = ($r - $l) * ($b - $t) / ($w * $h)
+        if ($shown -gt 0.4 -or $shown -lt 0.15) { throw "she shows $([int]($shown * 100))% of herself" }
+        Screenshot 'game-hide.png' | Out-Null
+        $px = [int](($l + $r) / 2); $py = [int](($t + $b) / 2)
+        Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$px`",`"y`":`"$py`"}}" | Out-Null
+        if ((Game).state -ne 'found 1') { throw "not found: $((Game).state)" }
+        if ((Text64 (Kv 'debug-comment').text64) -ne 'لقيتني! 😆') { throw "found line: '$(Text64 (Kv 'debug-comment').text64)'" }
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        if ((Text64 (Kv 'debug-comment').text64) -notmatch '^لقيتني بـ \d+ ثانية بالمعدل') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+    }
+    Step 'ball: a flick throws it, she fetches it and brings it back' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball"}}' | Out-Null
+        Start-Sleep -Milliseconds 1500
+        $g = Game
+        if ($g.ball -ne 'Ready') { throw "ball: $($g.ball)" }
+        $bx = [int]$g.ballX; $by = [int]$g.ballY
+        Send "{`"type`":`"cmd`",`"name`":`"game-flick`",`"args`":{`"x1`":`"$bx`",`"y1`":`"$by`",`"x2`":`"$($bx + 150)`",`"y2`":`"$($by - 60)`"}}" | Out-Null
+        if ((Game).ball -ne 'Flying') { throw "after the flick: $((Game).ball)" }
+        Start-Sleep -Milliseconds 600
+        Screenshot 'game-ball.png' | Out-Null
+        $deadline = (Get-Date).AddSeconds(15)
+        do { Start-Sleep -Milliseconds 300; $g = Game } while ($g.score -ne '1' -and (Get-Date) -lt $deadline)
+        if ($g.score -ne '1') { throw "no fetch: ball=$($g.ball) state=$($g.state)" }
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        if ((Text64 (Kv 'debug-comment').text64) -ne 'جبتلك الطابة مرة وحدة ⚽') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+    }
+    Step 'stars: they fall, she follows the pointer along the bottom, the game ends by itself' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Stars","seconds":"10"}}' | Out-Null
+        $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $end = (Get-Date).AddSeconds(9)
+        $shot = $false
+        while ((Get-Date) -lt $end) {
+            [Mouse]::Move([int]($work.Left + ($work.Width * (0.5 + 0.4 * [Math]::Sin(((Get-Date) - $end).TotalSeconds)))), $work.Bottom - 40)
+            Start-Sleep -Milliseconds 150
+            if (-not $shot -and [int](Game).stars -ge 3) { Screenshot 'game-stars.png' | Out-Null; $shot = $true }
+        }
+        $g = Game
+        if ([int]$g.y -lt $work.Bottom - 200) { throw "she is not along the bottom (y $($g.y))" }
+        $deadline = (Get-Date).AddSeconds(4)
+        do { Start-Sleep -Milliseconds 200 } while ((Game).running -eq 'true' -and (Get-Date) -lt $deadline)
+        if ((Game).running -ne 'false') { throw 'the stars game did not end by itself' }
+        $said = Text64 (Kv 'debug-comment').text64
+        if ($said -notmatch 'نجمة') { throw "result: '$said'" }
+        Write-Host "    stars result: $said"
+    }
+    Step 'a game is interrupted cleanly when she has to hide' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase"}}' | Out-Null
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null
+        Start-Sleep -Milliseconds 1200
+        if ((Game).running -ne 'false') { throw 'the game kept running while she hid' }
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Start-Sleep -Seconds 2
+        if (-not (State)) { throw 'no state after an interrupted game' }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -1892,6 +1997,7 @@ try {
             'menu' { Stage-Menu }
             'senses' { Stage-Senses }
             'prayer' { Stage-Prayer }
+            'games' { Stage-Games }
         }
     }
 }

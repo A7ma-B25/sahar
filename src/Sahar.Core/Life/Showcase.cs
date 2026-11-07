@@ -64,6 +64,7 @@ public static class Showcase
         MotionKind.Wander, MotionKind.PeekTaskbar, MotionKind.PerchWindow, MotionKind.CelebrateLoop, MotionKind.FollowCursor,
         MotionKind.HideBehindWindow, MotionKind.PlayWithMoon, MotionKind.Curious, MotionKind.Shy, MotionKind.HopIcons,
         MotionKind.Dance, MotionKind.Breathe, MotionKind.OrbitCursor,
+        MotionKind.WalkTaskbar, MotionKind.Stretch, MotionKind.Yawn, MotionKind.ScratchHead, MotionKind.MoonToss, MotionKind.ChaseButterfly,
     ];
 
     private static List<ShowcaseStep> Build()
@@ -71,7 +72,7 @@ public static class Showcase
         var steps = new List<ShowcaseStep>();
         foreach (var k in Enum.GetValues<MotionKind>())
         {
-            if (k == MotionKind.Drag) continue;
+            if (k is MotionKind.Drag or MotionKind.Game) continue;
             int n = (int)k;
             steps.Add(new(ShowcaseKind.Motion, k.ToString(), $"{n} · {MotionNames[n - 1]}", MotionSeconds(k)));
             if (k == MotionKind.Wander)

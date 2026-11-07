@@ -5,7 +5,7 @@ namespace Sahar.Core.Tests;
 public class SmokeTests
 {
     [Fact]
-    public void CoreInfo_Version_Is_0_8_0() => Assert.Equal("0.8.0", CoreInfo.Version);
+    public void CoreInfo_Version_Is_0_9_0() => Assert.Equal("0.9.0", CoreInfo.Version);
 
     [Fact]
     public void CoreInfo_Version_MatchesBuildVersion() =>

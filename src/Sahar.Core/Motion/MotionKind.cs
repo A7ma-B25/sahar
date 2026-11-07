@@ -11,6 +11,8 @@ public enum MotionKind
     // 0.8: shake reactions and living moves.
     Dizzy = 26, Angry = 27, WalkTaskbar = 28, Stretch = 29, Yawn = 30, ScratchHead = 31, WatchYou = 32, TypeAlong = 33,
     HopWindows = 34, MoonToss = 35, ChaseButterfly = 36,
+    // 0.9: a game moves her (not a move of her own; not in the show).
+    Game = 37,
 }
 
 public enum Edge { Bottom, Top, Left, Right }

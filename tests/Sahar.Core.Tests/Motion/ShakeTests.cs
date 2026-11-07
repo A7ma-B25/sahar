@@ -90,7 +90,7 @@ public class ShakeTests
     [Fact]
     public void Motions_26To36_HaveShowcaseSteps()
     {
-        Assert.Equal(36, Enum.GetValues<MotionKind>().Max(k => (int)k));
+        Assert.True(Enum.IsDefined((MotionKind)36));
         foreach (var k in new[] { "Dizzy", "Angry", "WalkTaskbar", "Stretch", "Yawn", "ScratchHead", "WatchYou", "TypeAlong", "HopWindows", "MoonToss", "ChaseButterfly" })
             Assert.Contains(Showcase.Steps, s => s.Id == k && s.Kind == ShowcaseKind.Motion && !s.Caption.Contains(k));
         Assert.Contains(Showcase.Steps, s => s.Id == "angry" && s.Caption.Contains("معصّبة"));

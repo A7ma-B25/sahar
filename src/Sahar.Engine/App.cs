@@ -1,3 +1,5 @@
+using Sahar.Engine.Games;
+using Sahar.Core.Games;
 using System.Globalization;
 using System.Numerics;
 using Sahar.Core.Art;
@@ -359,7 +361,9 @@ internal sealed unsafe class App
             lastDrift = DateTimeOffset.UtcNow;
             motion.DriftAway();
         });
-        lifeDirector.Sulking = Sulking;
+        // 🎮 Games (0.9): while one runs, life waits and the game moves her.
+        using var games = new GamePlayer(ui, host, sahar, motion, line => speech.Say(line), Express, _options.Capturable);
+        lifeDirector.Sulking = () => Sulking() || games.Running;
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
@@ -460,7 +464,11 @@ internal sealed unsafe class App
                 case "dnd-120": dndTool.TurnOn(TimeSpan.FromHours(2)); break;
                 case "dnd-on": dndTool.TurnOn(null); break;
                 case "dnd-off": dndTool.TurnOff(); break;
-                case "play":
+                case "game-chase": games.Start(GameKind.Chase); break;
+                case "game-hide": games.Start(GameKind.HideSeek); break;
+                case "game-ball": games.Start(GameKind.Ball); break;
+                case "game-stars": games.Start(GameKind.Stars); break;
+                case "play-random":
                     var picks = Showcase.PlayPicks;
                     int pick = playRng.Next(picks.Count + 1);
                     if (pick == picks.Count)
@@ -631,6 +639,20 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-shake", _ => new PipeReply(true,
                 $"last={motion.LastReaction} sulking={(Sulking() ? "true" : "false")} pokes={sulk.Pokes} motion={motion.Current}"));
+            pipe.Register("game-start", r =>
+            {
+                if (r.Args?.TryGetValue("kind", out var k) != true || !Enum.TryParse<GameKind>(k, true, out var kind)) return new PipeReply(false, "game-start needs kind");
+                games.Start(kind, r.Args.ContainsKey("seconds") ? Arg(r, "seconds") : null);
+                return new PipeReply(true, games.Describe());
+            });
+            pipe.Register("game-click", r => { games.Click(new Vector2(Arg(r, "x"), Arg(r, "y"))); return new PipeReply(true, games.Describe()); });
+            pipe.Register("game-flick", r =>
+            {
+                games.Flick(new Vector2(Arg(r, "x1"), Arg(r, "y1")), new Vector2(Arg(r, "x2"), Arg(r, "y2")));
+                return new PipeReply(true, games.Describe());
+            });
+            pipe.Register("game-stop", _ => { games.Stop(); return new PipeReply(true, games.Describe()); });
+            pipe.Register("debug-game", _ => new PipeReply(true, games.Describe()));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
             pipe.Register("tray-pick", r =>
             {

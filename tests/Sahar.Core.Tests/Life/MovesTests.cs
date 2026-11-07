@@ -92,7 +92,7 @@ public class ShowcaseTests
         var steps = Showcase.Steps;
         var motions = steps.Where(s => s.Kind == ShowcaseKind.Motion).Select(s => s.Id).ToHashSet();
         foreach (var k in Enum.GetValues<MotionKind>())
-            if (k != MotionKind.Drag) Assert.Contains(k.ToString(), motions);
+            if (k is not (MotionKind.Drag or MotionKind.Game)) Assert.Contains(k.ToString(), motions);   // a game moves her; not a show step
         Assert.DoesNotContain(MotionKind.Drag.ToString(), motions);
         var flights = steps.Where(s => s.Kind == ShowcaseKind.Flight).Select(s => s.Id).ToHashSet();
         foreach (var f in Enum.GetValues<FlightPattern>()) Assert.Contains(f.ToString(), flights);

@@ -42,6 +42,11 @@ public static class MenuItems
             Level("activity-lively", "☀️", "نشيطة", level == ActivityLevel.Lively),
             Back,
         ],
+        "play" =>
+        [
+            new("game-chase", "🏃", "الحقني"), new("game-hide", "🙈", "غمّضلي"), new("game-ball", "⚽", "الطابة"),
+            new("game-stars", "⭐", "لقط النجوم"), new("play-random", "🎲", "حركة عشوائية"), Back,
+        ],
         "listen" when quranPlaying => [new("quran-stop", "⏹️", "وقّف القرآن"), new("music", "🎵", "موسيقى"), Back],
         "listen" => [new("music", "🎵", "موسيقى"), new("quran", "📖", "قرآن"), Back],
         "music" =>

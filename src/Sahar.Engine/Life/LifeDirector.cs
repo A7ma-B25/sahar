@@ -170,7 +170,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (Enabled && _routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         // Something needs you (Claude asks, the timer is done, a reminder): she draws your eye, paced.
-        if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye)
+        if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye or MotionKind.Game)
             && _attention.ShouldPlay(_director.CurrentKey, now, DndOn() || AdhanOn() || QuranOn()))
         {
             Log.Write($"life: Attention for '{_director.CurrentKey}'");

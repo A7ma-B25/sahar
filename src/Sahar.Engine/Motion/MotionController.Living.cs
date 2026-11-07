@@ -34,6 +34,30 @@ internal sealed partial class MotionController
         return true;
     }
 
+    // ---------- 37 Game ----------
+
+    /// <summary>A game takes her over: its tick moves her each frame (her eyes still follow the mouse).</summary>
+    public void StartGame(Func<float, bool> tick)
+    {
+        Reset(MotionKind.Game);
+        _eyes = true;
+        _step = tick;
+        UpdateTicker();
+    }
+
+    /// <summary>Puts her body's top-left where a game wants it (it may be partly off-screen while she hides).</summary>
+    public void GameMoveTo(Vector2 topLeft) => TopLeft = topLeft;
+
+    public Vector2 GameBodySize => BodySize;
+
+    /// <summary>The game is over: back on screen, hovering.</summary>
+    public void EndGame()
+    {
+        if (Current != MotionKind.Game) return;
+        Reclamp();
+        Play(MotionKind.Hover);
+    }
+
     // ---------- 28 WalkTaskbar ----------
 
     /// <summary>She lands on the taskbar's edge, walks a few steps with a bob, sits a moment, then floats up.</summary>
