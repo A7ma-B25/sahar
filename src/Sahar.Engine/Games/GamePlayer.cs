@@ -344,7 +344,7 @@ internal sealed class GamePlayer : IDisposable
     {
         _hidden = false;
         if (found) _found.Add(_roundClock);
-        Score = _found.Count == 0 ? 0 : (int)MathF.Round(_found.Average());
+        Score = _found.Count == 0 ? 0 : Math.Max(1, (int)MathF.Ceiling(_found.Average()));   // a find under a second is still "1 s"
         var w = Work;
         MoveTo(new Vector2(w.X + w.Width / 2 - Size.X / 2, w.Y + w.Height / 2 - Size.Y / 2), 0.5f);
         _say(Sahar.Core.Settings.Address.ToYou(found ? "لقيتني! 😆" : "هون كنت! 😜"));
