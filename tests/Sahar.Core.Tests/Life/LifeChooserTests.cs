@@ -83,4 +83,42 @@ public class LifeChooserTests
         float disliked = Draw(Ctx(), 4000, a => a == LifeAction.Wander ? 0.25f : 1f)[LifeAction.Wander];
         Assert.True(liked > 4 * disliked, $"{liked} vs {disliked}");
     }
+
+    private static readonly LifeAction[] Living =
+    [
+        LifeAction.WalkTaskbar, LifeAction.Stretch, LifeAction.Yawn, LifeAction.ScratchHead, LifeAction.WatchYou,
+        LifeAction.HopWindows, LifeAction.MoonToss, LifeAction.ChaseButterfly,
+    ];
+
+    [Fact]
+    public void Choose_LivingMoves_AtLeastAsOftenAsFlying()
+    {
+        var d = Draw(Ctx(), 4000);
+        int living = Living.Sum(a => d[a]);
+        Assert.All(Living, a => Assert.True(d[a] > 0, $"{a} never chosen"));
+        Assert.True(living >= d[LifeAction.Flight] + d[LifeAction.Wander], $"living {living} vs flying {d[LifeAction.Flight] + d[LifeAction.Wander]}");
+    }
+
+    [Fact]
+    public void Choose_VideoInFront_NoLivingMoves() => Assert.Equal(0, Living.Sum(a => Draw(Ctx(video: true), 2000)[a]));
+
+    [Fact]
+    public void Choose_NoWindow_NoWatchingOrHopping()
+    {
+        var d = Draw(Ctx(perch: false), 3000);
+        Assert.Equal(0, d[LifeAction.WatchYou]);
+        Assert.Equal(0, d[LifeAction.HopWindows]);
+    }
+
+    [Theory]
+    [InlineData(0.39, null, true)]       // 40% of typing sessions
+    [InlineData(0.40, null, false)]
+    [InlineData(0.10, 9.0, false)]       // at most once per 10 minutes
+    [InlineData(0.10, 10.5, true)]
+    public void TypeAlong_SometimesWhenYouStartTyping(double roll, double? minutesSinceLast, bool expected)
+    {
+        var now = new DateTimeOffset(2026, 11, 7, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset? last = minutesSinceLast is { } m ? now.AddMinutes(-m) : null;
+        Assert.Equal(expected, TypeAlongPolicy.Should(now, last, roll));
+    }
 }

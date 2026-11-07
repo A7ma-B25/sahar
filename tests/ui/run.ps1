@@ -394,11 +394,13 @@ function Stage-Motion {
             }
         }
     }
-    $script:moveTimes = @{ FollowCursor = 6; HideBehindWindow = 7.5; Shy = 2.5; StartupEntry = 3; Goodbye = 2; HopIcons = 3.5; Attention = 3.6; NapOnIcon = 3 }
-    foreach ($kind in 'FollowCursor', 'HideBehindWindow', 'Shy', 'StartupEntry', 'Goodbye', 'HopIcons', 'Attention', 'NapOnIcon') {
+    $script:moveTimes = @{ FollowCursor = 6; HideBehindWindow = 7.5; Shy = 2.5; StartupEntry = 3; Goodbye = 2; HopIcons = 3.5; Attention = 3.6; NapOnIcon = 3
+        Dizzy = 3.6; Angry = 3.2; WalkTaskbar = 10; Stretch = 2.6; Yawn = 2.3; ScratchHead = 2.3; WatchYou = 7.5; HopWindows = 4.5; MoonToss = 2.6; ChaseButterfly = 6.5 }
+    foreach ($kind in 'FollowCursor', 'HideBehindWindow', 'Shy', 'StartupEntry', 'Goodbye', 'HopIcons', 'Attention', 'NapOnIcon',
+        'Dizzy', 'Angry', 'WalkTaskbar', 'Stretch', 'Yawn', 'ScratchHead', 'WatchYou', 'HopWindows', 'MoonToss', 'ChaseButterfly') {
         Step "motion $kind" {
             $w = $null
-            if ($kind -eq 'HideBehindWindow') { $w = Start-TestWindow 'typing' }
+            if ($kind -in 'HideBehindWindow', 'WatchYou', 'HopWindows') { $w = Start-TestWindow 'typing' }
             try {
                 Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
                 Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"250"}}' | Out-Null
@@ -1042,7 +1044,7 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
         $actions = [int](Life).actions
-        $r = Send '{"type":"cmd","name":"showcase","args":{"from":"30"}}'
+        $r = Send '{"type":"cmd","name":"showcase","args":{"from":"46"}}'   # the expressions (motions 26–36 made 30+ slow)
         if (-not $r.ok) { throw "showcase not ok: $($r.error)" }
         $seen = @{}
         $deadline = (Get-Date).AddSeconds(35)
@@ -1559,6 +1561,36 @@ function Stage-Life {
             Wait-State { param($st) $st.motion -ne 'PerchWindow' } 2500 'leaving the maximized window' | Out-Null
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
+    }
+    Step 'her own moves now include living ones (life picks them)' {
+        foreach ($act in 'WalkTaskbar', 'Stretch', 'MoonToss', 'ChaseButterfly') {
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"400"}}' | Out-Null
+            Send ('{"type":"cmd","name":"life","args":{"gap":"600","now":"' + $act + '"}}') | Out-Null
+            Wait-State { param($st) $st.motion -eq $act } 4000 "life playing $act" | Out-Null
+            Wait-State { param($st) $st.motion -eq 'Hover' } 15000 "$act ending" | Out-Null
+        }
+    }
+    Step 'when you start typing she sometimes types along beside your window' {
+        $w = Start-TestWindow 'typing'
+        try {
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Send '{"type":"cmd","name":"pose","args":{"x":"1100","y":"300"}}' | Out-Null
+            Send '{"type":"cmd","name":"typealong-next"}' | Out-Null
+            & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null
+            Start-Sleep -Milliseconds 300
+            $seen = $false
+            $end = (Get-Date).AddSeconds(4)
+            while ((Get-Date) -lt $end) {
+                [System.Windows.Forms.SendKeys]::SendWait('abc ')
+                Start-Sleep -Milliseconds 150
+                if ((State).motion -eq 'TypeAlong') { $seen = $true }
+            }
+            if (-not $seen) { throw 'she did not type along' }
+            Screenshot 'type-along.png' | Out-Null
+            Wait-State { param($st) $st.motion -eq 'Hover' } 5000 'typing along ends when you stop' | Out-Null
+        }
+        finally { Stop-Process -Id $w.Id -Force -ErrorAction SilentlyContinue }
     }
     Step 'what she learned is saved when Windows shuts down' {
         Remove-Item $lifePath -ErrorAction SilentlyContinue

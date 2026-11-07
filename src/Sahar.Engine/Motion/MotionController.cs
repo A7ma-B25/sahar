@@ -125,7 +125,9 @@ internal sealed partial class MotionController
             case MotionKind.NapOnIcon: Reset(k); StartCorner(sleep: true, along: 1f / 3); break;
             case MotionKind.Dizzy: Reset(k); StartDizzy(sick: false); break;
             case MotionKind.Angry: Reset(k); StartAngry(); break;
-            default: return false;
+            default:
+                if (!PlayLiving(k)) return false;
+                break;
         }
         UpdateTicker();
         return true;
@@ -150,6 +152,7 @@ internal sealed partial class MotionController
         _v.Character.RotationAngleInDegrees = 0;
         _v.Face.Container.Offset = Vector3.Zero;
         RemoveRings();
+        ResetLiving();
         if (BodyScaleBusy)
         {
             // An interrupted breath or shy shrink: stop it, and give the expression back its own body animations.

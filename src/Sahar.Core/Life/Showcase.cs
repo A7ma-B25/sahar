@@ -50,6 +50,9 @@ public static class Showcase
         MotionKind.PeekTaskbar or MotionKind.SleepInCorner or MotionKind.NapOnIcon => 6f,
         MotionKind.Wander or MotionKind.PerchWindow or MotionKind.FollowCursor => 7f,
         MotionKind.HideBehindWindow => 8f, MotionKind.Breathe => 9f, MotionKind.Dance => 13f,
+        MotionKind.Dizzy => 3.8f, MotionKind.Angry => 3.4f, MotionKind.WalkTaskbar => 10f, MotionKind.Stretch => 2.8f,
+        MotionKind.Yawn or MotionKind.ScratchHead => 2.5f, MotionKind.WatchYou => 8f, MotionKind.HopWindows => 5f,
+        MotionKind.MoonToss => 2.8f, MotionKind.ChaseButterfly => 6.8f,
         _ => 4f,
     };
 

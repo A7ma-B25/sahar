@@ -116,6 +116,11 @@ internal sealed unsafe class LifeDirector : IDisposable
     public bool Paused { get; set; }
     /// <summary>She is sulking after an angry shake: no moves of her own until it passes.</summary>
     public Func<bool> Sulking { get; set; } = () => false;
+    private DateTimeOffset? _lastTypeAlong;
+    private bool _forceTypeAlong;
+
+    /// <summary>Test mode: the next time you start typing she types along.</summary>
+    public void ForceTypeAlong() => _forceTypeAlong = true;
 
     public ActivityLevel Level
     {
@@ -141,7 +146,20 @@ internal sealed unsafe class LifeDirector : IDisposable
             : TimeSpan.MaxValue;
         _routine.Tick(now, sinceInput < TimeSpan.FromMinutes(1));
         bool typing = _typing.Update(now, _sinceKeyboard());
-        if (typing != Typing) { Typing = typing; TypingChanged?.Invoke(typing); }
+        if (typing != Typing)
+        {
+            Typing = typing;
+            TypingChanged?.Invoke(typing);
+            // "بتكتب معك": sometimes, when you start typing, she sits beside your window and taps along.
+            if (typing && Enabled && !Paused && !Sulking() && Resting && !_director.Hidden && !_director.Quiet &&
+                (_forceTypeAlong || TypeAlongPolicy.Should(now, _lastTypeAlong, _rng.NextDouble())))
+            {
+                _forceTypeAlong = false;
+                _lastTypeAlong = now;
+                Log.Write("life: TypeAlong");
+                _motion.TypeAlong(() => Typing);
+            }
+        }
         // Her routine follows life: a test machine's own clock (CI runs at night too) never posts it into other stages.
         if (Enabled && _routine.TakeBreakDue()) _director.Post(EventKind.Break);
         if (Enabled && _routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
@@ -244,6 +262,14 @@ internal sealed unsafe class LifeDirector : IDisposable
                     LifeAction.FollowCursor => MotionKind.FollowCursor,
                     LifeAction.HideBehindWindow => MotionKind.HideBehindWindow,
                     LifeAction.HopIcons => MotionKind.HopIcons,
+                    LifeAction.WalkTaskbar => MotionKind.WalkTaskbar,
+                    LifeAction.Stretch => MotionKind.Stretch,
+                    LifeAction.Yawn => MotionKind.Yawn,
+                    LifeAction.ScratchHead => MotionKind.ScratchHead,
+                    LifeAction.WatchYou => MotionKind.WatchYou,
+                    LifeAction.HopWindows => MotionKind.HopWindows,
+                    LifeAction.MoonToss => MotionKind.MoonToss,
+                    LifeAction.ChaseButterfly => MotionKind.ChaseButterfly,
                     _ => MotionKind.SleepInCorner,
                 });
                 break;

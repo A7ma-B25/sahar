@@ -7,6 +7,8 @@ public enum LifeAction
 {
     None, Wander, PeekTaskbar, PerchWindow, CelebrateLoop, SleepInCorner,
     Flight, PlayWithMoon, Curious, Dance, Breathe, OrbitCursor, Moment, FollowCursor, HideBehindWindow, HopIcons,
+    // 0.8: living moves (ground and play), together at least as likely as flying.
+    WalkTaskbar, Stretch, Yawn, ScratchHead, WatchYou, HopWindows, MoonToss, ChaseButterfly,
 }
 
 /// <summary>How long until her next own action, by activity level (spec §6).</summary>

@@ -41,9 +41,17 @@ public static class LifeChooser
                 LifeAction.FollowCursor => 2,
                 LifeAction.HopIcons => 2,
                 LifeAction.HideBehindWindow => c.HasPerchableWindow ? 1 : 0,
-                LifeAction.Dance => c.MusicPlaying ? 5 : 0,
+                LifeAction.Dance => c.MusicPlaying ? 7 : 0,   // with more living moves, still about one turn in six
                 LifeAction.CelebrateLoop => lateNight ? 0 : c.MusicPlaying ? 3 : 1,
                 LifeAction.SleepInCorner => lateNight ? 2 : 0,
+                LifeAction.WalkTaskbar => 1.5f,
+                LifeAction.Stretch => 1.5f,
+                LifeAction.Yawn => lateNight ? 2 : 0.75f,
+                LifeAction.ScratchHead => 1,
+                LifeAction.WatchYou => c.HasPerchableWindow ? 1.5f : 0,
+                LifeAction.HopWindows => c.HasPerchableWindow ? 1 : 0,
+                LifeAction.MoonToss => 1.5f,
+                LifeAction.ChaseButterfly => 1.5f,
                 _ => 0,
             };
             w[i] = b * MathF.Max(0, learnedWeight(Candidates[i]));
@@ -61,4 +69,14 @@ public static class LifeChooser
         }
         return Candidates[last];   // rounding: the last action that could be chosen
     }
+}
+
+/// <summary>"بتكتب معك": sometimes, when you start typing, she sits beside your window and pretends to type along.</summary>
+public static class TypeAlongPolicy
+{
+    public const double Chance = 0.4;
+    public static readonly TimeSpan Cooldown = TimeSpan.FromMinutes(10);
+
+    public static bool Should(DateTimeOffset now, DateTimeOffset? last, double roll) =>
+        roll < Chance && (last is not { } l || now - l >= Cooldown);
 }

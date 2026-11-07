@@ -672,6 +672,7 @@ internal sealed unsafe class App
                     lifeDirector.ActNow(Enum.TryParse<LifeAction>(a, out var act) && Enum.IsDefined(act) ? act : null);
                 return new PipeReply(true, lifeDirector.Describe());
             });
+            pipe.Register("typealong-next", _ => { lifeDirector.Enabled = true; lifeDirector.ForceTypeAlong(); return new PipeReply(true); });
             pipe.Register("set-activity", r =>
             {
                 if (r.Args is null || !r.Args.TryGetValue("level", out var name) || !Enum.TryParse<ActivityLevel>(name, out var level) || !Enum.IsDefined(level))
