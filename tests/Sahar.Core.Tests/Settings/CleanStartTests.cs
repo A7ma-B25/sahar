@@ -52,4 +52,17 @@ public class CleanStartTests : IDisposable
         Assert.False(File.Exists(Path.Combine(Roaming, "notes.json")));
         Assert.True(File.Exists(Path.Combine(Roaming, "data-version")));
     }
+
+    [Fact]
+    public void DataThisVersionSaved_WithoutAMarker_IsNeverWiped()
+    {
+        // The marker lost (its write failed, or the folder was emptied while she ran): settings that only the clean
+        // version writes ("helloDone") show the data is new, so nothing goes.
+        Directory.CreateDirectory(Roaming);
+        File.WriteAllText(Path.Combine(Roaming, "settings.json"), "{\n  \"helloDone\": true\n}");
+        File.WriteAllText(Path.Combine(Roaming, "notes.json"), "[\"mine\"]");
+        Assert.False(CleanStart.Run(Roaming, Local));
+        Assert.True(File.Exists(Path.Combine(Roaming, "notes.json")));
+        Assert.True(File.Exists(Path.Combine(Roaming, "data-version")));
+    }
 }

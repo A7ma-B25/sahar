@@ -74,7 +74,12 @@ public class FullscreenDebounceTests
     public void Fullscreen_MaximizedBrowserWithAutoHideTaskbar_IsNot() =>
         // A maximized Chrome/Edge has no caption and, with the taskbar auto-hidden, covers the whole monitor:
         // she hid over the browser and showed only on the desktop (0.6.0).
-        Assert.False(Fullscreen.IsFullscreen(new RectI(-8, -8, 1928, 1088), new RectI(0, 0, 1920, 1080), "Chrome_WidgetWin_1", hasCaption: false, maximized: true));
+        Assert.False(Fullscreen.IsFullscreen(new RectI(-8, -8, 1928, 1088), new RectI(0, 0, 1920, 1080), "Chrome_WidgetWin_1", hasCaption: false, maximized: true, resizable: true));
+
+    [Fact]
+    public void Fullscreen_MaximizedPopupCoveringTheMonitor_StillIs() =>
+        // An app that makes fullscreen from a maximized window without a sizing frame (not a resizable app window).
+        Assert.True(Fullscreen.IsFullscreen(new RectI(0, 0, 1920, 1080), new RectI(0, 0, 1920, 1080), "VideoPlayer", hasCaption: false, maximized: true, resizable: false));
 
     [Fact]
     public void Fullscreen_BrowserF11_StillIs() =>

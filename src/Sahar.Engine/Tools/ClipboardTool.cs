@@ -12,7 +12,7 @@ internal sealed class ClipboardTool(ListBubble list, ClipboardSense sense, Func<
     {
         var items = sense.History.Items;
         var lines = items.Select(Line).ToList();
-        if (lines.Count == 0) lines.Add("لسا ما نسخت شي");
+        if (lines.Count == 0) lines.Add(Sahar.Core.Settings.Address.ToYou("لسا ما نسخت شي"));
         list.Show(body(), "📋 آخر شي نسخته", lines, "امسح الكل", i => { if (i < items.Count) Pick(i); }, Clear);
     }
 

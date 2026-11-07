@@ -11,7 +11,7 @@ namespace Sahar.Engine.Senses;
 internal static unsafe class FullscreenWatcher
 {
     private const int GWL_STYLE = -16;
-    private const long WS_CAPTION = 0x00C00000;
+    private const long WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000;
     private const int QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4;
 
     /// <summary>What the check sees, for test diagnostics.</summary>
@@ -28,8 +28,22 @@ internal static unsafe class FullscreenWatcher
                $"monitor {m.Bounds} caption {caption} maximized {Native.IsZoomed(fg) != 0} own {Win.Own.Contains(fg)} quns {state} => {Check()}";
     }
 
-    /// <summary>The foreground window's class (never its title), for the log when she hides.</summary>
-    public static string ForegroundClass() => Native.ClassName(Native.GetForegroundWindow());
+    /// <summary>Why she hides, for the log: Windows' own fullscreen state and what the window looks like (its class,
+    /// never its title).</summary>
+    public static string Reason()
+    {
+        int state = -1;
+        Native.SHQueryUserNotificationState(&state);
+        nint fg = Native.GetForegroundWindow();
+        RECT r = default;
+        Native.GetWindowRect(fg, &r);
+        var m = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
+        long style = Native.GetWindowLongPtr(fg, GWL_STYLE);
+        var w = Monitors.ToRect(r);
+        bool covers = w.Left <= m.Bounds.Left && w.Top <= m.Bounds.Top && w.Right >= m.Bounds.Right && w.Bottom >= m.Bounds.Bottom;
+        return $"class '{Native.ClassName(fg)}' quns {state} caption {(style & WS_CAPTION) == WS_CAPTION} " +
+               $"maximized {Native.IsZoomed(fg) != 0} sizing-frame {(style & WS_THICKFRAME) != 0} covers-monitor {covers}";
+    }
 
     public static bool Check()
     {
@@ -42,7 +56,8 @@ internal static unsafe class FullscreenWatcher
         RECT r;
         if (Native.GetWindowRect(fg, &r) == 0) return false;
         var monitor = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
-        bool hasCaption = (Native.GetWindowLongPtr(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
-        return Fullscreen.IsFullscreen(Monitors.ToRect(r), monitor.Bounds, Native.ClassName(fg), hasCaption, Native.IsZoomed(fg) != 0);
+        long style = Native.GetWindowLongPtr(fg, GWL_STYLE);
+        return Fullscreen.IsFullscreen(Monitors.ToRect(r), monitor.Bounds, Native.ClassName(fg), (style & WS_CAPTION) == WS_CAPTION,
+            Native.IsZoomed(fg) != 0, (style & WS_THICKFRAME) != 0);
     }
 }

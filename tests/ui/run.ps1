@@ -1765,8 +1765,28 @@ function Stage-Prayer {
         $title = Text64 (Kv 'debug-bubble').title64
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         if ($title -ne 'اكتبي ملاحظة…') { throw "the note bubble to a woman: '$title'" }
+        # Only her own words change: what you copied stays exactly as you copied it.
+        $copied = -join ([char[]](0x0631, 0x062C, 0x0639, 0x062A, 0x0020, 0x0645, 0x0646, 0x0020, 0x0627, 0x0644, 0x0634, 0x063A, 0x0644))   # رجعت من الشغل
+        Set-Clipboard -Value $copied
+        Start-Sleep -Milliseconds 800
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'clipboard'
+        Start-Sleep -Milliseconds 400
+        $l = Kv 'debug-list'
+        $first = ((Text64 $l.lines64) -split "`n")[0]
+        $button = Text64 $l.button64
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+        if ($first -ne $copied) { throw "the copied text changed in the list: '$first'" }
+        if ($button -ne 'امسحي الكل') { throw "her button to a woman: '$button'" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'Sami') { throw 'the name is in engine.log' }
+    }
+    Step 'the tray can ask who you are again' {
+        Send '{"type":"cmd","name":"tray-pick","args":{"item":"who"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $b = Kv 'debug-bubble'
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        if ($b.open -ne 'true' -or (Text64 $b.title64) -notmatch 'شو بدك ناديك') { throw 'the tray did not ask again' }
     }
     Step 'the city never reaches the log' {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw

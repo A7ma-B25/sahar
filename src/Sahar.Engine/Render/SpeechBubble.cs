@@ -38,7 +38,6 @@ internal sealed class SpeechBubble : IDisposable
     public void Say(string text, bool comment = false)
     {
         Remove();
-        text = Sahar.Core.Settings.Address.ToYou(text);   // her words agree with who she talks to
         Text = text;
         _comment = comment;
         var c = _v.Root.Compositor;

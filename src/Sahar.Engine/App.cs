@@ -263,7 +263,7 @@ internal sealed unsafe class App
         var apps = new AppWatch(ui,
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => director.CurrentKey == "sleep",
-            say: line => speech.Say(line, comment: true), ownComments: !_options.TestMode);
+            say: line => speech.Say(Address.ToYou(line), comment: true), ownComments: !_options.TestMode);   // her words agree with you
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
@@ -330,6 +330,7 @@ internal sealed unsafe class App
             speech.Say(name is null ? "تشرفنا 💜" : $"تشرفنا يا {name} 💜");
         }
 
+        tray.WhoAmI += () => Safe(StartHello);
         if (!_options.TestMode && !settings.HelloDone)
         {
             var helloTimer = ui.CreateTimer();
@@ -562,6 +563,11 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
+            pipe.Register("tray-pick", r =>
+            {
+                if (r.Args?.TryGetValue("item", out var item) != true || !tray.Pick(item)) return new PipeReply(false, "unknown tray item");
+                return new PipeReply(true);
+            });
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>

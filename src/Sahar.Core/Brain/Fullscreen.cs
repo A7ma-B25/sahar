@@ -14,10 +14,12 @@ public static class Fullscreen
     ];
 
     /// <summary>A borderless, non-shell window that covers the whole monitor.</summary>
-    /// <param name="maximized">A maximized window is never fullscreen, even one with no caption covering the
-    /// monitor (a browser with the taskbar auto-hidden).</param>
-    public static bool IsFullscreen(RectI window, RectI monitor, string windowClass, bool hasCaption, bool maximized = false) =>
-        !hasCaption && !maximized
+    /// <param name="maximized">With <paramref name="resizable"/> (a sizing frame): a maximized app window is never
+    /// fullscreen, even one with no caption covering the monitor (Electron apps, a browser with the taskbar auto-hidden).
+    /// Real fullscreen drops the sizing frame, so a maximized window without one still counts.</param>
+    public static bool IsFullscreen(RectI window, RectI monitor, string windowClass, bool hasCaption, bool maximized = false,
+        bool resizable = false) =>
+        !hasCaption && !(maximized && resizable)
         && Array.IndexOf(ShellClasses, windowClass) < 0
         && window.Left <= monitor.Left && window.Top <= monitor.Top
         && window.Right >= monitor.Right && window.Bottom >= monitor.Bottom;

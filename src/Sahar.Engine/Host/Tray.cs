@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -56,6 +56,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     /// <summary>The level shown as checked in the menu.</summary>
     public ActivityLevel Activity { get; set; } = ActivityLevel.Medium;
     public event Action? Quit;
+    /// <summary>"مين أنا؟": she asks your name and whether you are a man or a woman again.</summary>
+    public event Action? WhoAmI;
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
     /// <summary>Windows is shutting down, logging off or restarting for an update.</summary>
@@ -151,7 +153,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
         fixed (char* folder = Sahar.Core.Settings.Address.ToYou("افتح مجلد سَحَر / Open Sahar folder"))
         fixed (char* show = Sahar.Core.Settings.Address.ToYou(ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves"))
-        fixed (char* weather = Sahar.Core.Settings.Address.ToYou(WeatherCity is { } city ? $"الطقس: {city} — وقّف / Weather: {city} — off" : "الطقس… / Weather…"))
+        fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — {Sahar.Core.Settings.Address.ToYou("وقّف")} / Weather: {city} — off" : "الطقس… / Weather…")
+        fixed (char* who = "مين أنا؟ (اسمي) / Who am I?")
         fixed (char* quit = "إغلاق / Quit")
         {
             Native.AppendMenu(menu, MF_STRING, CmdShow, show);
@@ -159,6 +162,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
             Native.AppendMenu(menu, MF_STRING, CmdWeather, weather);
+            Native.AppendMenu(menu, MF_STRING, CmdWho, who);
             Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
@@ -172,7 +176,16 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         else if (cmd == CmdFolder) OpenFolder();
         else if (cmd == CmdShow) ShowToggled?.Invoke();
         else if (cmd == CmdWeather) WeatherClicked?.Invoke();
+        else if (cmd == CmdWho) WhoAmI?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
+    }
+
+    /// <summary>Test mode: a tray item as a click would pick it.</summary>
+    public bool Pick(string item)
+    {
+        if (item != "who") return false;
+        WhoAmI?.Invoke();
+        return true;
     }
 
     /// <summary>Opens %LocalAppData%\Sahar (where engine.log lives) in Explorer, so the log is easy to send.</summary>

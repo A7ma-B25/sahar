@@ -25,7 +25,7 @@ public static class CleanStart
         {
             return false;   // unreadable marker: never wipe on a guess
         }
-        bool wiped = Empty(roaming) | Empty(local);
+        bool wiped = !SavedByThisVersion(roaming) && (Empty(roaming) | Empty(local));
         try
         {
             Directory.CreateDirectory(roaming);
@@ -38,11 +38,34 @@ public static class CleanStart
         return wiped;
     }
 
+    /// <summary>Settings only the clean version writes: the data is this version's even if the marker went missing.</summary>
+    private static bool SavedByThisVersion(string roaming)
+    {
+        try
+        {
+            var settings = Path.Combine(roaming, "settings.json");
+            return File.Exists(settings) && File.ReadAllText(settings).Contains("\"helloDone\"", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return true;   // can't tell: keep everything
+        }
+    }
+
     private static bool Empty(string folder)
     {
-        if (!Directory.Exists(folder)) return false;
+        List<string> entries;
+        try
+        {
+            if (!Directory.Exists(folder)) return false;
+            entries = Directory.EnumerateFileSystemEntries(folder).ToList();
+        }
+        catch
+        {
+            return false;   // a folder it can't list stays as it is; she still starts
+        }
         bool any = false;
-        foreach (var entry in Directory.EnumerateFileSystemEntries(folder).ToList())
+        foreach (var entry in entries)
         {
             any = true;
             try
