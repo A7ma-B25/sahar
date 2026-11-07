@@ -8,6 +8,9 @@ public enum MotionKind
     FollowCursor = 13, HideBehindWindow = 14, PlayWithMoon = 15, Curious = 16, Shy = 17,
     StartupEntry = 18, Goodbye = 19, HopIcons = 20, Dance = 21, Breathe = 22, Attention = 23,
     OrbitCursor = 24, NapOnIcon = 25,
+    // 0.8: shake reactions and living moves.
+    Dizzy = 26, Angry = 27, WalkTaskbar = 28, Stretch = 29, Yawn = 30, ScratchHead = 31, WatchYou = 32, TypeAlong = 33,
+    HopWindows = 34, MoonToss = 35, ChaseButterfly = 36,
 }
 
 public enum Edge { Bottom, Top, Left, Right }

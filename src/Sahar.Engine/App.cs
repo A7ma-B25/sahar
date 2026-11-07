@@ -565,7 +565,7 @@ internal sealed unsafe class App
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
             pipe.Register("tray-pick", r =>
             {
-                if (r.Args?.TryGetValue("item", out var item) != true || !tray.Pick(item)) return new PipeReply(false, "unknown tray item");
+                if (r.Args?.TryGetValue("item", out var item) != true || item is null || !tray.Pick(item)) return new PipeReply(false, "unknown tray item");
                 return new PipeReply(true);
             });
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));

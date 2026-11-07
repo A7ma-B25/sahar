@@ -27,7 +27,7 @@ public class PaletteTests
     [Fact]
     public void Palette_AllFourteenMoods_Defined()
     {
-        Assert.Equal(14, Enum.GetValues<Mood>().Length);
+        Assert.Equal(16, Enum.GetValues<Mood>().Length);
         foreach (var m in Enum.GetValues<Mood>()) Assert.NotNull(Palette.Get(m));
         Assert.Equal(Rgba.Parse("#7C69C9"), Palette.Get(Mood.Mystic).Mid);
         Assert.Equal(Rgba.Parse("#8E88B8"), Palette.Get(Mood.Sleepy).Bottom);

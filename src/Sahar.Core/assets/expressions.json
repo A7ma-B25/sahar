@@ -295,5 +295,38 @@
   "orbTop": "#5FB38A",
   "orbBottom": "#1F5A3E",
   "extras": "Headphones"
+ },
+ {
+  "id": 27,
+  "key": "dizzy",
+  "mood": "Calm",
+  "eyes": "Dizzy",
+  "mouth": "Wobble",
+  "orbGlyph": "💫",
+  "orbTop": "#FFE89A",
+  "orbBottom": "#C9A43A",
+  "extras": "Stars"
+ },
+ {
+  "id": 28,
+  "key": "sick",
+  "mood": "Sick",
+  "eyes": "Dizzy",
+  "mouth": "Puff",
+  "orbGlyph": "🤢",
+  "orbTop": "#CDEFC2",
+  "orbBottom": "#5E9E4E",
+  "extras": "Sweat"
+ },
+ {
+  "id": 29,
+  "key": "angry",
+  "mood": "Angry",
+  "eyes": "Half",
+  "mouth": "Puff",
+  "orbGlyph": "💢",
+  "orbTop": "#FFB3AC",
+  "orbBottom": "#B3261E",
+  "extras": "Steam"
  }
 ]

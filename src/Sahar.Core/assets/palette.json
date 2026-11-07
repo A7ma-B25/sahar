@@ -110,5 +110,21 @@
   "glow": "#9C86FF",
   "bud": "#FFE7A8",
   "blush": "#C9B8F0"
+ },
+ "Sick": {
+  "top": "#FFFFFF",
+  "mid": "#EAF7E4",
+  "bottom": "#A8D99A",
+  "glow": "#6CC25A",
+  "bud": "#7FCF6A",
+  "blush": "#B9E3A8"
+ },
+ "Angry": {
+  "top": "#FFFFFF",
+  "mid": "#FFE3E0",
+  "bottom": "#F59A92",
+  "glow": "#E0322B",
+  "bud": "#E0322B",
+  "blush": "#FF7A70"
  }
 }

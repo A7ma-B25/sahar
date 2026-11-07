@@ -8,14 +8,14 @@ public class ExpressionCatalogTests
     [Fact]
     public void Catalog_Has27_UniqueIdsAndKeys()
     {
-        Assert.Equal(27, ExpressionCatalog.All.Count);
-        Assert.Equal(27, ExpressionCatalog.All.Select(x => x.Id).Distinct().Count());
-        Assert.Equal(27, ExpressionCatalog.All.Select(x => x.Key).Distinct().Count());
+        Assert.Equal(30, ExpressionCatalog.All.Count);
+        Assert.Equal(30, ExpressionCatalog.All.Select(x => x.Id).Distinct().Count());
+        Assert.Equal(30, ExpressionCatalog.All.Select(x => x.Key).Distinct().Count());
     }
 
     [Fact]
-    public void Catalog_Ids_Are_0_To_26() =>
-        Assert.Equal(Enumerable.Range(0, 27), ExpressionCatalog.All.Select(x => x.Id).Order());
+    public void Catalog_Ids_Are_0_To_29() =>
+        Assert.Equal(Enumerable.Range(0, 30), ExpressionCatalog.All.Select(x => x.Id).Order());
 
     [Fact]
     public void Catalog_Idle_IsCalmOpenSmile()
@@ -28,7 +28,7 @@ public class ExpressionCatalogTests
     public void Catalog_Keys_MatchSpecOrder() => Assert.Equal(
         new[] { "music", "claude-working", "claude-permission", "claude-done", "timer-done", "celebrate", "rain",
                 "battery-low", "charging", "download", "sleep", "back", "notification", "dnd", "offline", "online",
-                "screenshot", "copied", "reminder", "error", "hot", "poked", "dragged", "break", "late-night", "quran" },
+                "screenshot", "copied", "reminder", "error", "hot", "poked", "dragged", "break", "late-night", "quran", "dizzy", "sick", "angry" },
         ExpressionCatalog.All.Where(x => x.Id > 0).OrderBy(x => x.Id).Select(x => x.Key));
 
     [Fact]

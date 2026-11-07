@@ -2,7 +2,7 @@ using Sahar.Core.Json;
 
 namespace Sahar.Core.Art;
 
-public enum Mood { Calm, Happy, Focus, Excited, Sleepy, Mystic, Alert, Dim, Error, Online, Hot, Cold, Love, Night }
+public enum Mood { Calm, Happy, Focus, Excited, Sleepy, Mystic, Alert, Dim, Error, Online, Hot, Cold, Love, Night, Sick, Angry }
 
 /// <summary>Body gradient (top, mid, bottom), glow, leaf bud and blush colours of one mood.</summary>
 public sealed record MoodColors(Rgba Top, Rgba Mid, Rgba Bottom, Rgba Glow, Rgba Bud, Rgba Blush);
