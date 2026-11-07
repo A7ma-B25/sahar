@@ -278,10 +278,12 @@ internal sealed unsafe class D2DContext : IDisposable
     /// Draws text centred in <paramref name="box"/> (design units, before the transform). Colour fonts
     /// (Segoe UI Emoji) draw in their own colours; other text uses <paramref name="brush"/>.
     /// </summary>
-    public void Text(string text, string family, float size, int weight, D2DRect box, nint brush)
+    public void Text(string text, string family, float size, int weight, D2DRect box, nint brush, bool rightToLeft = false)
     {
         nint format = DWrite.TextFormat(family, size, weight);
         Own(format);
+        // IDWriteTextFormat::SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT): Arabic lines with Latin names read right.
+        if (rightToLeft) ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 6))(format, 1);
         // ID2D1RenderTarget::DrawText(WCHAR*, UINT32, IDWriteTextFormat*, D2D1_RECT_F*, ID2D1Brush*, options, measuring)
         const int D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT = 4;
         fixed (char* t = text)

@@ -1,13 +1,50 @@
-سَحَر · Sahar — نسخة تجريبية 0.3.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.6.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.3.0
+شو الجديد بـ 0.6.0
 ------------------
-- صارت تتحرّك أكتر وأنوع: 10 طيرات مختلفة (زيك زاك، رقم 8، لولب لفوق، غطسة، موجة، دايرة كبيرة، ورقة عم توقع، دورية فوق التاسك بار…).
-- حركات جديدة: بتلعب مع قمرها، بتفضول وبتقرّب عالماوس، بترقص مع الموسيقى، بتتنفّس بهدوء، وبتلف حوالين الماوس إذا تركته جنبها.
-- لحظات وجه صغيرة: غمزة، ابتسامة، بتطلّع حواليها، بتنعس، بتضحك.
-- أغنية من يوتيوب أو أي متصفح: بتلبس السماعات. إذا المتصفح قدامك بتضل هادية (ما بتطير فوق الفيديو)، وإذا رحت لنافذة تانية بترقص. لما توقف الأغنية بتوقف رقص.
-- سجل صغير: كبسة يمين على أيقونتها ← "افتح مجلد سَحَر" بيفتحلك المجلد فيه ملف engine.log. السجل بيكتب شو اختارت تعمل وليش كانت عم تستنى، وما بيكبر أكتر من 1 ميغا.
+- 🕌 أوقات الصلاة بالقائمة: أول مرة بتسألك عن مدينتك، وبعدين بتفرجيك الصلاة الجاية وقديش باقي، وأوقات اليوم الست.
+  بتنحسب على جهازك بلا نت، على توقيت الجهاز. طريقة الحساب بتختارها من السطر "طريقة الحساب" (أم القرى افتراضياً،
+  رابطة العالم الإسلامي، المصرية، كراتشي، أمريكا الشمالية). "المدينة: … — غيّر" لتغيّر المدينة.
+  قبل كل صلاة بـ 10 دقايق بتذكّرك (وجّ التذكير، بتلفت انتباهك، وبتقول "بعد 10 دقايق العصر" مثلاً).
+  وقت الأذان بتهدى 5 دقايق: لا تعليقات ولا حركات كبيرة. ما في صوت أذان بهالنسخة.
+  اسم المدينة بيروح لـ Open-Meteo مرة وحدة لنعرف مكانها، وما بينكتب بالسجل.
+- 🎧 الاستماع بالقائمة:
+  🎵 موسيقى: ⏮️ السابق، ⏯️ تشغيل/إيقاف، ⏭️ التالي لأي برنامج عم يشغّل (سبوتيفاي، يوتيوب…)، وفقاعتها بتقول شو عم يشتغل.
+  📖 قرآن: 114 سورة (آخر وحدة سمعتها أول شي) و6 قرّاء (العفاسي، عبد الباسط، الحصري، المنشاوي، المعيقلي، السديس).
+  وقت تشغّل القرآن بتوقّف الموسيقى، وبتلبس السماعات وبتغمض عيونها وبتهدى: لا رقص ولا تعليقات. لتوقفه: 🎧 ← ⏹️ وقّف القرآن.
+  التلاوات من islamic.network (alquran.cloud)، ومسموحة للاستماع الشخصي. إذا ما في نت بتقلك "ما قدرت شغّل التلاوة هلق".
+
+من 0.5.0
+--------
+- 📋 الحافظة بالقائمة: آخر 20 شي نسخته (نص، رابط، صورة). كبسة على وحدة بترجّعها للحافظة، و"امسح الكل" بيمسح.
+  ما بتحفظ شي من برامج كلمات السر يلي على الجهاز، ولا شي معلّم إنو خاص. وإذا نسخت شي بيشبه كلمة سر من المتصفح
+  (متل إضافات كلمات السر)، بتبيّنه "🔒 ••••••" وما بتكتبه على الجهاز أبداً. كل شي بيضل على جهازك.
+- بتعرف وقت يخلص تنزيل ملف، ووقت تاخد لقطة شاشة (Print Screen أو Win+Shift+S)، ووقت الجهاز يضل مشغول كتير دقيقتين.
+- إذا الكاميرا أو المايك شغالين (مكالمة فيديو) بتهدى: ما بتعلّق وما بتعمل حركات كبيرة.
+- بتعلّق بلطف أحياناً: إذا صار لك ساعة أو ساعتين على نفس البرنامج، أو صباح الخير أول النهار.
+  مرة كل 45 دقيقة بالكتير، وإذا كبست عليها لتسكّر التعليق بتعلّق أقل. بتعرف اسم البرنامج بس، ما بتقرا شي من الشاشة.
+- المطر (إذا بدك): كبسة يمين على أيقونتها ← "الطقس…" واكتب مدينتك. إذا في مطر جاي بالساعتين الجايين بتنبهك.
+  اسم المدينة بيروح لـ Open-Meteo مرة وحدة، وبعدين بس الإحداثيات، مرة بالساعة.
+
+من 0.4.0
+--------
+- القائمة الدائرية: كليك يمين أو كبستين عليها. فيها 6 أزرار:
+  ⏱️ مؤقت (5 / 15 / 25 / 45 دقيقة أو وقت بتكتبه، مع حلقة وقت حواليها، ولما يخلص بتلفت انتباهك. كبسة عليها بتسكّت المؤقت).
+  📝 ملاحظة سريعة (بتكتب وبتكبس Enter، وبتشوف آخر 3 ملاحظات).
+  🌗 مستوى نشاطها. 🔕 لا تزعجني (نص ساعة، ساعة، ساعتين، أو لحد ما توقّفها). 😴 خبّيها ساعة. 🎲 العبي (حركة عشوائية).
+  بتتسكّر بـ Esc أو بكبسة برّا. إذا كانت جنب حافة الشاشة بتصير نص دايرة.
+- الحركات الـ25 كلها صارت موجودة. الجديدة: بتلحق الماوس، بتختبي ورا نافذة وبتطل، بتستحي إذا قرّبت الماوس كتير،
+  بتدخل وبتسلّم أول ما تشغّل الجهاز، بتودّعك لما تسكّرها، بتنط على التاسك بار، بتلفت انتباهك بالأشياء المهمة،
+  وبتغفى على أيقونة.
+- "فرجيني حركاتك": كبسة يمين على أيقونتها ← "فرجيني حركاتك". بتعرض كل حركاتها ووجوهها ورا بعض، وتحتها اسم كل وحدة.
+  كبسة عليها بتوقف العرض.
+
+من 0.3.0 (لسا موجودين)
+----------------------
+- 10 طيرات مختلفة، وحركات: بتلعب مع قمرها، فضولية، بترقص مع الموسيقى، بتتنفّس، بتلف حوالين الماوس، ولحظات وجه صغيرة.
+- أغنية من يوتيوب: سماعات. والمتصفح قدامك: ما بتطير فوق الفيديو.
+- "افتح مجلد سَحَر" من قائمة أيقونتها: فيه ملف السجل engine.log لتبعتلي ياه.
 
 من 0.2.0 (لسا موجودين)
 ----------------------
@@ -21,7 +58,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.3.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.6.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -53,9 +90,21 @@
 - شغّل أغنية بسبوتيفاي: لازم تلبس السماعات وترقص أحياناً.
 - شغّل أغنية بيوتيوب والمتصفح قدامك: سماعات وبس، بلا طيران. روح لنافذة تانية: بترجع تتحرك وترقص. وقّف الأغنية: بتوقف رقص.
 - خلّيها على "نشيطة" ربع ساعة: لازم تشوف حركات كتير مختلفة، مش بس طيران.
+- كبستين على التاتش باد، وكليك يمين: لازم تفتح القائمة. جرّبها وهي بكل زاوية من الشاشة: كل الأزرار لازم تبيّن.
+- حط مؤقت 5 دقايق ونيّم الجهاز 10 دقايق: لما يصحى لازم يخلص المؤقت فوراً.
+- اكتب ملاحظة بالعربي (بلغة الكيبورد العربي): لازم تنحفظ وتبيّن صح.
+- سكّرها من أيقونتها: لازم تودّعك وتتحوّل لنجوم.
+- انسخ كلمة سر من برنامج كلمات السر (Bitwarden أو 1Password…) أو من إضافته بالمتصفح: ما لازم تطلع مكشوفة بالحافظة تبعها.
+- نزّل ملف حقيقي من المتصفح، وخود لقطة بـ Win+Shift+S، وافتح مكالمة فيديو: لازم تتفاعل متل ما هو مكتوب فوق.
+- شغّل الطقس بمدينتك.
+- "لا تزعجني" تبع ويندوز (Focus Assist) ما إلو طريقة رسمية لنعرفه، فاستعمل "لا تزعجني" تبعها من قائمتها.
 - بعد ساعتين شغل متواصل: لازم يطلع وجّ الاستراحة ☕.
 
-بهالنسخة لسا ما في: القائمة الدائرية، الأصوات، الإعدادات، والتنبيهات. هدول بالخطط الجاية.
+- 🕌 قارن أوقات مدينتك مع جامعك، واستنى تذكير صلاة حقيقي (10 دقايق قبل).
+- 🎵 شغّل أغنية بسبوتيفاي وجرّب ⏮️ ⏯️ ⏭️ من قائمتها، وشوف إذا الفقاعة بتقول اسم الأغنية.
+- 📖 شغّل سورة والسماعات بأذنيك وأغنية شغالة: لازم توقف الأغنية وتبلش التلاوة، وسَحَر تهدى. وبآخر السورة بترجع عادي.
+
+بهالنسخة لسا ما في: الأصوات، الإعدادات، وربط Claude. هدول بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -65,16 +114,54 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.3.0 (Windows)
+Sahar — test build 0.6.0 (Windows)
 ==================================
 
-What's new in 0.3.0
+What's new in 0.6.0
 -------------------
-- More, and more varied, movement: 10 different flights (zigzag, figure eight, spiral up, dive, wave, glide, big circle, dash and stop, falling leaf, taskbar patrol).
-- New moves: she plays with her moon, gets curious and edges toward the pointer, dances to music, breathes slowly, and circles the pointer when you leave it next to her.
-- Small face moments: a wink, a smile, a look around, a drowsy blink, a giggle.
-- A song from YouTube or any browser: headphones on. While the browser is in front she stays calm (no flights over the video); switch to another window and she dances. Stop the song and the dance stops.
-- A log you can send: right-click her icon → "Open Sahar folder" opens the folder with engine.log. It records what she chose to do and why she was waiting, and never grows past 1 MB.
+- 🕌 Prayer times in her menu: the first time she asks your city, then shows the next prayer, the time left, and today's six times.
+  Computed on your PC, offline, in your PC's time zone. Pick the method from the "طريقة الحساب" line (Umm al-Qura by default,
+  Muslim World League, Egyptian, Karachi, North America); "المدينة: … — غيّر" changes the city.
+  10 minutes before each prayer she reminds you (the reminder face, she draws your eye, and says e.g. "بعد 10 دقايق العصر").
+  At the adhan she stays quiet for 5 minutes: no comments, no big moves. No adhan sound in this build.
+  Your city goes to Open-Meteo once to find where it is, and never reaches the log.
+- 🎧 Listening in her menu:
+  🎵 Music: ⏮️ previous, ⏯️ play/pause, ⏭️ next for whatever app plays (Spotify, YouTube…); her bubble says what is playing.
+  📖 Quran: 114 surahs (the last one you heard first) and 6 reciters (Alafasy, Abdul Basit, Al-Husary, Al-Minshawi, Maher
+  Al-Muaiqly, As-Sudais). Starting it pauses your music; she wears headphones, closes her eyes and goes quiet: no dance, no
+  comments. To stop: 🎧 → ⏹️ وقّف القرآن. Recitations stream from islamic.network (alquran.cloud), free for personal listening.
+  With no internet she says "ما قدرت شغّل التلاوة هلق".
+
+From 0.5.0
+----------
+- 📋 Clipboard in her menu: the last 20 things you copied (text, links, images). Click one to copy it again; "Clear all".
+  Nothing from password-manager apps or content marked private is kept. A password-looking copy from a browser (password
+  extensions) shows as "🔒 ••••••" and is never written to disk. Everything stays on your PC.
+- She notices a finished download, a screenshot (Print Screen or Win+Shift+S) and a CPU busy for two minutes.
+- Camera or microphone on (a video call): she goes quiet — no comments, no big moves.
+- Gentle comments now and then: an hour or two on the same app, or good morning. At most every 45 minutes, and less
+  if you click them away. She only knows the app's name; she reads nothing on your screen.
+- Rain (if you want it): right-click her icon → "Weather…" and type your city. Rain within two hours: she tells you.
+  Your city goes to Open-Meteo once, then only its coordinates, once an hour.
+
+From 0.4.0
+----------
+- The radial menu: right-click or double-click her. Six buttons:
+  ⏱️ Timer (5 / 15 / 25 / 45 min or a time you type; a ring of time around her; when it ends she draws your eye, a click on her dismisses it).
+  📝 Quick note (type, press Enter; the last 3 notes show under it).
+  🌗 Activity. 🔕 Do not disturb (30 min, 1 h, 2 h, or until you turn it off). 😴 Hide 1 h. 🎲 Play (a random move).
+  Esc or a click outside closes it; near a screen edge it becomes a half circle.
+- All 25 moves now. New: she follows the pointer, hides behind a window and peeks, gets shy if the pointer keeps coming close,
+  flies in and says hello when the PC starts, waves goodbye when you quit her, hops along the taskbar, draws your eye for
+  important things, and naps on an icon.
+- "Show me your moves": right-click her icon → "Show me your moves". She plays every move and face, with its name under her.
+  A click on her stops the show.
+
+Still here from 0.3.0
+---------------------
+- 10 different flights; plays with her moon, gets curious, dances to music, breathes, circles the pointer, small face moments.
+- A song on YouTube: headphones; with the browser in front she does not fly over the video.
+- "Open Sahar folder" in her icon's menu: engine.log is there to send.
 
 Still here from 0.2.0
 ---------------------
@@ -87,7 +174,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.3.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.6.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -118,9 +205,22 @@ Manual checks (GitHub cannot test these)
 - Play a song in Spotify: headphones on, and she dances now and then.
 - Play a song on YouTube with the browser in front: headphones only, no flights. Switch to another window: she moves and dances again. Stop the song: the dance stops.
 - Leave her on Lively for 15 minutes: you should see many different moves, not just flights.
+- Double-click on a touchpad, and right-click: the menu opens. Try it with her in every corner: every button shows.
+- Start a 5-minute timer and sleep the PC for 10 minutes: when it wakes, the timer ends right away.
+- Write a note in Arabic (Arabic keyboard layout): it is saved and shows correctly.
+- Quit her from her icon: she waves goodbye and turns into stars.
+- Copy a password from a password manager app or its browser extension: it must never appear in clear in her list.
+- Download a real file in a browser, take a Win+Shift+S snip, start a video call: she reacts as described above.
+- Turn on the weather for your city.
+- Windows' own "Do not disturb" (Focus Assist) has no official way to be read; use her own "Do not disturb" in her menu.
 - After two hours of non-stop work: the break face ☕.
 
-Not in this build yet: the radial menu, sounds, settings and notifications (later plans).
+- 🕌 Compare your city's times with your mosque, and wait for a real prayer reminder (10 minutes before).
+- 🎵 Play a song in Spotify and try ⏮️ ⏯️ ⏭️ from her menu; the bubble should name the song.
+- 📖 Play a surah with headphones on while a song plays: the song pauses, the recitation starts, Sahar goes quiet,
+  and at the end of the surah she is back to normal.
+
+Not in this build yet: sounds, settings and the Claude link (later plans).
 
 If something goes wrong
 -----------------------

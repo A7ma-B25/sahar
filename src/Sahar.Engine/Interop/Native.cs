@@ -181,6 +181,8 @@ internal static unsafe partial class Native
     public const uint WM_LBUTTONDOWN = 0x0201;
     public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_CAPTURECHANGED = 0x0215;
+    public const uint WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205, WM_KEYDOWN = 0x0100, WM_ACTIVATE = 0x0006;
+    public const int VK_ESCAPE = 0x1B, SW_SHOW = 5;
     public const uint WM_MOUSEHOVER = 0x02A1;
     public const uint WM_MOUSELEAVE = 0x02A3;
     public const uint TME_HOVER = 0x1, TME_LEAVE = 0x2;
@@ -325,6 +327,74 @@ internal static unsafe partial class Native
 
     [LibraryImport("kernel32.dll")]
     public static partial int CloseHandle(nint handle);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDoubleClickTime();
+
+    // ---- raw input key codes, CPU times (Plan 4) ----
+    [LibraryImport("user32.dll")] public static partial uint GetRawInputData(nint rawInput, uint command, void* data, uint* size, uint headerSize);
+    [LibraryImport("kernel32.dll")] public static partial int GetSystemTimes(long* idle, long* kernel, long* user);
+
+    // ---- clipboard (Plan 4) ----
+    [LibraryImport("user32.dll")] public static partial int AddClipboardFormatListener(nint hwnd);
+    [LibraryImport("user32.dll")] public static partial int OpenClipboard(nint hwnd);
+    [LibraryImport("user32.dll")] public static partial int CloseClipboard();
+    [LibraryImport("user32.dll")] public static partial int EmptyClipboard();
+    [LibraryImport("user32.dll")] public static partial uint EnumClipboardFormats(uint format);
+    [LibraryImport("user32.dll", EntryPoint = "GetClipboardFormatNameW")] public static partial int GetClipboardFormatName(uint format, char* name, int max);
+    [LibraryImport("user32.dll")] public static partial nint GetClipboardData(uint format);
+    [LibraryImport("user32.dll")] public static partial nint SetClipboardData(uint format, nint mem);
+    [LibraryImport("user32.dll")] public static partial nint GetClipboardOwner();
+    [LibraryImport("user32.dll")] public static partial uint GetClipboardSequenceNumber();
+    [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW")] public static partial uint RegisterClipboardFormat(char* name);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalLock(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial int GlobalUnlock(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial nuint GlobalSize(nint mem);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalAlloc(uint flags, nuint bytes);
+    [LibraryImport("kernel32.dll")] public static partial nint GlobalFree(nint mem);
+
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+    public static partial nint SendMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW")]
+    public static partial int GetWindowTextLength(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
+    public static partial int GetWindowText(nint hwnd, char* text, int max);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    public static partial nint SetWindowLongPtr(nint hwnd, int index, nint value);
+
+    [LibraryImport("user32.dll", EntryPoint = "CallWindowProcW")]
+    public static partial nint CallWindowProc(nint proc, nint hwnd, uint msg, nuint wParam, nint lParam);
+
+    [LibraryImport("gdi32.dll", EntryPoint = "CreateFontW")]
+    public static partial nint CreateFont(int height, int width, int escapement, int orientation, int weight, uint italic,
+        uint underline, uint strikeOut, uint charSet, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, char* face);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint CreateRoundRectRgn(int left, int top, int right, int bottom, int w, int h);
+
+    [LibraryImport("user32.dll")]
+    public static partial int SetWindowRgn(nint hwnd, nint rgn, int redraw);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint GetStockObject(int index);
+
+    [LibraryImport("user32.dll")]
+    public static partial int FillRect(nint hdc, RECT* rect, nint brush);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetClientRect(nint hwnd, RECT* rect);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial uint SetTextColor(nint hdc, uint color);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial uint SetBkColor(nint hdc, uint color);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetFocus(nint hwnd);
 
     public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 

@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -26,6 +26,31 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    /// <summary>A key went down or up (its virtual-key code only; for the screenshot keys). Nothing is kept.</summary>
+    public event Action<int, bool>? KeyChanged;
+
+    /// <summary>RAWINPUT (x64): a 24-byte header, then RAWKEYBOARD { MakeCode, Flags, Reserved, VKey, Message, Extra }.</summary>
+    private static (int Vk, bool Down)? ReadKey(nint lParam)
+    {
+        const uint RID_INPUT = 0x10000003;
+        byte* buffer = stackalloc byte[64];
+        uint size = 64;
+        if (Native.GetRawInputData(lParam, RID_INPUT, buffer, &size, 24) == unchecked((uint)-1) || size < 24 + 12) return null;
+        if (*(uint*)buffer != 1 /* RIM_TYPEKEYBOARD */) return null;
+        ushort flags = *(ushort*)(buffer + 24 + 2), vk = *(ushort*)(buffer + 24 + 6);
+        return (vk, (flags & 1 /* RI_KEY_BREAK */) == 0);
+    }
+    /// <summary>The clipboard changed (WM_CLIPBOARDUPDATE).</summary>
+    public event Action? ClipboardChanged;
+    /// <summary>The weather item: turn on (asks for a city) or off.</summary>
+    public event Action? WeatherClicked;
+    /// <summary>The city the weather is on for (null = off).</summary>
+    public string? WeatherCity { get; set; }
+
+    /// <summary>"فرجيني حركاتك" (start) or "وقّف العرض" (stop) was chosen.</summary>
+    public event Action? ShowToggled;
+    /// <summary>Her show is running (the menu item then stops it).</summary>
+    public bool ShowRunning { get; set; }
     public event Action? ShowNow;
     public event Action<ActivityLevel>? ActivityChosen;
     /// <summary>The level shown as checked in the menu.</summary>
@@ -49,6 +74,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         if (Native.RegisterRawInputDevices(&keyboard, 1, (uint)sizeof(RAWINPUTDEVICE)) == 0) Log.Write("keyboard raw input not registered");
         _icon = MakeIcon();
         Add();
+        if (Native.AddClipboardFormatListener(Hwnd) == 0) Log.Write("clipboard listener not added");
     }
 
     private void Add()
@@ -91,8 +117,12 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 if (ev is WM_CONTEXTMENU or WM_RBUTTONUP) ShowMenu();
                 else if (ev is NIN_SELECT or WM_LBUTTONUP) ShowNow?.Invoke();   // a click on the icon brings her back
                 return 0;
+            case 0x031D:   // WM_CLIPBOARDUPDATE
+                ClipboardChanged?.Invoke();
+                return 0;
             case WM_INPUT:
                 _lastKeyTick = Environment.TickCount64;
+                if (KeyChanged is { } keys && ReadKey(lParam) is { } k) keys(k.Vk, k.Down);
                 return null;   // DefWindowProc cleans up the input
             case WM_QUERYENDSESSION:
                 return 1;
@@ -120,11 +150,15 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* activity = "نشاطها / Activity")
         fixed (char* hide = "إخفاء ساعة / Hide 1 h")
         fixed (char* folder = "افتح مجلد سَحَر / Open Sahar folder")
+        fixed (char* show = ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves")
+        fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — وقّف / Weather: {city} — off" : "الطقس… / Weather…")
         fixed (char* quit = "إغلاق / Quit")
         {
+            Native.AppendMenu(menu, MF_STRING, CmdShow, show);
             Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
+            Native.AppendMenu(menu, MF_STRING, CmdWeather, weather);
             Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
@@ -136,6 +170,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         if (cmd is >= CmdActivity and <= CmdActivity + 2) ActivityChosen?.Invoke((ActivityLevel)(cmd - CmdActivity));
         else if (cmd == CmdHide) HideHour?.Invoke();
         else if (cmd == CmdFolder) OpenFolder();
+        else if (cmd == CmdShow) ShowToggled?.Invoke();
+        else if (cmd == CmdWeather) WeatherClicked?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 

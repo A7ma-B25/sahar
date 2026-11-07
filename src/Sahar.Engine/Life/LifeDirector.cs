@@ -27,6 +27,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     private readonly Director _director;
     private readonly Media _media;
     private readonly CursorRest _cursorRest = new();
+    private readonly ShyDetector _shy = new();
+    private readonly AttentionPacer _attention = new();
     private bool _cursorResting;
     private string? _waiting;
     private readonly DispatcherQueueTimer _timer;
@@ -83,6 +85,13 @@ internal sealed unsafe class LifeDirector : IDisposable
             _prefs.DecayDays(_lastDecay.DayNumber - last.DayNumber);
         Schedule(DateTimeOffset.Now);
         motion.DragStarted += OnDragStarted;
+        motion.PointerNear += distanceDip =>
+        {
+            if (!Enabled || Paused || _motion.Current is not (MotionKind.Hover or MotionKind.EyesFollow)) return;
+            if (!_shy.Update(DateTimeOffset.Now, distanceDip, clicked: false)) return;
+            Log.Write("life: Shy (the pointer kept coming close)");
+            _motion.Play(MotionKind.Shy);
+        };
         motion.ExtraAvoid = () => Typing ? TypingAvoid() : [];
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -93,6 +102,18 @@ internal sealed unsafe class LifeDirector : IDisposable
         };
         _timer.Start();
     }
+
+    /// <summary>"Do not disturb" is on: only small things (like a video in front).</summary>
+    public Func<bool> DndOn { get; set; } = () => false;
+    /// <summary>The camera or microphone is in use: only small things too.</summary>
+    public Func<bool> CameraMicOn { get; set; } = () => false;
+    /// <summary>The minutes after a prayer's time: small things only, and no drawing your eye.</summary>
+    public Func<bool> AdhanOn { get; set; } = () => false;
+    /// <summary>The Quran is playing: she stays still (small things only, no dance, no drawing your eye).</summary>
+    public Func<bool> QuranOn { get; set; } = () => false;
+
+    /// <summary>Her menu is open (or a show is running): no own actions.</summary>
+    public bool Paused { get; set; }
 
     public ActivityLevel Level
     {
@@ -119,15 +140,23 @@ internal sealed unsafe class LifeDirector : IDisposable
         _routine.Tick(now, sinceInput < TimeSpan.FromMinutes(1));
         bool typing = _typing.Update(now, _sinceKeyboard());
         if (typing != Typing) { Typing = typing; TypingChanged?.Invoke(typing); }
-        if (_routine.TakeBreakDue()) _director.Post(EventKind.Break);
-        if (_routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
+        // Her routine follows life: a test machine's own clock (CI runs at night too) never posts it into other stages.
+        if (Enabled && _routine.TakeBreakDue()) _director.Post(EventKind.Break);
+        if (Enabled && _routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
-        if (!Enabled) return;
+        // Something needs you (Claude asks, the timer is done, a reminder): she draws your eye, paced.
+        if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye)
+            && _attention.ShouldPlay(_director.CurrentKey, now, DndOn() || AdhanOn() || QuranOn()))
+        {
+            Log.Write($"life: Attention for '{_director.CurrentKey}'");
+            _motion.Play(MotionKind.Attention);
+        }
+        if (!Enabled || Paused) return;
         var cursor = Native.CursorPos();
         var body = _motion.Body;
         _cursorResting = _cursorRest.Update(now, new Vector2(cursor.X, cursor.Y),
             new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2), _motion.DpiScale);
-        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying))
+        if (_motion.Current == MotionKind.Dance && (!_media.MusicPlaying || _media.VideoPlaying || DndOn() || CameraMicOn() || AdhanOn() || QuranOn()))
         {
             Log.Write("life: the music stopped (or a video is in front), dance ends");
             _motion.Play(MotionKind.Hover);
@@ -140,13 +169,13 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (away && !_sleepingForAway && Resting && !_director.Hidden)
         {
             _sleepingForAway = true;
-            _motion.Play(MotionKind.SleepInCorner);
+            _motion.Play(_rng.Next(2) == 0 ? MotionKind.SleepInCorner : MotionKind.NapOnIcon);   // corner, or her favourite icon
             return;
         }
         if (!away && _sleepingForAway)
         {
             _sleepingForAway = false;
-            if (_motion.Current == MotionKind.SleepInCorner) _motion.Play(MotionKind.Wake);
+            if (_motion.Current is MotionKind.SleepInCorner or MotionKind.NapOnIcon) _motion.Play(MotionKind.Wake);
             Schedule(now);
             return;
         }
@@ -164,7 +193,7 @@ internal sealed unsafe class LifeDirector : IDisposable
 
         var forced = _forceNext;
         _forceNext = null;
-        var context = new LifeContext(Typing, _media.VideoPlaying, _media.MusicPlaying, away, _director.Hidden, !Resting,
+        var context = new LifeContext(Typing, _media.VideoPlaying || DndOn() || CameraMicOn() || AdhanOn() || QuranOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
             now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
@@ -210,6 +239,9 @@ internal sealed unsafe class LifeDirector : IDisposable
                     LifeAction.Dance => MotionKind.Dance,
                     LifeAction.Breathe => MotionKind.Breathe,
                     LifeAction.OrbitCursor => MotionKind.OrbitCursor,
+                    LifeAction.FollowCursor => MotionKind.FollowCursor,
+                    LifeAction.HideBehindWindow => MotionKind.HideBehindWindow,
+                    LifeAction.HopIcons => MotionKind.HopIcons,
                     _ => MotionKind.SleepInCorner,
                 });
                 break;
@@ -288,6 +320,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     /// <summary>A poke shortly after one of her own actions: she learns you liked it.</summary>
     public void OnPoked()
     {
+        _shy.Update(DateTimeOffset.Now, 0, clicked: true);
         if (_memory.TakeForFeedback(DateTimeOffset.Now) is { } a) _prefs.Liked(a);   // once per action
     }
 
@@ -323,7 +356,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             .Select(a => string.Create(CultureInfo.InvariantCulture, $"{a}:{_prefs.Weight(a):0.00}")));
         return string.Create(CultureInfo.InvariantCulture,
             $"level={_level} enabled={(Enabled ? "true" : "false")} next={next:0.0} last={_lastAction} " +
-            $"typing={(Typing ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
+            $"typing={(Typing ? "true" : "false")} quiet={(_director.Quiet ? "true" : "false")} video={(_media.VideoPlaying ? "true" : "false")} actions={Actions} weights={weights} spot={SpotText()}");
     }
 
     private static string SpotText()

@@ -17,7 +17,7 @@ internal sealed class Director
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
     private string _lastKey = "idle";
-    private bool _hidden, _fullscreen;
+    private bool _hidden, _fullscreen, _dnd, _cameraMic, _adhan, _quran;
     private DateTimeOffset _hiddenUntil;
 
     public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden)
@@ -42,11 +42,62 @@ internal sealed class Director
         catch (Exception e) { Diagnostics.Log.Write($"director error: {e}"); }
     }
 
-    public void Post(EventKind k)
+    public void Post(EventKind k) => Post(k, null);
+
+    public void Post(EventKind k, TimeSpan? ttl)
     {
-        _brain.Post(k, DateTimeOffset.UtcNow);
+        _brain.Post(k, DateTimeOffset.UtcNow, ttl);
         Tick();
     }
+
+    /// <summary>Ends an event now (a poke dismisses the timer's face).</summary>
+    public void End(EventKind k)
+    {
+        _brain.End(k);
+        Tick();
+    }
+
+    /// <summary>Her own "do not disturb" (quiet, alongside fullscreen).</summary>
+    public void SetDnd(bool on)
+    {
+        _dnd = on;
+        ApplyQuiet();
+    }
+
+    /// <summary>The camera or microphone is in use: quiet (no comments, no sounds).</summary>
+    public void SetCameraMic(bool on)
+    {
+        _cameraMic = on;
+        ApplyQuiet();
+    }
+
+    /// <summary>The minutes after a prayer's time: quiet (no comments, no sounds, small things only).</summary>
+    public void SetAdhan(bool on)
+    {
+        if (on == _adhan) return;
+        _adhan = on;
+        ApplyQuiet();
+    }
+
+    public bool Adhan => _adhan;
+
+    /// <summary>The Quran is playing: quiet, and her resting face is the quran face (events still show above it).</summary>
+    public void SetQuran(bool on)
+    {
+        if (on == _quran) return;
+        _quran = on;
+        ApplyQuiet();
+        Tick();
+    }
+
+    public bool Quran => _quran;
+
+    public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan || _quran;
+
+    private void ApplyQuiet() =>
+        _brain.SetQuiet((_fullscreen ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None) |
+            (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None) | (_adhan ? QuietReason.Adhan : QuietReason.None) |
+        (_quran ? QuietReason.Quran : QuietReason.None));
 
     /// <summary>"Hide 1 h" from the tray; <see cref="TimeSpan.Zero"/> shows her again (tray click).</summary>
     public void HideFor(TimeSpan span)
@@ -60,17 +111,18 @@ internal sealed class Director
         bool fs = _debounce.Update(FullscreenWatcher.Check(), DateTimeOffset.UtcNow);
         if (fs == _fullscreen) return;
         _fullscreen = fs;
-        _brain.SetQuiet(fs ? QuietReason.Fullscreen : QuietReason.None);
+        ApplyQuiet();
     }
 
     private void Tick()
     {
         var now = DateTimeOffset.UtcNow;
         var output = _brain.Tick(now);
-        if (output.ExpressionKey != _lastKey)
+        var key = QuranFace.Over(output.ExpressionKey, _quran);
+        if (key != _lastKey)
         {
-            _lastKey = output.ExpressionKey;
-            _express(output.ExpressionKey);
+            _lastKey = key;
+            _express(key);
         }
         bool hidden = output.Hidden || now < _hiddenUntil;
         if (hidden != _hidden)

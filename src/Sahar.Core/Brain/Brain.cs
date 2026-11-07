@@ -24,6 +24,9 @@ public sealed class Brain
 
     public void SetQuiet(QuietReason r) => _quiet = r;
 
+    /// <summary>Ends an active event now (a poke dismisses the timer's face).</summary>
+    public void End(EventKind k) => _active.RemoveAll(a => a.Kind == k);
+
     public BrainOutput Tick(DateTimeOffset now)
     {
         _active.RemoveAll(a => a.Expires is { } e && now >= e);

@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -32,8 +32,8 @@ function Wait-Pipe([int]$seconds) {
     throw "pipe 'sahar' did not appear within $seconds s"
 }
 
-function Start-Engine {
-    $script:engine = Start-Process -FilePath $Exe -ArgumentList '--test-mode', '--capturable' -PassThru
+function Start-Engine([string[]]$Extra = @()) {
+    $script:engine = Start-Process -FilePath $Exe -ArgumentList (@('--test-mode', '--capturable') + $Extra) -PassThru
     Wait-Pipe 5
 }
 
@@ -182,7 +182,7 @@ using System;
 using System.Runtime.InteropServices;
 public static class Shell {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
-    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     public static void TaskbarCreated() { PostMessage((IntPtr)0xFFFF, RegisterWindowMessage("TaskbarCreated"), IntPtr.Zero, IntPtr.Zero); }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
@@ -393,6 +393,57 @@ function Stage-Motion {
                 Copy-Item (Screenshot 'motion-full.png') (Join-Path $frames "$f.png") -Force
             }
         }
+    }
+    $script:moveTimes = @{ FollowCursor = 6; HideBehindWindow = 7.5; Shy = 2.5; StartupEntry = 3; Goodbye = 2; HopIcons = 3.5; Attention = 3.6; NapOnIcon = 3 }
+    foreach ($kind in 'FollowCursor', 'HideBehindWindow', 'Shy', 'StartupEntry', 'Goodbye', 'HopIcons', 'Attention', 'NapOnIcon') {
+        Step "motion $kind" {
+            $w = $null
+            if ($kind -eq 'HideBehindWindow') { $w = Start-TestWindow 'typing' }
+            try {
+                Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+                Send '{"type":"cmd","name":"pose","args":{"x":"700","y":"250"}}' | Out-Null
+                [Mouse]::Move(5, 5)   # pointer away from her
+                if ($w) { & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null; Start-Sleep -Milliseconds 300 }
+                $r = Send ('{"type":"cmd","name":"motion","args":{"kind":"' + $kind + '"}}')
+                if (-not $r.ok) { throw "motion $kind not ok: $($r.error)" }
+                if ($r.state.motion -ne $kind) { throw "state.motion is '$($r.state.motion)', expected '$kind'" }
+                $frames = Join-Path $dir "move-$kind"
+                New-Item -ItemType Directory -Force -Path $frames | Out-Null
+                $t0 = Get-Date
+                $f = 0
+                $end = $t0.AddSeconds($script:moveTimes[$kind] + 2)
+                $back = $false
+                while ((Get-Date) -lt $end) {
+                    Start-Sleep -Milliseconds 200
+                    $st = State
+                    if ($kind -ne 'StartupEntry' -or ((Get-Date) - $t0).TotalSeconds -gt 1.8) { Assert-BodyInWork $st "$kind" }
+                    if ($f -lt 2 -and ((Get-Date) - $t0).TotalSeconds -gt (0.4 + $f * 1.2)) {
+                        $f++
+                        Copy-Item (Screenshot 'motion-full.png') (Join-Path $frames "$f.png") -Force
+                    }
+                    if ($kind -notin 'Goodbye', 'NapOnIcon' -and $st.motion -eq 'Hover') { $back = $true; break }
+                }
+                if ($kind -notin 'Goodbye', 'NapOnIcon' -and -not $back) { throw "$kind did not end in Hover (motion '$((State).motion)')" }
+                if ($kind -in 'Goodbye', 'NapOnIcon') {
+                    if ((State).motion -ne $kind) { throw "$kind ended early: '$((State).motion)'" }
+                    Send '{"type":"cmd","name":"motion","args":{"kind":"Wake"}}' | Out-Null
+                    Start-Sleep -Seconds 1
+                }
+            }
+            finally { if ($w) { $w.Kill() } }
+        }
+    }
+    Step 'no hello in test mode unless asked' {
+        Stop-Engine
+        Start-Engine
+        Start-Sleep -Milliseconds 800
+        if ((State).motion -eq 'StartupEntry') { throw 'she said hello without --simulate-boot' }
+    }
+    Step 'the PC just started: she flies in and says hello' {
+        Stop-Engine
+        Start-Engine @('--simulate-boot')
+        Wait-State { param($st) $st.motion -eq 'StartupEntry' } 3000 'hello at start' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Hover' } 6000 'hovering after hello' | Out-Null
     }
     Step 'every flight stays on screen, from every corner' {
         $patterns = 'Zigzag', 'FigureEight', 'SpiralUp', 'Dive', 'Wave', 'GlideHigh', 'BigCircle', 'DashAndStop', 'FallingLeaf', 'TaskbarPatrol'
@@ -608,6 +659,681 @@ function Stage-Perf {
     Stop-Engine
 }
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Mouse {
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+    public static void Click(int x, int y, bool right) {
+        SetCursorPos(x, y); System.Threading.Thread.Sleep(60);
+        mouse_event(right ? 0x0008u : 0x0002u, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(30);
+        mouse_event(right ? 0x0010u : 0x0004u, 0, 0, 0, UIntPtr.Zero);
+    }
+    public static void DoubleClick(int x, int y) { Click(x, y, false); System.Threading.Thread.Sleep(120); Click(x, y, false); }
+    public static void Move(int x, int y) { SetCursorPos(x, y); }
+}
+'@
+
+# debug-menu: "open=true level=main buttons=id:x,y,r;id:x,y,r" (screen px)
+function Menu {
+    $r = Send '{"type":"cmd","name":"debug-menu"}'
+    if (-not $r.ok) { throw "debug-menu not ok: $($r.error)" }
+    $h = @{ buttons = @() }
+    foreach ($pair in ($r.error -split ' ')) {
+        $k, $v = $pair -split '=', 2
+        if ($k -eq 'buttons') {
+            if ($v) {
+                $h.buttons = @($v -split ';' | ForEach-Object {
+                    $id, $xyr = $_ -split ':', 2; $p = $xyr -split ','
+                    $b = [pscustomobject]@{ id = $id; x = [double]$p[0]; y = [double]$p[1]; r = [double]$p[2]; lx = $null; ly = $null; lw = $null; lh = $null }
+                    if ($p.Count -ge 7) { $b.lx = [double]$p[3]; $b.ly = [double]$p[4]; $b.lw = [double]$p[5]; $b.lh = [double]$p[6] }
+                    $b
+                })
+            }
+        }
+        else { $h[$k] = $v }
+    }
+    $h
+}
+function Body-Centre { $st = State; @([int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)) }
+function Pose-Body([double]$bx, [double]$by) {
+    # pose moves her canvas; shift it so her body's top-left lands on (bx, by)
+    $st = State
+    $p = Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"300"}}'
+    $st = $p.state
+    $x = 400 + ($bx - $st.x); $y = 300 + ($by - $st.y)
+    (Send ('{"type":"cmd","name":"pose","args":{"x":"' + [int]$x + '","y":"' + [int]$y + '"}}')).state
+}
+function Wait-Menu([string]$open, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do { $m = Menu; if ($m.open -eq $open) { return $m }; Start-Sleep -Milliseconds 100 } while ((Get-Date) -lt $deadline)
+    throw "$what not seen within $ms ms (open=$($m.open))"
+}
+function Press([string]$id) {
+    $r = Send ('{"type":"cmd","name":"menu-press","args":{"id":"' + $id + '"}}')
+    if (-not $r.ok) { throw "menu-press $id not ok: $($r.error)" }
+}
+
+function Kv([string]$cmd) {
+    $r = Send ('{"type":"cmd","name":"' + $cmd + '"}')
+    if (-not $r.ok) { throw "$cmd not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+function Type-InBubble([string]$text, [switch]$Enter) {
+    # Real focus by a click, then the characters straight to the edit box (SendKeys can't type every Arabic letter).
+    $b = Kv 'debug-bubble'
+    if ($b.open -ne 'true') { throw 'no typing bubble' }
+    [Mouse]::Click([int]$b.x + 20, [int]$b.y + [int]([int]$b.h / 2), $false)
+    Start-Sleep -Milliseconds 300
+    $edit = [IntPtr][long]$b.edit
+    foreach ($ch in $text.ToCharArray()) { [Shell]::PostMessage($edit, 0x0102, [IntPtr][int]$ch, [IntPtr]1) | Out-Null }
+    Start-Sleep -Milliseconds 200
+    if ($Enter) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 300 }
+}
+
+function Stage-Menu {
+    Step 'start engine' { Start-Engine }
+    Step 'right-click opens the menu with the six buttons' {
+        Pose-Body 900 450 | Out-Null
+        Start-Sleep -Milliseconds 300
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'menu open after a right-click'
+        $ids = ($m.buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
+        Start-Sleep -Milliseconds 600
+        Screenshot 'menu-open.png' | Out-Null
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'menu closed' | Out-Null
+    }
+    Step 'Esc closes it' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'menu open after a right-click' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Menu).open -ne 'true') { throw 'the menu closed by itself' }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Menu 'false' 1000 'menu closed by Esc' | Out-Null
+    }
+    Step 'a double-click opens it' {
+        $c = Body-Centre
+        [Mouse]::DoubleClick($c[0], $c[1])
+        Wait-Menu 'true' 2000 'menu open after a double-click' | Out-Null
+    }
+    Step 'a click outside closes it and nothing else happens' {
+        $before = (State).expression
+        $c = Body-Centre
+        [Mouse]::Click($c[0] - 400, $c[1] + 250, $false)
+        Wait-Menu 'false' 1000 'menu closed by a click outside' | Out-Null
+        if ((State).expression -ne $before) { throw "expression changed to $((State).expression)" }
+    }
+    Step 'buttons work by real clicks' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'menu open'
+        Start-Sleep -Milliseconds 600
+        $b = $m.buttons | Where-Object id -eq 'activity'
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Start-Sleep -Milliseconds 700
+        $m = Menu
+        if ($m.level -ne 'activity') { throw "level is '$($m.level)' after clicking activity" }
+        $b = $m.buttons | Where-Object id -eq 'activity-lively'
+        if (-not $b) { throw "no activity-lively button: $(($m.buttons | ForEach-Object id) -join ',')" }
+        Screenshot 'menu-activity.png' | Out-Null
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Wait-Menu 'false' 1500 'menu closed after choosing a level' | Out-Null
+        if ((Life).level -ne 'Lively') { throw "level is $((Life).level)" }
+    }
+    Step 'from every corner every button is on screen' {
+        $n = 0
+        foreach ($corner in @(@($Work.Left, $Work.Top), @(($Work.Right - 80), $Work.Top), @($Work.Left, ($Work.Bottom - 80)), @(($Work.Right - 80), ($Work.Bottom - 80)))) {
+            $n++
+            Pose-Body $corner[0] $corner[1] | Out-Null
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            $m = Wait-Menu 'true' 1000 "menu open in corner $n"
+            foreach ($b in $m.buttons) {
+                if ($b.x - $b.r -lt $Work.Left -or $b.y - $b.r -lt $Work.Top -or $b.x + $b.r -gt $Work.Right -or $b.y + $b.r -gt $Work.Bottom) {
+                    throw "corner ${n}: $($b.id) at ($($b.x),$($b.y)) is off the work area $Work"
+                }
+                if ($null -eq $b.lx) { throw "corner ${n}: debug-menu gives no label rectangle for $($b.id)" }
+                if ($b.lx -lt $Work.Left -or $b.ly -lt $Work.Top -or $b.lx + $b.lw -gt $Work.Right -or $b.ly + $b.lh -gt $Work.Bottom) {
+                    throw "corner ${n}: the label of $($b.id) is off the work area"
+                }
+            }
+            Start-Sleep -Milliseconds 600
+            Screenshot "menu-corner-$n.png" | Out-Null
+            Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+            Wait-Menu 'false' 1000 'menu closed' | Out-Null
+        }
+        Pose-Body 900 450 | Out-Null
+    }
+    Step 'hide closes the menu and hides her' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'hide'
+        Wait-Menu 'false' 1000 'menu closed after hide' | Out-Null
+        Wait-State { param($st) $st.hidden } 2000 'hidden' | Out-Null
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Wait-State { param($st) -not $st.hidden } 3000 'shown again' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'play makes her move' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'play'
+        Wait-Menu 'false' 1000 'menu closed after play' | Out-Null
+        Wait-State { param($st) $st.motion -notin 'Hover', 'EyesFollow' } 1500 'a move' | Out-Null
+        Start-Sleep -Seconds 9
+    }
+    Step 'the menu closes when she hides' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null
+        Wait-Menu 'false' 1000 'menu closed by hiding' | Out-Null
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'no drag while the menu is open' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        $before = State
+        $c = Body-Centre
+        & agent-desktop --headed drag --from-xy ('{0},{1}' -f $c[0], $c[1]) --to-xy ('{0},{1}' -f ($c[0] + 200), ($c[1] + 60)) --duration 600 --drop-delay 200 --timeout-ms 8000 | Out-Null
+        $after = State
+        if ([math]::Abs($after.x - $before.x) -gt 4 -or [math]::Abs($after.y - $before.y) -gt 4) { throw "she moved from ($($before.x),$($before.y)) to ($($after.x),$($after.y))" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'a 25-minute timer runs with its ring' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer-5,timer-15,timer-25,timer-45,timer-custom,back') { throw "timer options: $ids" }
+        Press 'timer-25'
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 1490 -or [int]$t.remaining -gt 1500) { throw "timer: running=$($t.running) remaining=$($t.remaining)" }
+        Start-Sleep -Milliseconds 800
+        Screenshot 'timer-ring.png' | Out-Null
+    }
+    Step 'the timer menu offers to stop it' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer-cancel,back') { throw "running timer options: $ids" }
+        Press 'timer-cancel'
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running' }
+    }
+    Step 'a typed time in Arabic digits' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Type-InBubble ([string][char]0x0662) -Enter
+        Start-Sleep -Milliseconds 300
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 110 -or [int]$t.remaining -gt 120) { throw "typed timer: running=$($t.running) remaining=$($t.remaining)" }
+        if ((Kv 'debug-bubble').open -ne 'false') { throw 'the bubble is still open' }
+    }
+    Step 'when it ends she shows it and a poke dismisses it' {
+        Send '{"type":"cmd","name":"timer","args":{"seconds":"3"}}' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'timer-done' } 6000 'timer-done face' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Attention' } 2500 'her attention move' | Out-Null
+        Start-Sleep -Seconds 4
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running after it ended' }
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $false)
+        Wait-State { param($st) $st.expression -notin 'timer-done' } 2500 'timer face dismissed by a poke' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'do not disturb for 30 minutes' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'dnd-30,dnd-60,dnd-120,dnd-on,back') { throw "dnd options: $ids" }
+        Press 'dnd-30'
+        Wait-State { param($st) $st.expression -eq 'dnd' } 2000 'dnd face' | Out-Null
+        if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd is off' }
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $end = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' during do-not-disturb" }
+        }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'dnd-off,back') { throw "dnd-on options: $ids" }
+        Press 'dnd-off'
+        Wait-State { param($st) $st.expression -eq 'idle' } 2000 'dnd face gone' | Out-Null
+    }
+    Step 'fullscreen while DND is on keeps both' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'dnd'
+        Press 'dnd-on'
+        Wait-State { param($st) $st.expression -eq 'dnd' } 2000 'dnd face' | Out-Null
+        $w = Start-TestWindow 'borderless'
+        try { Wait-State { param($st) $st.hidden } 4000 'hidden over fullscreen' | Out-Null }
+        finally { $w.Kill() }
+        Wait-State { param($st) -not $st.hidden } 5000 'back after fullscreen' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'dnd' } 4000 'dnd face after fullscreen (after her hello-back face)' | Out-Null
+        if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd turned off by fullscreen' }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'dnd'
+        Press 'dnd-off'
+    }
+    Step 'a quick note is saved and shown next time' {
+        $notes = Join-Path $env:APPDATA 'Sahar\notes.json'
+        Remove-Item $notes -ErrorAction SilentlyContinue
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        $text = -join ([char[]](0x0627, 0x0634, 0x062A, 0x0631, 0x064A, 0x0020, 0x062E, 0x0628, 0x0632))   # اشتري خبز
+        Type-InBubble $text -Enter
+        Wait-State { param($st) $st.expression -eq 'notification' } 2000 'the note face' | Out-Null
+        if (-not (Test-Path $notes)) { throw 'notes.json not written' }
+        $saved = @((Get-Content $notes -Raw -Encoding UTF8) | ConvertFrom-Json)
+        if ($saved.Count -ne 1 -or $saved[0].text -ne $text) { throw "notes.json: $(Get-Content $notes -Raw)" }
+        Start-Sleep -Seconds 2
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
+        if ($lines[0] -ne $text) { throw "bubble lines: $($lines -join ' | ')" }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Kv 'debug-bubble').open -ne 'false') { throw 'Esc did not close the bubble' }
+        $count = ((Get-Content $notes -Raw -Encoding UTF8) | ConvertFrom-Json).Count
+        if ($count -ne 1) { throw "$count notes after Esc" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 400
+        Screenshot 'note-bubble.png' | Out-Null
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Screenshot 'timer-bubble.png' | Out-Null
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+    }
+    Step 'four notes: the bubble shows the last three, newest first' {
+        foreach ($n in 2, 3, 4) {
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            Wait-Menu 'true' 1000 'menu open' | Out-Null
+            Press 'note'
+            Start-Sleep -Milliseconds 300
+            Type-InBubble "note $n" -Enter
+            Start-Sleep -Milliseconds 300
+        }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'note'
+        Start-Sleep -Milliseconds 300
+        $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
+        if (($lines -join ',') -ne 'note 4,note 3,note 2') { throw "bubble lines: $($lines -join ',')" }
+        $edit = [IntPtr][long](Kv 'debug-bubble').edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+    }
+    Step 'the show plays every step with a caption' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $actions = [int](Life).actions
+        $r = Send '{"type":"cmd","name":"showcase","args":{"from":"30"}}'
+        if (-not $r.ok) { throw "showcase not ok: $($r.error)" }
+        $seen = @{}
+        $deadline = (Get-Date).AddSeconds(35)
+        $shot = $false
+        do {
+            Start-Sleep -Milliseconds 500
+            $s = Kv 'debug-showcase'
+            if ($s.running -ne 'true') { throw "the show stopped early at $($s.step)" }
+            $seen[$s.step] = $s.id
+            if (-not $shot -and $seen.Count -ge 2) { Start-Sleep -Milliseconds 400; Screenshot 'showcase.png' | Out-Null; $shot = $true }
+        } while ($seen.Count -lt 8 -and (Get-Date) -lt $deadline)
+        Write-Host "    steps seen: $(($seen.Values) -join ', ')"
+        if ($seen.Count -lt 8) { throw "only $($seen.Count) steps in 35 s" }
+        if ([int](Life).actions -ne $actions) { throw 'she did her own things during the show' }
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $false)
+        Start-Sleep -Milliseconds 600
+        if ((Kv 'debug-showcase').running -ne 'false') { throw 'a click did not stop the show' }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'clicking a label presses its button' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Press 'timer'
+        Start-Sleep -Milliseconds 500
+        $b = (Menu).buttons | Where-Object id -eq 'timer-15'
+        if ($null -eq $b.lx) { throw 'debug-menu gives no label rectangle' }
+        [Mouse]::Click([int]($b.lx + $b.lw / 2), [int]($b.ly + $b.lh / 2), $false)
+        Start-Sleep -Milliseconds 500
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 890) { throw "a click on the label '15 د' did not start the timer (running=$($t.running))" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-cancel'
+    }
+    Step 'a typed time she does not understand is not written to the log' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Press 'timer'
+        Press 'timer-custom'
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'abc' -Enter
+        Start-Sleep -Milliseconds 400
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'not understood[^\r\n]*0061') { throw 'the log holds what was typed' }
+        if ($log -notmatch 'typed time not understood \(3 characters\)') { throw 'the log does not say a typed time was not understood' }
+        Start-Sleep -Seconds 2
+    }
+    Step 'a right-click during the show keeps the menu around her' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"showcase","args":{"from":"1"}}' | Out-Null
+        Start-Sleep -Seconds 2
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'menu open during the show'
+        if ((Kv 'debug-showcase').running -ne 'false') { throw 'the show is still running with the menu open' }
+        $c = Body-Centre
+        foreach ($b in $m.buttons) {
+            $d = [math]::Sqrt([math]::Pow($b.x - $c[0], 2) + [math]::Pow($b.y - $c[1], 2))
+            if ($d -gt 560) { throw "button $($b.id) is $([int]$d) px from her" }   # nine buttons: a corner's quarter ring reaches ~525 px
+        }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    Step 'stopping the show does not make her jump' {
+        Send '{"type":"cmd","name":"showcase","args":{"from":"1"}}' | Out-Null
+        Start-Sleep -Seconds 2
+        $s0 = Kv 'debug-showcase'
+        if ([double]$s0.captionMinX -lt $Work.Left -or [double]$s0.captionMaxX -gt $Work.Right) { throw "caption spans $($s0.captionMinX)..$($s0.captionMaxX), outside $Work" }
+        $c = Body-Centre
+        $p0 = State
+        [Mouse]::Click($c[0], $c[1], $false)
+        Start-Sleep -Milliseconds 80
+        $p1 = State
+        $jump = [math]::Sqrt([math]::Pow($p1.x - $p0.x, 2) + [math]::Pow($p1.y - $p0.y, 2))
+        if ($jump -gt 60) { throw "she jumped $([int]$jump) px when the show stopped" }
+        Start-Sleep -Seconds 2
+    }
+    Step 'an interrupted breath does not keep pulsing' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Breathe"}}' | Out-Null
+        Start-Sleep -Milliseconds 700
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Info).bodyScale -ne 'free') { throw "body scale after an interrupted breath: '$((Info).bodyScale)'" }
+    }
+    Step 'the menu and the bubble cost nothing, again and again' {
+        # Absolute RAM at rest is checked by the perf stage; on the runner's software renderer, memory after this
+        # busy stage is not "at rest", so here the check is what the menu adds and that repeating it does not grow.
+        $before = (State).workingSetBytes
+        Write-Host ("    working set before: {0:N1} MB (managed heap {1} MB)" -f ($before / 1MB), (Info).gcHeapMB)
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Start-Sleep -Seconds 3
+        $open = (State).workingSetBytes
+        Write-Host ("    with the menu open: {0:N1} MB" -f ($open / 1MB))
+        if ($open - $before -gt 5MB) { throw ("the open menu adds {0:N1} MB" -f (($open - $before) / 1MB)) }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        $first = (State).workingSetBytes
+        foreach ($i in 1..15) {
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            Press 'activity'
+            Press 'back'
+            Press 'note'
+            Start-Sleep -Milliseconds 150
+            $edit = [IntPtr][long](Kv 'debug-bubble').edit
+            if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+            Start-Sleep -Milliseconds 150
+        }
+        Start-Sleep -Seconds 3
+        $after = (State).workingSetBytes
+        Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
+        if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
+    }
+    Stop-Engine
+}
+
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Clip {
+    [DllImport("user32.dll")] static extern bool OpenClipboard(IntPtr h);
+    [DllImport("user32.dll")] static extern bool CloseClipboard();
+    [DllImport("user32.dll")] static extern bool EmptyClipboard();
+    [DllImport("user32.dll")] static extern IntPtr SetClipboardData(uint f, IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterClipboardFormat(string n);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalAlloc(uint f, UIntPtr n);
+    [DllImport("kernel32.dll")] static extern IntPtr GlobalLock(IntPtr h);
+    [DllImport("kernel32.dll")] static extern bool GlobalUnlock(IntPtr h);
+    static IntPtr Text(string t) {
+        var h = GlobalAlloc(2, (UIntPtr)((t.Length + 1) * 2));
+        var p = GlobalLock(h); var b = System.Text.Encoding.Unicode.GetBytes(t + "\0"); Marshal.Copy(b, 0, p, b.Length); GlobalUnlock(h); return h;
+    }
+    /// Copies text the way a password manager does: marked "don't monitor".
+    public static bool CopyPrivate(string t) {
+        for (int i = 0; i < 10 && !OpenClipboard(IntPtr.Zero); i++) System.Threading.Thread.Sleep(50);
+        EmptyClipboard();
+        SetClipboardData(13, Text(t));
+        SetClipboardData(RegisterClipboardFormat("ExcludeClipboardContentFromMonitorProcessing"), GlobalAlloc(2, (UIntPtr)4));
+        return CloseClipboard();
+    }
+}
+'@
+
+function Clip-Count { [int](Kv 'debug-clipboard').count }
+
+function Stage-Senses {
+    $clipJson = Join-Path $env:APPDATA 'Sahar\clipboard.json'
+    Remove-Item $clipJson -ErrorAction SilentlyContinue
+    Step 'start engine' { Start-Engine }
+    Step 'copying text shows the copied face and lands in the history' {
+        Set-Clipboard -Value 'salam sahar'
+        Wait-State { param($st) $st.expression -eq 'copied' } 2500 'copied face' | Out-Null
+        $c = Kv 'debug-clipboard'
+        if ([int]$c.count -ne 1) { throw "history count $($c.count)" }
+        if ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.first)) -ne 'salam sahar') { throw 'first item is wrong' }
+    }
+    Step 'a password-manager style copy is never kept' {
+        Start-Sleep -Seconds 1
+        [Clip]::CopyPrivate('secret-123') | Out-Null
+        Start-Sleep -Milliseconds 800
+        if ((Clip-Count) -ne 1) { throw 'a private copy was kept' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'secret-123') { throw 'the private text reached the log' }
+    }
+    Step 'thirty quick copies keep twenty and one face' {
+        foreach ($i in 1..30) { Set-Clipboard -Value "item $i"; Start-Sleep -Milliseconds 60 }
+        Start-Sleep -Milliseconds 800
+        if ((Clip-Count) -ne 20) { throw "history count $(Clip-Count)" }
+        $faces = @(Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') | Where-Object { $_ -match 'clipboard: copied face' }).Count
+        if ($faces -gt 2) { throw "$faces copied faces" }
+    }
+    Step 'picking an item puts it back on the clipboard' {
+        Send '{"type":"cmd","name":"clipboard-pick","args":{"index":"3"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Get-Clipboard) -ne 'item 27') { throw "clipboard holds '$(Get-Clipboard)'" }
+        if ((Clip-Count) -ne 20) { throw 'picking added a new item' }
+    }
+    Step 'the menu has the clipboard button and its list' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        Press 'clipboard'
+        Start-Sleep -Milliseconds 500
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 20) { throw "list open=$($l.open) lines=$($l.lines)" }
+        Screenshot 'clipboard-list.png' | Out-Null
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'downloads: a finished browser download shows its face' {
+        Stop-Engine
+        $script:dl = Join-Path $env:TEMP 'sahar-downloads'
+        Remove-Item $script:dl -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:dl | Out-Null
+        Start-Engine @('--downloads', $script:dl)
+        Start-Sleep -Seconds 1
+        $tmp = Join-Path $script:dl 'a.zip.crdownload'
+        [IO.File]::WriteAllBytes($tmp, (New-Object byte[] 4096))
+        Rename-Item $tmp 'a.zip'
+        Wait-State { param($st) $st.expression -eq 'download' } 3000 'download face' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+        Start-Sleep -Seconds 3
+    }
+    Step 'downloads: a cancelled one shows nothing' {
+        $tmp = Join-Path $script:dl 'b.zip.part'
+        [IO.File]::WriteAllBytes($tmp, (New-Object byte[] 4096))
+        Start-Sleep -Milliseconds 500
+        Remove-Item $tmp
+        $end = (Get-Date).AddSeconds(4)
+        while ((Get-Date) -lt $end) { if ((State).expression -eq 'download') { throw 'a cancelled download showed the face' }; Start-Sleep -Milliseconds 300 }
+    }
+    Step 'downloads: a file written straight to its name counts once it stops growing' {
+        $f = Join-Path $script:dl 'c.pdf'
+        $s = [IO.File]::OpenWrite($f)
+        foreach ($i in 1..3) { $s.Write((New-Object byte[] 1024), 0, 1024); $s.Flush(); Start-Sleep -Milliseconds 500 }
+        $s.Close()
+        Wait-State { param($st) $st.expression -eq 'download' } 6000 'download face for a direct write' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+    }
+    Step 'downloads: a Firefox placeholder beside its .part shows nothing' {
+        New-Item -ItemType File -Path (Join-Path $script:dl 'd.mp4') | Out-Null
+        [IO.File]::WriteAllBytes((Join-Path $script:dl 'd.mp4.part'), (New-Object byte[] 2048))
+        $end = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $end) { if ((State).expression -eq 'download') { throw 'the face showed when the download only started' }; Start-Sleep -Milliseconds 300 }
+    }
+    Step 'a comment that names an app reads right to left' {
+        $text = 'صار لك ساعتين على VS Code، كيف ماشي؟'
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+        Send ('{"type":"cmd","name":"say","args":{"text64":"' + $b64 + '"}}') | Out-Null
+        Start-Sleep -Milliseconds 600
+        Screenshot 'comment-latin.png' | Out-Null
+    }
+    Step 'a screenshot key shows her screenshot face' {
+        [System.Windows.Forms.SendKeys]::SendWait('{PRTSC}')
+        Start-Sleep -Milliseconds 300
+        Write-Host "    Print Screen key events seen: $((Kv 'debug-keys').printScreen)"
+        Wait-State { param($st) $st.expression -eq 'screenshot' } 3000 'screenshot face' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'vk=|key ') { throw 'keys reached the log' }
+        Wait-State { param($st) $st.expression -eq 'idle' } 12000 'back to idle' | Out-Null
+    }
+    Step 'a busy CPU for two minutes makes her hot' {
+        $r = Send '{"type":"cmd","name":"debug-cpu","args":{"percent":"92","count":"13"}}'
+        if (-not $r.ok) { throw "debug-cpu not ok: $($r.error)" }
+        Wait-State { param($st) $st.expression -eq 'hot' } 3000 'hot face' | Out-Null
+    }
+    Step 'camera or microphone on: quiet, only small things' {
+        $r = Send '{"type":"cmd","name":"debug-cameramic","args":{"on":"true"}}'
+        if (-not $r.ok) { throw "debug-cameramic not ok: $($r.error)" }
+        if ((Life).quiet -ne 'true') { throw 'not quiet with the camera on' }
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"2"}}' | Out-Null
+        $end = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $end) {
+            Start-Sleep -Milliseconds 400
+            $m = (State).motion
+            if ($m -notin 'Hover', 'Breathe') { throw "big move '$m' while the camera is on" }
+        }
+        Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
+        Send '{"type":"cmd","name":"debug-cameramic","args":{"on":"false"}}' | Out-Null
+        if ((Life).quiet -ne 'false') { throw 'still quiet after the camera went off' }
+    }
+    Step 'no comment while you type' {
+        $w = Start-TestWindow 'typing'
+        try {
+            $end = (Get-Date).AddSeconds(2)
+            while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('abc '); Start-Sleep -Milliseconds 150 }
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if ($r.ok) { throw 'she commented while you typed' }
+            Start-Sleep -Seconds 4   # typing ends
+            & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # the test window in front again
+            Start-Sleep -Milliseconds 500
+            Write-Host "    app in front: $((Kv 'debug-apptime').app)"
+            Send '{"type":"cmd","name":"apptime-skip","args":{"minutes":"125"}}' | Out-Null
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if (-not $r.ok) { throw "no comment after a long session: $($r.error)" }
+            $c = Kv 'debug-comment'
+            $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.text64))
+            Write-Host "    comment: $text"
+            if ($c.showing -ne 'true' -or $text -notmatch 'ساعتين|ساعة كاملة|صباح') { throw "comment: showing=$($c.showing) '$text'" }
+            Start-Sleep -Milliseconds 500
+            Screenshot 'comment.png' | Out-Null
+            $b = Body-Centre
+            [Mouse]::Click($b[0], $b[1], $false)
+            Start-Sleep -Milliseconds 400
+            $c = Kv 'debug-comment'
+            if ($c.showing -ne 'false') { throw 'a click did not close her comment' }
+            if ([int]$c.gapMinutes -le 45) { throw "the next comment waits only $($c.gapMinutes) min after being clicked away" }
+            $r = Send '{"type":"cmd","name":"comment-now"}'
+            if ($r.ok) { throw 'a second comment came right away' }
+        }
+        finally { $w.Kill() }
+    }
+    Step 'weather: a city with rain coming shows the rain face' {
+        Stop-Engine
+        $script:wx = Join-Path $env:TEMP 'sahar-weather'
+        Remove-Item $script:wx -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:wx | Out-Null
+        '{"results":[{"name":"Damascus","latitude":33.51,"longitude":36.29}]}' | Set-Content (Join-Path $script:wx 'geocode.json')
+        '{"hourly":{"time":["2026-11-06T20:00","2026-11-06T21:00"],"weather_code":[61,63],"precipitation_probability":[80,90]}}' | Set-Content (Join-Path $script:wx 'forecast.json')
+        Start-Engine @('--weather-stub', $script:wx)
+        Send '{"type":"cmd","name":"weather-open"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'Damascus' -Enter
+        Wait-State { param($st) $st.expression -eq 'rain' } 5000 'rain face' | Out-Null
+        if ((Kv 'debug-weather').on -ne 'true') { throw 'weather is not on' }
+        $json = Get-Content (Join-Path $env:APPDATA 'Sahar\settings.json') -Raw
+        if ($json -notmatch '"weatherEnabled"\s*:\s*true') { throw "settings.json: $json" }
+    }
+    Step 'weather: no network keeps it off and says so' {
+        Stop-Engine
+        $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+        Remove-Item $settings -ErrorAction SilentlyContinue
+        $empty = Join-Path $env:TEMP 'sahar-weather-empty'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        Start-Engine @('--weather-stub', $empty)
+        Send '{"type":"cmd","name":"weather-open"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Type-InBubble 'Damascus' -Enter
+        Start-Sleep -Seconds 2
+        $b = Kv 'debug-bubble'
+        $title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b.title64))
+        if ($b.open -ne 'true' -or $title -notmatch 'نت') { throw "bubble: open=$($b.open) '$title'" }
+        if ((Kv 'debug-weather').on -ne 'false') { throw 'weather turned on without a city' }
+        $edit = [IntPtr][long]$b.edit
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+    }
+    Step 'clear all empties it' {
+        Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
+        if ((Clip-Count) -ne 0) { throw 'not cleared' }
+        if (@((Get-Content $clipJson -Raw) | ConvertFrom-Json).Count -ne 0) { throw 'clipboard.json still holds items' }
+    }
+    Stop-Engine
+}
+
 function Stage-Life {
     $settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
     $lifePath = Join-Path $env:APPDATA 'Sahar\life.json'
@@ -652,7 +1378,7 @@ function Stage-Life {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Wait-State { param($st) $st.expression -eq 'music' } 4000 'music face' | Out-Null
         $small = @{}
-        $end = (Get-Date).AddSeconds(12)
+        $end = (Get-Date).AddSeconds(25)   # a Breathe keeps her busy 8 s; two in a row happen
         while ((Get-Date) -lt $end) {
             Start-Sleep -Milliseconds 400
             $m = (State).motion
@@ -738,13 +1464,13 @@ function Stage-Life {
             while ((Get-Date) -lt $end) { [System.Windows.Forms.SendKeys]::SendWait('salam '); Start-Sleep -Milliseconds 150 }
             if ((Life).typing -ne 'true') { throw 'typing not detected' }
             $far = $false
-            $deadline = (Get-Date).AddSeconds(8)
+            $deadline = (Get-Date).AddSeconds(12)   # a long wander away takes up to 8 s after the first tick
             do {
                 [System.Windows.Forms.SendKeys]::SendWait('x'); Start-Sleep -Milliseconds 300
                 $st = State
                 $d = [math]::Sqrt([math]::Pow($st.x + $st.width / 2 - $sx, 2) + [math]::Pow($st.y + $st.height / 2 - $sy, 2))
                 if ($st.motion -notin 'Wander', 'Hover') { throw "motion '$($st.motion)' while typing" }
-                if ($d -gt 150 -and $st.motion -eq 'Hover') { $far = $true }
+                if ($d -gt 120 -and $st.motion -eq 'Hover') { $far = $true }
             } while (-not $far -and (Get-Date) -lt $deadline)
             Screenshot 'life-typing.png' | Out-Null
             Write-Host "    her distance after typing $([int]$d) px"
@@ -814,6 +1540,190 @@ function Stage-Life {
     Stop-Engine
 }
 
+function Text64([string]$b64) { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64)) }
+
+function Stage-Prayer {
+    $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+    Step 'start engine with a stubbed city search' {
+        Stop-Engine
+        Remove-Item $settings -ErrorAction SilentlyContinue
+        $script:px = Join-Path $env:TEMP 'sahar-prayer'
+        Remove-Item $script:px -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $script:px | Out-Null
+        '{"results":[{"name":"Damascus","latitude":33.51,"longitude":36.29}]}' | Set-Content (Join-Path $script:px 'geocode.json')
+        Start-Engine @('--weather-stub', $script:px)
+        Pose-Body 900 450 | Out-Null
+    }
+    Step 'the first press asks the city, then shows the next prayer and six times' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"prayer"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $b = Kv 'debug-bubble'
+        if ($b.open -ne 'true' -or (Text64 $b.title64) -notmatch 'مدينت') { throw "no city question (open=$($b.open))" }
+        Type-InBubble 'Damascus' -Enter
+        $deadline = (Get-Date).AddSeconds(5)
+        do { Start-Sleep -Milliseconds 200; $l = Kv 'debug-list' } while ($l.open -ne 'true' -and (Get-Date) -lt $deadline)
+        if ($l.open -ne 'true') { throw 'the prayer list did not open' }
+        $lines = (Text64 $l.lines64) -split "`n"
+        if ($lines.Count -ne 8) { throw "list lines: $($lines.Count)" }
+        if ($lines[0] -notmatch '^الجاية: ') { throw "first line: $($lines[0])" }
+        foreach ($name in 'الفجر', 'الشروق', 'الظهر', 'العصر', 'المغرب', 'العشاء') {
+            if (-not ($lines | Where-Object { $_ -match "^$name — \d\d:\d\d$" })) { throw "no time line for $name" }
+        }
+        if ($lines[7] -notmatch 'طريقة الحساب: أم القرى') { throw "method line: $($lines[7])" }
+        if ((Text64 $l.button64) -notmatch 'Damascus') { throw "city button: $(Text64 $l.button64)" }
+        if ((Get-Content $settings -Raw) -notmatch '"prayerCity"\s*:\s*"Damascus"') { throw 'city not saved' }
+    }
+    Step 'the method line opens the methods and a pick is saved' {
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"7"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 5) { throw "methods list: open=$($l.open) lines=$($l.lines)" }
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"1"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Get-Content $settings -Raw) -notmatch '"prayerMethod"\s*:\s*"muslimWorldLeague"') { throw "method not saved: $(Get-Content $settings -Raw)" }
+        $l = Kv 'debug-list'
+        if ($l.open -ne 'true' -or (Text64 $l.lines64) -notmatch 'رابطة العالم الإسلامي') { throw 'the prayer list did not come back with the new method' }
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'ten minutes before Asr: the reminder face and words' {
+        $p = Kv 'debug-prayer'
+        $script:asr = [DateTimeOffset]::Parse($p.asr, [Globalization.CultureInfo]::InvariantCulture)
+        $at = $script:asr.AddMinutes(-9.5).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Wait-State { param($st) $st.expression -eq 'reminder' } 5000 'reminder face' | Out-Null
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'بعد 10 دقايق العصر') { throw "reminder words: '$(Text64 $c.text64)'" }
+        if ((Kv 'debug-prayer').next -ne 'Asr') { throw 'next prayer is not Asr' }
+    }
+    Step 'at Asr: quiet for the adhan, small things only' {
+        $at = $script:asr.AddSeconds(5).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-prayer').quiet -ne 'true') { throw 'no adhan quiet' }
+        if ((Kv 'debug-life').quiet -ne 'true') { throw 'life is not quiet' }
+        if ((State).expression -eq 'reminder') { throw 'the reminder face stayed into the adhan' }
+        $r = Send '{"type":"cmd","name":"comment-now"}'
+        if ($r.ok) { throw 'a comment during the adhan' }
+    }
+    Step 'six minutes later the quiet ends' {
+        $at = $script:asr.AddMinutes(6).ToString('o')
+        Send "{`"type`":`"cmd`",`"name`":`"prayer-at`",`"args`":{`"at`":`"$at`"}}" | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-prayer').quiet -ne 'false') { throw 'still quiet' }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'life still quiet' }
+    }
+    Step 'listening: music and Quran, then the music controls and what is playing' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'music,quran,back') { throw "listen ring: $ids" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"music"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'music-prev,music-toggle,music-next,back') { throw "music ring: $ids" }
+        if ((Kv 'debug-music').session -ne 'false') { throw 'a media session on the test machine' }
+        $deadline = (Get-Date).AddSeconds(3)
+        do { Start-Sleep -Milliseconds 200; $c = Kv 'debug-comment' } while ($c.showing -ne 'true' -and (Get-Date) -lt $deadline)
+        if ((Text64 $c.text64) -ne 'ما في شي عم يشتغل') { throw "music bubble: '$(Text64 $c.text64)'" }
+        $gap = (Kv 'debug-apptime').gapMinutes
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"music-toggle"}}' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Menu).open -ne 'false') { throw 'the menu stayed open after a control' }
+        if (-not (State)) { throw 'no state after a control with nothing playing' }
+        # Her tool lines are not comments: letting them time out never makes her comment less.
+        Start-Sleep -Seconds 9
+        if ((Kv 'debug-comment').showing -ne 'false') { throw 'the music bubble did not go away' }
+        if ((Kv 'debug-apptime').gapMinutes -ne $gap) { throw "the comment gap grew from $gap to $((Kv 'debug-apptime').gapMinutes) minutes" }
+    }
+    Step 'Quran: no network gives a gentle message and no stuck playing' {
+        Stop-Engine
+        Start-Engine @('--weather-stub', $script:px, '--quran-base', 'http://127.0.0.1:9/')
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"1","reciter":"ar.alafasy"}}' | Out-Null
+        # A refused connection or a hang: either way she gives up within 15 s, once.
+        $deadline = (Get-Date).AddSeconds(25)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'failed' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'false' -or $q.state -ne 'failed') { throw "quran: playing=$($q.playing) state=$($q.state)" }
+        $c = Kv 'debug-comment'
+        if ((Text64 $c.text64) -ne 'ما قدرت شغّل التلاوة هلق') { throw "message: '$(Text64 $c.text64)'" }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the failure' }
+        if ((State).expression -eq 'quran') { throw 'the quran face stayed after the failure' }
+    }
+    # CI's Windows Server has no MP3 decoder (SourceNotSupported), so these steps use a stand-in player ("fake" seconds);
+    # real playback is a manual check (README-test-build.txt).
+    Step 'Quran: playing pauses the dance, is quiet and wears its face' {
+        Stop-Engine
+        Start-Engine @('--weather-stub', $script:px)
+        Pose-Body 900 450 | Out-Null
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"true","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Send '{"type":"cmd","name":"life","args":{"gap":"600","now":"Dance"}}' | Out-Null
+        Wait-State { param($st) $st.motion -eq 'Dance' } 3000 'dancing to the music' | Out-Null
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"112","reciter":"ar.alafasy","fake":"30"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(8)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'playing' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'true' -or $q.state -ne 'playing' -or $q.surah -ne '112') { throw "quran: playing=$($q.playing) state=$($q.state) surah=$($q.surah)" }
+        Wait-State { param($st) $st.motion -ne 'Dance' } 4000 'the dance ending for the Quran' | Out-Null
+        Wait-State { param($st) $st.expression -eq 'quran' } 2000 'the quran face' | Out-Null
+        if ((Kv 'debug-life').quiet -ne 'true') { throw 'life is not quiet during the Quran' }
+        Start-Sleep -Seconds 3
+        if ((State).motion -eq 'Dance') { throw 'she danced during the Quran' }
+        # Listening without touching the PC is not being away: no sleepy face, no nap in the corner.
+        # (The music stops first: a playing song outranks "away" in her brain and would hide the case.)
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        Post 'user.away' | Out-Null
+        Start-Sleep -Seconds 3
+        $st = State
+        if ($st.expression -ne 'quran') { throw "face during the Quran while 'away': $($st.expression)" }
+        if ($st.motion -in 'SleepInCorner', 'NapOnIcon') { throw "she went to nap during the Quran ($($st.motion))" }
+        Post 'user.back' | Out-Null
+    }
+    Step 'Quran: the listen ring offers stop, and stop restores her' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        if ($ids -ne 'quran-stop,music,back') { throw "listen ring while playing: $ids" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran-stop"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Kv 'debug-quran').playing -ne 'false') { throw 'still playing after stop' }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after stop' }
+        if ((State).expression -eq 'quran') { throw 'the quran face stayed after stop' }
+        Send '{"type":"cmd","name":"debug-media","args":{"playing":"false","video":"false","browser":"false","front":"false"}}' | Out-Null
+    }
+    Step 'Quran: the surah list puts the last one first, and the reciter can change' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $l = Kv 'debug-list'
+        $lines = (Text64 $l.lines64) -split "`n"
+        if ($l.open -ne 'true' -or $lines.Count -ne 115) { throw "surah list: open=$($l.open) lines=$($lines.Count)" }
+        if ($lines[0] -notmatch 'الإخلاص' -or $lines[1] -notmatch 'الفاتحة' -or $lines[114] -notmatch 'الناس') { throw "list order: $($lines[0]) / $($lines[1]) / $($lines[114])" }
+        if ((Text64 $l.button64) -ne 'القارئ: مشاري العفاسي') { throw "reciter button: $(Text64 $l.button64)" }
+        Send '{"type":"cmd","name":"list-button"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $l = Kv 'debug-list'
+        if ([int]$l.lines -ne 6) { throw "reciter list lines: $($l.lines)" }
+        Send '{"type":"cmd","name":"list-pick","args":{"index":"2"}}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Get-Content $settings -Raw) -notmatch '"quranReciter"\s*:\s*"ar.husary"') { throw 'reciter not saved' }
+        $l = Kv 'debug-list'
+        if ((Text64 $l.button64) -notmatch 'الحصري') { throw "reciter button after the pick: $(Text64 $l.button64)" }
+        Send '{"type":"cmd","name":"list-close"}' | Out-Null
+    }
+    Step 'Quran: the end of the surah brings her back' {
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"113","reciter":"ar.husary","fake":"2"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(12)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'ended' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'false' -or $q.state -ne 'ended') { throw "quran: playing=$($q.playing) state=$($q.state)" }
+        if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the surah ended' }
+    }
+    Step 'the city never reaches the log' {
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'Damascus') { throw 'the city name is in engine.log' }
+    }
+    Stop-Engine
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -825,6 +1735,9 @@ try {
             'events' { Stage-Events }
             'perf' { Stage-Perf }
             'life' { Stage-Life }
+            'menu' { Stage-Menu }
+            'senses' { Stage-Senses }
+            'prayer' { Stage-Prayer }
         }
     }
 }
