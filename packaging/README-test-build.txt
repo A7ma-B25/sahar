@@ -1,8 +1,23 @@
-سَحَر · Sahar — نسخة تجريبية 0.7.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.8.0 (ويندوز)
 ============================================
 
-شو الجديد بـ 0.7.0 — النسخة النضيفة
------------------------------------
+شو الجديد بـ 0.8.0 — ردّات فعل وحركات حيّة
+------------------------------------------
+- إذا سحبتها وهزّيتها يمين وشمال بسرعة:
+  😵 بتدوخ (عيون دوّامات ونجوم حول راسها)، أو 🤢 إذا الهزّة قوية بتستفرغ بشكل كرتوني وبعدين بتستحي،
+  أو 😠 بتعصّب (حمرا وبخار) وبتزعل 20 ثانية: بتبعد عن الماوس، وإذا كبست عليها بتقلك "هِم! 😤"،
+  وتالت نكزة لطيفة بتصالحك 💜. إذا هزّيتها مرة تانية خلال 5 دقايق، غالباً بتعصّب.
+- حركات حيّة بدل الطيران بس: بتمشي على التاسك بار وبتقعد ترتاح، بتتمطّى متل القطة، بتتثاوب،
+  بتحك راسها، بتقعد جنب الشباك يلي فاتحه وبتتفرّج، بتنط على طول الشباك، بترمي قمرها وبتلقطه،
+  وبتلحق فراشة صغيرة.
+- لما تبلّش تكتب، أحياناً بتقعد جنب شباكك (مش فوقه) وبتعمل حالها عم تكتب معك، وبتوقف لما توقف.
+
+شو جرّب: اسحبها وهزّها؛ هزّها مرة تانية بعد شوي؛ "فرجيني حركاتك" من أيقونتها لتشوف الحركات الجديدة (26–36).
+
+من 0.7.0
+--------
+النسخة النضيفة
+---------------
 - أول ما تشغّلها بتمسح كل شي خلّفته النسخ القديمة (الإعدادات، الملاحظات، الحافظة، السجل) وبتبلّش من الصفر. مرة وحدة بس.
   بعد التشغيل احذف مجلدات النسخ القديمة يلي فكّيتها بإيدك.
 - تعارف: بتسلّم عليك وبتسألك شو بدها تناديك، وإذا انت شب ولا بنت. كلامها معك بيصير حسب جوابك ("اكتب" / "اكتبي")،
@@ -68,7 +83,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.7.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.8.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -124,11 +139,23 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.7.0 (Windows)
+Sahar — test build 0.8.0 (Windows)
 ==================================
 
-What's new in 0.7.0 — the clean version
----------------------------------------
+What's new in 0.8.0 — reactions and living moves
+------------------------------------------------
+- Drag her and shake her left and right quickly: 😵 she gets dizzy (spiral eyes, stars), 🤢 after a hard shake she is
+  sick in a cartoon way and then a little embarrassed, or 😠 she gets angry (red, steam) and sulks for 20 s: she keeps
+  away from the pointer, a click gets "هِم! 😤", and the third gentle poke makes up 💜. Shake her again within 5 minutes
+  and she is likely to get angry.
+- Living moves instead of mostly flying: she walks on the taskbar and sits, stretches like a cat, yawns, scratches her
+  head, sits beside your window and watches, hops along a window, tosses her moon and catches it, chases a butterfly.
+- When you start typing she sometimes sits beside your window (never over it) and pretends to type along.
+
+Try: drag and shake her; shake her again a bit later; "Show me your moves" from her tray icon for the new moves (26–36).
+
+From 0.7.0 — the clean version
+------------------------------
 - Its first start removes everything older test builds left (settings, notes, clipboard, log) and starts fresh, once.
   Delete the folders of old builds you unzipped yourself.
 - Hello: she greets you and asks what to call you and whether you are a man or a woman; her Arabic then addresses you
@@ -194,7 +221,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.7.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.8.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
