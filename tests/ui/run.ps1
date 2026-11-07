@@ -1554,6 +1554,16 @@ function Stage-Prayer {
         Start-Engine @('--weather-stub', $script:px)
         Pose-Body 900 450 | Out-Null
     }
+    Step 'a test machine never gets her own comments (her morning hello hid a click in the motion stage)' {
+        # Her clock moved to 06:30, when she says good morning; on a test machine only comment-now may make her talk.
+        $now = Get-Date
+        $m = [int]((([TimeSpan]'06:30') - $now.TimeOfDay).TotalMinutes)
+        if ($m -lt 0) { $m += 1440 }
+        Send "{`"type`":`"cmd`",`"name`":`"apptime-skip`",`"args`":{`"minutes`":`"$m`"}}" | Out-Null
+        Start-Sleep -Seconds 65   # her own check runs every minute
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'false') { throw "she commented by herself: '$(Text64 $c.text64)'" }
+    }
     Step 'the first press asks the city, then shows the next prayer and six times' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Send '{"type":"cmd","name":"menu-press","args":{"id":"prayer"}}' | Out-Null
