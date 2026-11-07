@@ -64,7 +64,13 @@ internal sealed class GamePlayer : IDisposable
         catch (Exception e) { Log.Write($"game error: {e}"); }
     }
 
-    private MonitorInfo Monitor => Monitors.At(new Vector2(_motion.Body.X + _motion.Body.Width / 2, _motion.Body.Y + _motion.Body.Height / 2));
+    // The game's screen is fixed when it starts: hiding half off an edge never flips it to a neighbour.
+    private MonitorInfo? _gameMonitor;
+    private MonitorInfo Monitor => _gameMonitor ?? Monitors.At(new Vector2(_motion.Body.X + _motion.Body.Width / 2, _motion.Body.Y + _motion.Body.Height / 2));
+    private static RectF ToF(RectI r) => new(r.Left, r.Top, r.Width, r.Height);
+
+    /// <summary>A game started (true) or ended (false): her own input window steps aside so the game gets every click.</summary>
+    public event Action<bool>? RunningChanged;
     private float Dpi => Monitor.DpiScale;
     private RectF Work => Monitor.WorkF;
     private Vector2 Size => _motion.GameBodySize;
@@ -75,7 +81,10 @@ internal sealed class GamePlayer : IDisposable
     public void Start(GameKind kind, float? seconds = null)
     {
         if (Running) Stop(sayScore: false);
+        _gameMonitor = null;
+        _gameMonitor = Monitor;
         Kind = kind;
+        RunningChanged?.Invoke(true);
         Score = 0;
         _clock = 0;
         var p = Native.CursorPos();
@@ -94,7 +103,9 @@ internal sealed class GamePlayer : IDisposable
             _clock += dt;
             var c = Native.CursorPos();
             if (!_ballHeld) _pointer = new Vector2(c.X, c.Y);
-            bool go = _tick?.Invoke(dt) ?? false;
+            bool go;
+            try { go = _tick?.Invoke(dt) ?? false; }
+            catch (Exception e) { Log.Write($"game error: {e}"); go = false; }   // never a frozen game holding the mouse
             if (_clock >= _limit) go = false;
             if (!go) { _tick = null; Finish(); }
             return go;
@@ -115,9 +126,12 @@ internal sealed class GamePlayer : IDisposable
         Kind = null;
         State = "over";
         _catcher.Hide();
-        ClearVisuals();
+        try { ClearVisuals(); }
+        catch (Exception e) { Log.Write($"game cleanup error: {e.GetType().Name}"); }
         _ballHeld = false;
         _motion.EndGame();
+        _gameMonitor = null;
+        RunningChanged?.Invoke(false);
         Log.Write($"game: {kind} over, score {Score}");
         if (sayScore) _say(Sahar.Core.Settings.Address.ToYou(GameText.Result(kind, Score)));
     }
@@ -283,6 +297,7 @@ internal sealed class GamePlayer : IDisposable
         {
             Moving(dt);
             _roundClock += dt;
+            if (_round > HideSeek.Rounds) return false;   // the last round is over: no extra hide
             if (!_hidden)
             {
                 if (_roundClock >= 1.5f) Hide();
@@ -307,7 +322,12 @@ internal sealed class GamePlayer : IDisposable
 
     private void Hide()
     {
-        var spot = HideSeek.Spot(Work, Size, _rng.Next(4), (float)_rng.NextDouble());
+        var m = Monitor;
+        var (_, barEdge, _) = Taskbar.Get(m.Handle);
+        int taskbar = barEdge switch { Edge.Left => 0, Edge.Top => 1, Edge.Right => 2, _ => 3 };
+        var edges = HideSeek.OpenEdges(ToF(m.Bounds), Monitors.All().Select(x => ToF(x.Bounds)).ToList(), taskbar);
+        if (edges.Count == 0) edges = [taskbar == 1 ? 3 : 1];   // boxed in by screens: a peek over the top (or bottom)
+        var spot = HideSeek.Spot(ToF(m.Bounds), Size, edges[_rng.Next(edges.Count)], (float)_rng.NextDouble());
         _motion.GameMoveTo(spot);
         _hidden = true;
         _roundClock = 0;
@@ -316,7 +336,7 @@ internal sealed class GamePlayer : IDisposable
 
     private void HideClick(Vector2 p)
     {
-        if (!_hidden || !Chase.Hit(HerRect.Intersect(Work), p)) return;
+        if (!_hidden || !Chase.Hit(HerRect.Intersect(ToF(Monitor.Bounds)), p)) return;
         PopOut(found: true);
     }
 

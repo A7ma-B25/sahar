@@ -1,9 +1,9 @@
 name: ui-test
 
+# Windows minutes are precious: on main pushes, or run by hand for a branch (gh workflow run ui-test.yml --ref <branch>).
 on:
   push:
-    branches: [main, "v1/**"]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

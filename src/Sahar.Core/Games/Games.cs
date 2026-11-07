@@ -58,6 +58,24 @@ public static class HideSeek
         };
     }
 
+    /// <summary>Edges she can hide past: no other screen beyond them (her hidden part would show there) and not the
+    /// taskbar's edge (0 left, 1 top, 2 right, 3 bottom; −1 no taskbar on this screen).</summary>
+    public static List<int> OpenEdges(RectF monitor, IReadOnlyList<RectF> all, int taskbarEdge)
+    {
+        var open = new List<int>();
+        for (int edge = 0; edge < 4; edge++)
+        {
+            if (edge == taskbarEdge) continue;
+            float cx = monitor.X + monitor.Width / 2, cy = monitor.Y + monitor.Height / 2;
+            var (px, py) = edge switch
+            {
+                0 => (monitor.X - 20, cy), 1 => (cx, monitor.Y - 20), 2 => (monitor.Right + 20, cy), _ => (cx, monitor.Bottom + 20),
+            };
+            if (!all.Any(m => m.Contains(px, py))) open.Add(edge);
+        }
+        return open;
+    }
+
     public static bool Hint(double seconds) => seconds >= HintSeconds;
     public static bool GiveUp(double seconds) => seconds >= GiveUpSeconds;
 }

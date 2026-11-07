@@ -364,6 +364,7 @@ internal sealed unsafe class App
         // 🎮 Games (0.9): while one runs, life waits and the game moves her.
         using var games = new GamePlayer(ui, host, sahar, motion, line => speech.Say(line), Express, _options.Capturable);
         lifeDirector.Sulking = () => Sulking() || games.Running;
+        games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });

@@ -63,6 +63,17 @@ public class GamesTests
     }
 
     [Fact]
+    public void Hide_OnlyEdgesWithNoScreenBeyond_AndNotTheTaskbarEdge()
+    {
+        var left = new RectF(0, 0, 1920, 1080);
+        var right = new RectF(1920, 0, 1920, 1080);
+        // Left monitor: its right edge joins the other screen (her hidden part would show there); taskbar at the bottom.
+        Assert.Equal([0, 1], HideSeek.OpenEdges(left, [left, right], taskbarEdge: 3));
+        Assert.Equal([1, 2, 3], HideSeek.OpenEdges(right, [left, right], taskbarEdge: 0));
+        Assert.Equal([0, 1, 2, 3], HideSeek.OpenEdges(left, [left], taskbarEdge: -1));
+    }
+
+    [Fact]
     public void Hide_HintAfter20s_GiveUpAfter60s()
     {
         Assert.False(HideSeek.Hint(19.9));
