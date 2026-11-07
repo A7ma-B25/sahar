@@ -215,6 +215,7 @@ internal sealed partial class MotionController
         float dip = wm.DpiScale;
         var work = wm.WorkF;
         float y = perch.Y;
+        if (y < work.Y) { StartHopIcons(); return; }   // no room above the window: she would hop off the screen
         float left = Math.Max(work.X, w.Left + 20 * dip), right = Math.Min(work.Right - BodySize.X, w.Right - BodySize.X - 20 * dip);
         if (right - left < 150 * dip) { StartHopIcons(); return; }
         bool rightward = Centre.X < (w.Left + w.Right) / 2f;
@@ -226,7 +227,7 @@ internal sealed partial class MotionController
             if (hop == spots.Count) { Wait(0.6f, () => Play(MotionKind.Hover)); return; }
             var from = TopLeft;
             var to = spots[hop++];
-            float t = 0, lift = 60 * dip;
+            float t = 0, lift = MathF.Min(60 * dip, y - work.Y);   // arcs stay on the screen
             _step = dt =>
             {
                 t = MathF.Min(1, t + dt / 0.55f);
