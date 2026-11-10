@@ -127,11 +127,15 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 if (KeyChanged is { } keys && ReadKey(lParam) is { } k) keys(k.Vk, k.Down);
                 return null;   // DefWindowProc cleans up the input
             case WM_QUERYENDSESSION:
+                Log.Write("session: ending");
                 return 1;
             case WM_ENDSESSION:
+                Log.Write(wParam != 0 ? "session: end" : "session: end cancelled");
                 if (wParam != 0) EndSession?.Invoke();
                 return 0;
             case WM_POWERBROADCAST:
+                if (wParam == 4) Log.Write("power: suspend");                       // PBT_APMSUSPEND
+                else if (wParam is 7 or 0x12) Log.Write("power: resume");           // PBT_APMRESUMESUSPEND / RESUMEAUTOMATIC
                 PowerChanged?.Invoke();
                 return 1;
             case WM_WTSSESSION_CHANGE:

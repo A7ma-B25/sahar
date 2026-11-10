@@ -24,7 +24,11 @@ internal static class Program
         // The clean version: old test builds' data goes once, before the log opens.
         bool cleaned = Sahar.Core.Settings.CleanStart.Run(Sahar.Core.Settings.CleanStart.RoamingFolder, Log.Folder);
         Log.Start();
+        string? last = Log.LastLine();
         Log.Write($"start {CoreInfo.Version} args [{string.Join(' ', args)}] on {Environment.OSVersion}");
+        // A run that never wrote "exit" was killed, crashed, or lost power: say so (its time only, never the line).
+        if (!Sahar.Core.Diagnostics.LogRules.EndedCleanly(last))
+            Log.Write($"previous run ended without exit (last line {Sahar.Core.Diagnostics.LogRules.Timestamp(last!) ?? "?"})");
         if (cleaned) Log.Write("clean start: old data removed");
         try
         {

@@ -116,7 +116,7 @@ internal sealed class Director
         if (fs == _fullscreen) return;
         _fullscreen = fs;
         // Why she hid: the window class only (never a title), so "she vanished over X" can be traced.
-        Log.Write(fs ? $"fullscreen: hiding ({FullscreenWatcher.Reason()})" : "fullscreen: back");
+        Log.Write($"fullscreen: {(fs ? "hide" : "show")} ({FullscreenWatcher.Reason()})");
         ApplyQuiet();
     }
 
@@ -135,6 +135,7 @@ internal sealed class Director
         if (hidden != _hidden)
         {
             _hidden = hidden;
+            Log.Write($"hidden: {(hidden ? "on" : "off")} ({(output.Hidden ? "fullscreen" : now < _hiddenUntil ? "asked" : "fullscreen over")})");
             _setHidden(hidden);
         }
     }

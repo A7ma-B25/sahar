@@ -25,6 +25,24 @@ internal static class Log
         }
     }
 
+    /// <summary>The log's last non-empty line before this run writes anything (null when there is none).</summary>
+    public static string? LastLine()
+    {
+        try
+        {
+            if (!File.Exists(FilePath)) return null;
+            using var f = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            long from = Math.Max(0, f.Length - 4096);
+            f.Seek(from, SeekOrigin.Begin);
+            using var r = new StreamReader(f);
+            return r.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static void Write(string line)
     {
         try

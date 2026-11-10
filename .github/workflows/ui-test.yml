@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      stages:
+        description: Stages to run (comma-separated); a task runs the ones it touches, a release runs them all
+        type: string
+        default: smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games
 
 concurrency:
   group: ui-test-${{ github.ref }}
@@ -28,7 +33,9 @@ jobs:
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: UI tests
         shell: pwsh
-        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games
+        env:
+          STAGES: ${{ inputs.stages || 'smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games' }}
+        run: ./tests/ui/run.ps1 -Stage ($env:STAGES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
       - uses: actions/upload-artifact@v4
         if: always()
         with:

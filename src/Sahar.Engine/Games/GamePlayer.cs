@@ -263,10 +263,11 @@ internal sealed class GamePlayer : IDisposable
         State = "chasing";
         _express("poked", true);
         _say(Sahar.Core.Settings.Address.ToYou("الحقني إذا بتقدر! 😆"));
+        var stamina = new ChaseStamina(_rng);   // she tires as the game goes on: catchable in about 10–20 s
         _tick = dt =>
         {
             if (Moving(dt)) return true;
-            if (Chase.Flee(Her, _pointer, Size, Work, Dpi, _rng) is { } to) MoveTo(to, 0.28f);
+            if (stamina.Flee(_clock, Her, _pointer, Size, Work, Dpi) is { } jump) MoveTo(jump.To, jump.Seconds);
             return true;
         };
     }

@@ -12,17 +12,21 @@ public static class Chase
 {
     public const float NearDip = 140f, JumpDip = 230f, Seconds = 45f;
 
-    /// <summary>Where she jumps to, or null when the pointer is not near.</summary>
-    public static Vector2? Flee(Vector2 her, Vector2 pointer, Vector2 body, RectF work, float dpi, Random rng)
+    /// <summary>Where she jumps to, or null when the pointer is not near. The scales shrink her alert radius and her
+    /// jump as she tires (<see cref="ChaseStamina"/>); the turn range sets how far off "straight away" she darts.</summary>
+    public static Vector2? Flee(Vector2 her, Vector2 pointer, Vector2 body, RectF work, float dpi, Random rng,
+        float nearScale = 1f, float jumpScale = 1f, float minTurn = 0f, float maxTurn = 0.45f)
     {
         var centre = her + body / 2;
         var away = centre - pointer;
-        if (away.Length() > NearDip * dpi) return null;
+        if (away.Length() > NearDip * nearScale * dpi) return null;
         var dir = away.Length() < 1 ? Vector2.UnitX : Vector2.Normalize(away);
-        // A little sideways wobble so she isn't predictable.
-        float a = (float)(rng.NextDouble() - 0.5) * 0.9f;
+        // A sideways turn so she isn't predictable.
+        float a = minTurn <= 0
+            ? (float)(rng.NextDouble() - 0.5) * 2 * maxTurn
+            : (minTurn + (maxTurn - minTurn) * (float)rng.NextDouble()) * (rng.Next(2) == 0 ? 1 : -1);
         dir = Vector2.Normalize(new Vector2(dir.X * MathF.Cos(a) - dir.Y * MathF.Sin(a), dir.X * MathF.Sin(a) + dir.Y * MathF.Cos(a)));
-        var to = Clamp(her + dir * JumpDip * dpi, body, work);
+        var to = Clamp(her + dir * JumpDip * jumpScale * dpi, body, work);
         if (Vector2.Distance(to, her) >= 80 * dpi) return to;
         // Cornered: a dash across to the far side of the screen.
         var far = new Vector2(her.X + body.X / 2 < work.X + work.Width / 2 ? work.Right - body.X : work.X,

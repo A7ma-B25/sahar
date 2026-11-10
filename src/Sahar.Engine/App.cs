@@ -176,7 +176,7 @@ internal sealed unsafe class App
         // Settings: a bad or locked file never stops her (defaults).
         var settings = new SaharSettings();
         try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
-        catch (Exception e) { Log.Write($"settings not loaded: {e.Message}"); }
+        catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
         Address.You = settings.UserGender;   // her words agree with who she talks to
         Address.Name = settings.UserName;
         using var tray = new Tray { Activity = settings.Activity };
@@ -187,7 +187,7 @@ internal sealed unsafe class App
             tray.Activity = level;
             if (life != null) life.Level = level;
             try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { Log.Write($"settings not saved: {e.Message}"); }
+            catch (Exception e) { Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (file unreadable, kept .bad)" : $"settings: not saved ({e.GetType().Name})"); }   // never the path: it holds the user name
         }
         tray.ActivityChosen += level => Safe(() => SetActivity(level));
         tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
@@ -208,15 +208,15 @@ internal sealed unsafe class App
         var power = new Power(director.Post);
         power.Check();
         tray.PowerChanged += () => Safe(() => { power.Check(); host.CheckDevice(); });
-        var idle = new Idle(director.Post);
-        tray.SessionLocked += locked => Safe(() => { idle.SetAway(locked); if (!locked) host.CheckDevice(); });
+        var idle = new Idle(director.Post, () => tray.SinceKeyboard);
+        tray.SessionLocked += locked => Safe(() => { if (!_options.TestMode) idle.SetLocked(locked); if (!locked) host.CheckDevice(); });
         // Nothing draws while she rests, so ask the GPU every second whether it is still there.
         var deviceTimer = ui.CreateTimer();
         deviceTimer.Interval = TimeSpan.FromSeconds(1);
         deviceTimer.Tick += (_, _) => Safe(() => host.CheckDevice());
         deviceTimer.Start();
         var idleTimer = ui.CreateTimer();
-        idleTimer.Interval = TimeSpan.FromSeconds(5);
+        idleTimer.Interval = TimeSpan.FromSeconds(1);
         idleTimer.Tick += (_, _) => Safe(idle.Check);
         // Test machines have no human at the keyboard: away/back come only from the pipe there.
         if (!_options.TestMode) idleTimer.Start();
@@ -227,6 +227,7 @@ internal sealed unsafe class App
             Face, () => _state.Expression, () => motion.Squish())
         {
             Enabled = !_options.TestMode,
+            Away = () => idle.Away,
         };
         life = lifeDirector;
         // Her menu: life pauses and she hovers while it is open.
@@ -266,7 +267,7 @@ internal sealed unsafe class App
         using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
         var apps = new AppWatch(ui,
             allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
-            away: () => director.CurrentKey == "sleep",
+            away: () => idle.Away,
             say: line => speech.Say(Address.ToYou(line), comment: true), ownComments: !_options.TestMode);   // her words agree with you
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
@@ -278,7 +279,7 @@ internal sealed unsafe class App
         void SaveSettings()
         {
             try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { Log.Write($"settings not saved: {e.Message}"); }
+            catch (Exception e) { Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (file unreadable, kept .bad)" : $"settings: not saved ({e.GetType().Name})"); }   // never the path: it holds the user name
         }
         void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
         void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
@@ -521,7 +522,9 @@ internal sealed unsafe class App
             EventKind kind;
             try { kind = EventNames.Parse(r.Name); }
             catch (FormatException) { return new PipeReply(false, "unknown event"); }
-            director.Post(kind);
+            // Away and back are the presence sense's (a test machine has no human): it posts them itself.
+            if (kind is EventKind.UserAway or EventKind.UserBack) idle.SetAway(kind == EventKind.UserAway);
+            else director.Post(kind);
             return new PipeReply(true, State: _state.Snapshot());
         });
         pipe.Register("motion", r =>
@@ -706,6 +709,7 @@ internal sealed unsafe class App
                 return new PipeReply(true, lifeDirector.Describe());
             });
             pipe.Register("debug-foreground", _ => new PipeReply(false, FullscreenWatcher.Describe()));
+            pipe.Register("debug-presence", _ => new PipeReply(false, idle.Describe()));
             pipe.Register("debug-tray", _ => tray.IconRect() is { } r
                 ? new PipeReply(true, State: _state.Snapshot() with { X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top })
                 : new PipeReply(false, "tray icon unknown to Explorer"));

@@ -52,6 +52,8 @@ internal sealed unsafe class LifeDirector : IDisposable
     private ActivityLevel _level;
 
     public bool Enabled { get; set; } = true;
+    /// <summary>Are you away (from real input, never from her face)? While away she does nothing by herself.</summary>
+    public Func<bool> Away { get; set; } = () => false;
     public int Actions { get; private set; }
     public bool Typing { get; private set; }
     private TimeSpan? _gapOverride;
@@ -190,7 +192,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         if (Typing) { Waiting("you are typing"); StepAwayFromTyping(); return; }   // no own actions while you type
 
         // Away: she naps in the corner and wakes when you are back.
-        bool away = _director.CurrentKey == "sleep";
+        bool away = Away();
         if (away && !_sleepingForAway && Resting && !_director.Hidden)
         {
             _sleepingForAway = true;
@@ -299,11 +301,12 @@ internal sealed unsafe class LifeDirector : IDisposable
         return kind;
     }
 
-    /// <summary>Logs why she is not acting, once per change of reason.</summary>
+    /// <summary>Logs why she is not acting, once per change of reason (a new "next turn at" time is not a new reason).</summary>
     private void Waiting(string reason)
     {
-        if (reason == _waiting) return;
-        _waiting = reason;
+        var kind = Sahar.Core.Diagnostics.LogRules.WaitKind(reason);
+        if (kind == _waiting) return;
+        _waiting = kind;
         Log.Write($"life: waiting: {reason}");
     }
 

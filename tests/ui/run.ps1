@@ -272,6 +272,20 @@ function Stage-Smoke {
         if (-not $script:engine.WaitForExit(3000)) { throw 'engine still running 3 s after quit' }
         if ($script:engine.ExitCode -ne 0) { throw "engine exit code $($script:engine.ExitCode)" }
     }
+
+    Step 'a run that ends without exit is noticed at the next start' {
+        $log = Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'
+        Start-Engine
+        Start-Sleep -Milliseconds 300
+        $lines = Get-Content $log; $i = ($lines | Select-String '^\S+ \S+ start ' | Select-Object -Last 1).LineNumber
+        if (($lines[($i - 1)..($i + 2)] -join "`n") -match 'previous run ended without exit') { throw 'a clean quit was reported as a crash' }
+        $script:engine.Kill(); $script:engine.WaitForExit(3000) | Out-Null
+        Start-Engine
+        Start-Sleep -Milliseconds 300
+        $tail = (Get-Content $log)[-15..-1] -join "`n"
+        if ($tail -notmatch 'previous run ended without exit \(last line \d{4}-\d{2}-\d{2} [0-9:.]+\)') { throw "no crash note after a kill:`n$tail" }
+        Stop-Engine
+    }
 }
 
 function Stage-Idle {
@@ -635,6 +649,9 @@ function Stage-Events {
         }
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
         $back = Wait-State { param($st) -not $st.hidden } 2000 'shown again'
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch "fullscreen: hide \(class '") { throw 'the log does not say why she hid' }
+        if ($log -notmatch 'fullscreen: show \(') { throw 'the log does not say why she came back' }
         if ((Info).overlayVisible -ne 'true') { throw 'overlay not shown again' }
         Start-Sleep -Milliseconds 300
         $back = State
@@ -1603,6 +1620,22 @@ function Stage-Life {
         }
         finally { Stop-Process -Id $w.Id -Force -ErrorAction SilentlyContinue }
     }
+    Step 'away stops her own actions, whatever face shows (owner log: ~60 actions overnight)' {
+        $r = Send '{"type":"cmd","name":"life","args":{"gap":"1"}}'
+        if (-not $r.ok) { throw "life not ok: $($r.error)" }
+        Post 'music' | Out-Null   # a song outranks her sleepy face: away must still be away
+        Post 'user.away' | Out-Null
+        $p = Kv 'debug-presence'
+        if ($p.away -ne 'true') { throw "presence: $($p.away)" }
+        Start-Sleep -Milliseconds 1500
+        $before = [int](Life).actions
+        Start-Sleep -Seconds 6
+        $after = [int](Life).actions
+        Post 'user.back' | Out-Null
+        Post 'music.stop' | Out-Null
+        if ($after -ne $before) { throw "she acted $($after - $before) times while you were away" }
+        if ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw) -notmatch 'presence: away') { throw 'the log does not say you went away' }
+    }
     Step 'what she learned is saved when Windows shuts down' {
         Remove-Item $lifePath -ErrorAction SilentlyContinue
         if (-not [Shell]::EndSession()) { throw 'tray window not found' }
@@ -1917,6 +1950,27 @@ function Stage-Games {
         if ((Game).score -ne '1') { throw "score after a catch: $((Game).score)" }
         Send '{"type":"cmd","name":"game-stop"}' | Out-Null
         if ((Text64 (Kv 'debug-comment').text64) -ne 'مسكتني مرة وحدة! 🏆') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+    }
+    Step 'the chase is catchable: she rests after each dart (owner log: 0 catches in 5 of 6 games)' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"25"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(22); $tries = 0
+        try {
+            do {
+                $g = Game
+                $cx = [int]$g.x + [int]$g.w / 2; $cy = [int]$g.y + [int]$g.h / 2
+                [Mouse]::Move($cx, $cy)   # a player who goes straight for her
+                Start-Sleep -Milliseconds 150
+                $g2 = Game
+                if ([Math]::Abs([int]$g2.x - [int]$g.x) + [Math]::Abs([int]$g2.y - [int]$g.y) -le 4) {
+                    $tries++
+                    Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$cx`",`"y`":`"$cy`"}}" | Out-Null
+                }
+            } while ([int](Game).score -lt 1 -and (Get-Date) -lt $deadline)
+            $score = [int](Game).score
+            Write-Host "    clicks on a still Sahar: $tries; score $score"
+            if ($score -lt 1) { throw 'never caught her in 22 s' }
+        }
+        finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null; [Mouse]::Move(5, 5) }
     }
     Step 'hide and seek: she hides at an edge, a click on what shows finds her' {
         Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek"}}' | Out-Null

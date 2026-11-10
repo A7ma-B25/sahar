@@ -89,4 +89,61 @@ public sealed class SettingsStoreTests : IDisposable
         }
         finally { File.Delete(path); }
     }
+    // ---- Two writers (owner ruling 2026-11-10): the engine and the settings app share settings.json ----
+
+    [Fact]
+    public void Save_OverAnUnreadableFile_IsRefused_AndTheFileIsKept()
+    {
+        File.WriteAllText(PathOf, "{ not json");
+        Assert.False(SettingsStore.TrySave(PathOf, new SaharSettings { Size = SaharSize.Large }));
+        Assert.Equal("{ not json", File.ReadAllText(PathOf));
+        Assert.Equal("{ not json", File.ReadAllText(PathOf + ".bad"));
+        Assert.Throws<SettingsSaveRefusedException>(() => SettingsStore.Save(PathOf, new SaharSettings()));
+        Assert.Equal("{ not json", File.ReadAllText(PathOf));
+    }
+
+    [Fact]
+    public void TrySave_GoodFile_Saves()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings());
+        Assert.True(SettingsStore.TrySave(PathOf, new SaharSettings { Size = SaharSize.Large }));
+        Assert.Equal(SaharSize.Large, SettingsStore.Load(PathOf).Size);
+    }
+
+    [Fact]
+    public void Save_ManyWritersAndReaders_NeverThrow_AndTheFileStaysWhole()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings());
+        var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        var writers = Enumerable.Range(0, 8).Select(w => new Thread(() =>
+        {
+            for (int i = 0; i < 25; i++)
+                try { SettingsStore.Save(PathOf, new SaharSettings { Activity = (ActivityLevel)(w % 3), QuranLastSurah = w * 100 + i }); }
+                catch (Exception e) { errors.Add(e); }
+        })).ToList();
+        var readers = Enumerable.Range(0, 2).Select(r => new Thread(() =>
+        {
+            for (int i = 0; i < 60; i++)
+                try { _ = SettingsStore.Load(PathOf); }
+                catch (Exception e) { errors.Add(e); }
+        })).ToList();
+        foreach (var t in writers.Concat(readers)) t.Start();
+        foreach (var t in writers.Concat(readers)) t.Join();
+        Assert.Empty(errors);
+        Assert.False(File.Exists(PathOf + ".bad"), "a reader saw a half-written file");
+        var last = SettingsStore.Load(PathOf);
+        Assert.InRange(last.QuranLastSurah ?? -1, 0, 724);
+    }
+
+    [Fact]
+    public void Retry_SharingViolations_ThenGivesUp()
+    {
+        int calls = 0;
+        Assert.Equal(7, SettingsStore.Retry(() => { if (++calls < 3) throw new IOException("in use"); return 7; }));
+        Assert.Equal(3, calls);
+        calls = 0;
+        Assert.Throws<IOException>(() => SettingsStore.Retry<int>(() => { calls++; throw new IOException("in use"); }));
+        Assert.Equal(SettingsStore.Tries, calls);
+        Assert.Throws<FileNotFoundException>(() => SettingsStore.Retry<int>(() => throw new FileNotFoundException()));   // not a sharing problem: no retry
+    }
 }
