@@ -51,6 +51,14 @@ internal sealed class PrayerTool : IDisposable
 
     public bool On => _schedule is not null;
 
+    /// <summary>The next prayer and how long until it (null without a city), from its schedule and clock.</summary>
+    public (Sahar.Core.Prayer.Prayer Prayer, TimeSpan Left)? Next()
+    {
+        if (_schedule is null) return null;
+        var now = Now;
+        return _schedule.Next(now) is { } n ? (n.Prayer, n.At - now) : null;
+    }
+
     /// <summary>Real time, or (test mode) the clock a test set, moving on from there.</summary>
     private DateTimeOffset Now => _fakeBase is { } b ? b + _fakeClock.Elapsed : DateTimeOffset.Now;
 

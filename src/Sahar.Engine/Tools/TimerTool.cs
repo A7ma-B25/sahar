@@ -39,6 +39,8 @@ internal sealed class TimerTool
     }
 
     public bool Running => _timer.Running;
+    /// <summary>Time left (null when no timer runs).</summary>
+    public TimeSpan? Remaining => _timer.Running ? _timer.Remaining(DateTimeOffset.Now) : null;
 
     public void Start(TimeSpan length)
     {

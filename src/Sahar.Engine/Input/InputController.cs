@@ -8,7 +8,7 @@ namespace Sahar.Engine.Input;
 /// <summary>
 /// Mouse on Sahar (through the input window): click pokes her, press-and-move drags her by the leaf,
 /// a fast release throws her, and resting the cursor on her for 400 ms makes her lean toward it.
-/// A right-click or a double-click opens her menu (spec §7).
+/// A right-click opens her menu card; a double-click is reported too (by default it is two pokes, spec §0.6).
 /// </summary>
 internal sealed unsafe class InputController
 {
@@ -18,12 +18,13 @@ internal sealed unsafe class InputController
     private readonly InputWindow _window;
     private readonly MotionController _motion;
     private readonly Action _poke;
-    private readonly Action _menu;
+    private readonly Action<string> _menu;
     private bool _down, _dragging, _tracking;
     private Vector2 _downAt, _lastClickAt;
     private long _lastClickTick = long.MinValue / 2;
 
-    public InputController(InputWindow window, MotionController motion, Action poke, Action menu)
+    /// <param name="menu">"right" for a right-click, "double" for a double-click (the app decides what that opens).</param>
+    public InputController(InputWindow window, MotionController motion, Action poke, Action<string> menu)
     {
         _window = window;
         _motion = motion;
@@ -70,7 +71,7 @@ internal sealed unsafe class InputController
                 if (tick - _lastClickTick <= Native.GetDoubleClickTime() && Vector2.Distance(at, _lastClickAt) <= DragThresholdPx)
                 {
                     _lastClickTick = long.MinValue / 2;   // a third click starts over
-                    _menu();
+                    _menu("double");
                     return 0;
                 }
                 _lastClickTick = tick;
@@ -79,7 +80,7 @@ internal sealed unsafe class InputController
                 return 0;
 
             case Native.WM_RBUTTONUP:
-                _menu();
+                _menu("right");
                 return 0;
 
             case Native.WM_CAPTURECHANGED:

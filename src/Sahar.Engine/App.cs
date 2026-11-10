@@ -166,13 +166,22 @@ internal sealed unsafe class App
         overlay.SettingChanged += () => Safe(() => { if (!_options.TestMode) SetReduced(ReducedMotion.AnimationsOff()); });
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
-        using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin) { Need = stage.Need };
+        using var menu = new MenuCard(host, _options.Capturable, () => motion.Body, sahar, ui) { Need = stage.Need };
         Director? dismissDirector = null;
         Action<bool>? stopShow = null;
         Func<bool> dismissSpeech = () => false;
         Func<bool> sulkPoke = () => false;
         Func<bool> showRunning = () => false;
-        _ = new InputController(input, motion, () =>
+        Action poke = () => { };
+        _ = new InputController(input, motion, () => poke(), how =>
+        {
+            // Opening (spec §0.6): a right-click (or the shortcut); a double-click stays two pokes unless chosen.
+            if (how == "double") { poke(); return; }
+            if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
+            if (showRunning()) stopShow?.Invoke(false);   // first, so the card opens around where she stays
+            menu.Toggle(how);
+        });
+        poke = () =>
         {
             // A click during her show stops it.
             if (showRunning()) { stopShow?.Invoke(false); return; }
@@ -185,12 +194,7 @@ internal sealed unsafe class App
             // A tap does one thing (0.11, the owner's report): the hop with her joy face; no "poked" face or mood
             // flash on top (that was three face changes in a second). Refused hop: the joy face alone.
             if (!soul.Hop(1f)) soul.HappyFace();
-        }, () =>
-        {
-            if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
-            if (showRunning()) stopShow?.Invoke(false);   // first, so the menu opens around where she stays
-            menu.Toggle();
-        });
+        };
         // Senses → brain → what she shows. Hidden means gone: she shrinks away, then the overlay is hidden
         // (no dot over a fullscreen app); she comes back where she was.
         void SetHidden(bool hidden)
@@ -269,8 +273,6 @@ internal sealed unsafe class App
             Away = () => idle.Away,
         };
         life = lifeDirector;
-        // Her menu: life pauses and she hovers while it is open.
-        menu.Level = () => settings.Activity;
         // What you copy (spec §7.2): kept by the rules, a short "copied" face at most every 30 s.
         var clipboard = new ClipboardSense(tray.Hwnd, new ClipboardHistory(ClipboardHistory.DefaultFolder));
         var clipboardTool = new ClipboardTool(listBubble, clipboard, () => motion.Body);
@@ -298,8 +300,6 @@ internal sealed unsafe class App
         var cpu = new CpuSense(ui, director.Post);
         var cameraMic = new CameraMic(ui);
         cameraMic.Changed += on => Safe(() => director.SetCameraMic(on));
-        menu.TimerRunning = () => timerTool.Running;
-        menu.DndOn = () => dndTool.On;
         lifeDirector.DndOn = () => dndTool.On;
         lifeDirector.CameraMicOn = () => cameraMic.InUse;
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
@@ -448,7 +448,10 @@ internal sealed unsafe class App
         using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => speech.Say(line),
             () => settings, s => { settings = s; SaveSettings(); }, _options.QuranBase);
         quran.PlayingChanged += on => Safe(() => director.SetQuran(on));
-        menu.QuranPlaying = () => quran.Playing;
+        menu.State = () => new Sahar.Core.Menu.MenuState(timerTool.Running, dndTool.On, quran.Playing);
+        menu.Facts = () => new Sahar.Core.Menu.MenuFacts(timerTool.Remaining, director.CurrentKey == "claude-permission", prayer.Next(),
+            quran.Playing, dndTool.Remaining, dndTool.UntilOff);
+        menu.Mood = () => player.Current.Mood;
         lifeDirector.QuranOn = () => quran.Playing;
         menu.RingOpened += ring => Safe(() => { if (ring == "music") music.SayNowPlaying(); });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
@@ -601,7 +604,7 @@ internal sealed unsafe class App
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(stage.Visible ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
-                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
@@ -634,7 +637,7 @@ internal sealed unsafe class App
             pipe.Register("menu-open", _ =>
             {
                 if (show.Running) show.Stop(flyHome: false);
-                if (!_state.Hidden) menu.Open();
+                if (!_state.Hidden) menu.Open("pipe");
                 return new PipeReply(true, menu.Describe(), _state.Snapshot());
             });
             pipe.Register("menu-close", _ => { menu.Close(); return new PipeReply(true, menu.Describe(), _state.Snapshot()); });

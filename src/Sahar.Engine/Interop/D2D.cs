@@ -150,9 +150,22 @@ internal sealed unsafe class D2DContext : IDisposable
     /// <summary>Sets the drawing transform (applied after the surface's update offset).</summary>
     public void SetTransform(Matrix3x2 m)
     {
+        _current = m;
         var d = D2DMatrix.From(m * _base);
         ((delegate* unmanaged[Stdcall]<nint, D2DMatrix*, void>)Com.Slot(_dc, SetTransformSlot))(_dc, &d);
     }
+
+    private Matrix3x2 _current = Matrix3x2.Identity;
+    private readonly Stack<Matrix3x2> _saved = new();
+
+    /// <summary>Draws in a local space (<paramref name="m"/> then the current transform) until <see cref="PopTransform"/>.</summary>
+    public void PushTransform(Matrix3x2 m)
+    {
+        _saved.Push(_current);
+        SetTransform(m * _current);
+    }
+
+    public void PopTransform() => SetTransform(_saved.Pop());
 
     public void Clear()
     {
@@ -327,9 +340,10 @@ internal sealed unsafe class D2DContext : IDisposable
     /// <paramref name="digitCell"/> em (plan Ruling 5: Rubik's Arabic-Indic digits are proportional).
     /// Returns the laid-out text's size.
     /// </summary>
-    public Vector2 TextLayout(string text, float size, int weight, D2DRect box, nint brush, TextAlign align, bool rtl, float digitCell = DWrite.DigitCell)
+    public Vector2 TextLayout(string text, float size, int weight, D2DRect box, nint brush, TextAlign align, bool rtl, float digitCell = DWrite.DigitCell,
+        bool wrap = false)
     {
-        nint layout = DWrite.Layout(text, size, weight, box.Right - box.Left, box.Bottom - box.Top, align, rtl, digitCell);
+        nint layout = DWrite.Layout(text, size, weight, box.Right - box.Left, box.Bottom - box.Top, align, rtl, digitCell, wrap);
         Own(layout);
         var origin = new D2DPoint { X = box.Left, Y = box.Top };
         // ID2D1RenderTarget::DrawTextLayout(origin, layout, brush, options)
@@ -409,7 +423,7 @@ internal static unsafe partial class DWrite
 
     /// <summary>A text layout in Rubik (caller releases): reading direction, logical alignment, centred vertically, no
     /// wrapping, digit runs in fixed cells (IDWriteTextLayout1::SetCharacterSpacing min advance).</summary>
-    public static nint Layout(string text, float size, int weight, float width, float height, TextAlign align, bool rtl, float digitCell)
+    public static nint Layout(string text, float size, int weight, float width, float height, TextAlign align, bool rtl, float digitCell, bool wrap = false)
     {
         nint collection = Render.Fonts.Collection;
         nint format = TextFormat(collection != 0 ? Render.Fonts.Family : "Segoe UI", size, weight, collection);
@@ -419,7 +433,7 @@ internal static unsafe partial class DWrite
             // DWRITE_TEXT_ALIGNMENT: leading 0, trailing 1, centre 2 (leading follows the reading direction)
             ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 3))(format, align switch { TextAlign.Start => 0, TextAlign.End => 1, _ => 2 });
             ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 4))(format, 2);   // paragraph: centre
-            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 5))(format, 1);   // no wrap
+            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 5))(format, wrap ? 0 : 1);   // wrap, or one line
             ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 6))(format, rtl ? 1 : 0);
             fixed (char* t = text)
             {

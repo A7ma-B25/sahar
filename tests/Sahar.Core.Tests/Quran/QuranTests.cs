@@ -41,8 +41,8 @@ public class QuranTests
 
     [Fact]
     public void Menu_Listen_WhileTheQuranPlays_OffersStop() =>
-        Assert.Equal(["quran-stop", "music", "back"],
-            MenuItems.Options("listen", false, false, ActivityLevel.Medium, quranPlaying: true).Select(i => i.Id));
+        Assert.Equal(["quran-stop", "music"],
+            MenuCatalog.Drill("listen", new MenuState(false, false, true))!.Options.Select(i => i.Id));
 
     [Fact]
     public void Settings_QuranDefaults()

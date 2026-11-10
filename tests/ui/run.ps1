@@ -1063,7 +1063,7 @@ public static class Mouse {
 }
 '@
 
-# debug-menu: "open=true level=main buttons=id:x,y,r;id:x,y,r" (screen px)
+# debug-menu: "open=true view=main focus=… card=x,y,w,h clasp=x,y line64=… buttons=id:cx,cy,w,h;…" (screen px)
 function Menu {
     $r = Send '{"type":"cmd","name":"debug-menu"}'
     if (-not $r.ok) { throw "debug-menu not ok: $($r.error)" }
@@ -1073,10 +1073,8 @@ function Menu {
         if ($k -eq 'buttons') {
             if ($v) {
                 $h.buttons = @($v -split ';' | ForEach-Object {
-                    $id, $xyr = $_ -split ':', 2; $p = $xyr -split ','
-                    $b = [pscustomobject]@{ id = $id; x = [double]$p[0]; y = [double]$p[1]; r = [double]$p[2]; lx = $null; ly = $null; lw = $null; lh = $null }
-                    if ($p.Count -ge 7) { $b.lx = [double]$p[3]; $b.ly = [double]$p[4]; $b.lw = [double]$p[5]; $b.lh = [double]$p[6] }
-                    $b
+                    $id, $xy = $_ -split ':', 2; $p = $xy -split ','
+                    [pscustomobject]@{ id = $id; x = [double]$p[0]; y = [double]$p[1]; w = [double]$p[2]; h = [double]$p[3]; r = [math]::Min([double]$p[2], [double]$p[3]) / 2 }
                 })
             }
         }
@@ -1084,6 +1082,13 @@ function Menu {
     }
     $h
 }
+function Ids($m) { (@($m.buttons | Where-Object id -ne 'fact') | ForEach-Object id) -join ',' }
+Add-Type -TypeDefinition @"
+public static class Fg {
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern System.IntPtr GetForegroundWindow();
+    public static System.IntPtr Get() { return GetForegroundWindow(); }
+}
+"@
 function Body-Centre { $st = State; @([int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)) }
 function Pose-Body([double]$bx, [double]$by) {
     # pose moves her canvas; shift it so her body's top-left lands on (bx, by)
@@ -1146,23 +1151,95 @@ function Bytes([System.Drawing.Bitmap]$bmp) {
 
 function Stage-Menu {
     Step 'start engine' { Start-Engine }
-    Step 'right-click opens the menu with the six buttons' {
+    Step 'right-click opens the card' {
         Pose-Body 900 450 | Out-Null
         Start-Sleep -Milliseconds 300
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $true)
-        $m = Wait-Menu 'true' 2000 'menu open after a right-click'
-        $ids = ($m.buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        $m = Wait-Menu 'true' 2000 'card open after a right-click'
+        if ($m.view -ne 'main') { throw "view $($m.view)" }
+        $ids = Ids $m
+        if ($ids -ne 'chat,send,play,dnd,hide,timer,note,listen,clipboard') { throw "buttons: $ids (no mic, no settings yet)" }
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'menu: open \(right\)') { throw 'the log does not say how the card opened' }
+        [Mouse]::Move(5, 5)
         Start-Sleep -Milliseconds 600
-        Screenshot 'menu-open.png' | Out-Null
+        Screenshot 'menu-card.png' | Out-Null
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
-        Wait-Menu 'false' 1000 'menu closed' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
     }
-    Step 'a double-click opens the menu where a right-click does, with her settled and one face (strip)' {
-        # The owner (0.10.0): "when I double-click her she laughs, but the look glitches". The first click is a poke
-        # (hop + joy face), the second opens the menu while she is mid-hop. 12 frames over 1.5 s show what happens.
+    Step 'a double-click pokes twice and does not open the card' {
+        Start-Sleep -Milliseconds 1500
+        $c = Body-Centre
+        $hops = [int](Kv 'debug-soul').hops
+        [Mouse]::DoubleClick($c[0], $c[1])
+        Start-Sleep -Milliseconds 600
+        if ((Menu).open -ne 'false') { throw 'a double-click opened the card (default: right-click and the shortcut only)' }
+        if ([int](Kv 'debug-soul').hops -lt $hops + 1) { throw 'no poke hop' }
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 2
+    }
+    Step 'the card opens fast' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'card open'
+        Write-Host "    openMs=$($m.openMs)"
+        if ([int]$m.openMs -ge 100) { throw "the card took $($m.openMs) ms to set up" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+    }
+    Step 'her moon clasps the card' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'card open'
+        Start-Sleep -Milliseconds 500
+        $cx, $cy, $cw, $ch = $m.card -split ',' | ForEach-Object { [double]$_ }
+        $mx, $my = $m.clasp -split ',' | ForEach-Object { [double]$_ }
+        $near = [math]::Min([math]::Sqrt([math]::Pow($mx - $cx, 2) + [math]::Pow($my - $cy, 2)), [math]::Sqrt([math]::Pow($mx - $cx - $cw, 2) + [math]::Pow($my - $cy, 2)))
+        if ($near -gt 30) { throw "the clasp at $($m.clasp) is $([int]$near) px from the card's top corners ($($m.card))" }
+        if ((Info).moon -ne '0') { throw "her own moon is $((Info).moon) with the card open" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Info).moon -ne '1') { throw "her own moon is $((Info).moon) after the card closed" }
+    }
+    Step 'keys move and act' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 300
+        [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}')
+        Start-Sleep -Milliseconds 200
+        $m = Menu
+        if ($m.focus -ne 'play') { throw "focus after Tab x3: $($m.focus)" }
+        [System.Windows.Forms.SendKeys]::SendWait('1')
+        Start-Sleep -Milliseconds 300
+        if ((Menu).view -ne 'play') { throw "view after 1: $((Menu).view)" }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Start-Sleep -Milliseconds 300
+        if ((Menu).view -ne 'main') { throw "view after Esc in a drill: $((Menu).view)" }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Menu 'false' 1000 'card closed by the second Esc' | Out-Null
+    }
+    Step 'focus goes back to the window that had it' {
+        $w = Start-TestWindow 'typing'
+        try {
+            $c = Body-Centre
+            [Mouse]::Click($c[0], $c[1], $true)
+            Wait-Menu 'true' 2000 'card open' | Out-Null
+            Start-Sleep -Milliseconds 300
+            [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+            Wait-Menu 'false' 1000 'card closed by Esc' | Out-Null
+            Start-Sleep -Milliseconds 300
+            $fg = [Fg]::Get()
+            if ($fg -ne $w.MainWindowHandle) { throw "foreground is $fg, the test window is $($w.MainWindowHandle)" }
+        }
+        finally { $w.Kill() }
+    }
+    Step 'a poke, then a right-click mid-hop: the card opens where a lone right-click puts it, with her settled and one face (strip)' {
+        # The owner (0.10.0): "when I double-click her she laughs, but the look glitches" — the menu opened mid-hop. A
+        # double-click is two pokes now (spec §0.6); the menu opening mid-hop is a poke and then a right-click.
         Pose-Body 500 330 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 2
@@ -1185,7 +1262,7 @@ function Stage-Menu {
             $due = $first + 125 * $i
             while ($clock.ElapsedMilliseconds -lt $due) { Start-Sleep -Milliseconds 5 }
             if ($i -eq 2 -and -not $second) {
-                [Mouse]::Click($c[0], $c[1], $false)   # the second click of the double-click
+                [Mouse]::Click($c[0], $c[1], $true)   # the right-click, mid-hop
                 $second = $clock.ElapsedMilliseconds
                 $soul = Kv 'debug-soul'
                 $soulAt = $clock.ElapsedMilliseconds
@@ -1196,9 +1273,9 @@ function Stage-Menu {
             $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
             $tiles += $path
         }
-        Contact-Sheet $tiles 6 240 (Join-Path $Out 'double-click-strip.png')
-        $m = Wait-Menu 'true' 1500 'menu open after a double-click'
-        Screenshot 'double-click-menu.png' | Out-Null
+        Contact-Sheet $tiles 6 240 (Join-Path $Out 'poke-then-menu-strip.png')
+        $m = Wait-Menu 'true' 1500 'card open after the right-click'
+        Screenshot 'poke-then-menu.png' | Out-Null
         $after = Info
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Write-Host "    clicks at $first and $second ms; soul $($soul.hopping)/happy $($soul.happy) at $soulAt ms; face at rest $($rest.face) ($($rest.faceSwaps) swaps), after $($after.face) ($($after.faceSwaps) swaps)"
@@ -1264,54 +1341,54 @@ function Stage-Menu {
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Wait-Menu 'false' 1000 'menu closed by Esc' | Out-Null
     }
-    Step 'a double-click opens it' {
-        $c = Body-Centre
-        [Mouse]::DoubleClick($c[0], $c[1])
-        Wait-Menu 'true' 2000 'menu open after a double-click' | Out-Null
-    }
     Step 'a click outside closes it and nothing else happens' {
-        $before = (State).expression
         $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 300
+        $before = (State).expression
         [Mouse]::Click($c[0] - 400, $c[1] + 250, $false)
         Wait-Menu 'false' 1000 'menu closed by a click outside' | Out-Null
         if ((State).expression -ne $before) { throw "expression changed to $((State).expression)" }
     }
-    Step 'buttons work by real clicks' {
+    Step 'items work by real clicks' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-        $m = Wait-Menu 'true' 1000 'menu open'
+        $m = Wait-Menu 'true' 1000 'card open'
         Start-Sleep -Milliseconds 600
-        $b = $m.buttons | Where-Object id -eq 'activity'
+        $b = $m.buttons | Where-Object id -eq 'play'
         [Mouse]::Click([int]$b.x, [int]$b.y, $false)
-        Start-Sleep -Milliseconds 700
+        Start-Sleep -Milliseconds 600
         $m = Menu
-        if ($m.level -ne 'activity') { throw "level is '$($m.level)' after clicking activity" }
-        $b = $m.buttons | Where-Object id -eq 'activity-lively'
-        if (-not $b) { throw "no activity-lively button: $(($m.buttons | ForEach-Object id) -join ',')" }
-        Screenshot 'menu-activity.png' | Out-Null
+        if ($m.view -ne 'play') { throw "view is '$($m.view)' after clicking play" }
+        if ((Ids $m) -ne 'game-chase,game-hide,game-ball,game-stars,play-random,back') { throw "play drill: $(Ids $m)" }
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Milliseconds 300
+        Screenshot 'menu-play.png' | Out-Null
+        $b = $m.buttons | Where-Object id -eq 'back'
         [Mouse]::Click([int]$b.x, [int]$b.y, $false)
-        Wait-Menu 'false' 1500 'menu closed after choosing a level' | Out-Null
-        if ((Life).level -ne 'Lively') { throw "level is $((Life).level)" }
+        Start-Sleep -Milliseconds 500
+        if ((Menu).view -ne 'main') { throw "view is '$((Menu).view)' after back" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
     }
-    Step 'from every corner every button is on screen' {
+    Step 'from every corner the card is on screen and never over her' {
         $n = 0
         foreach ($corner in @(@($Work.Left, $Work.Top), @(($Work.Right - 80), $Work.Top), @($Work.Left, ($Work.Bottom - 80)), @(($Work.Right - 80), ($Work.Bottom - 80)))) {
             $n++
             Pose-Body $corner[0] $corner[1] | Out-Null
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-            $m = Wait-Menu 'true' 1000 "menu open in corner $n"
+            $m = Wait-Menu 'true' 1000 "card open in corner $n"
+            $st = State
+            $cx, $cy, $cw, $ch = $m.card -split ',' | ForEach-Object { [double]$_ }
+            if ($cx -lt $Work.Left -or $cy -lt $Work.Top -or $cx + $cw -gt $Work.Right + 1 -or $cy + $ch -gt $Work.Bottom + 1) { throw "corner ${n}: card $($m.card) is off the work area $Work" }
+            if ($cx -lt $st.x + $st.width -and $cx + $cw -gt $st.x -and $cy -lt $st.y + $st.height -and $cy + $ch -gt $st.y) { throw "corner ${n}: card $($m.card) is over her body ($($st.x),$($st.y))" }
             foreach ($b in $m.buttons) {
-                if ($b.x - $b.r -lt $Work.Left -or $b.y - $b.r -lt $Work.Top -or $b.x + $b.r -gt $Work.Right -or $b.y + $b.r -gt $Work.Bottom) {
-                    throw "corner ${n}: $($b.id) at ($($b.x),$($b.y)) is off the work area $Work"
-                }
-                if ($null -eq $b.lx) { throw "corner ${n}: debug-menu gives no label rectangle for $($b.id)" }
-                if ($b.lx -lt $Work.Left -or $b.ly -lt $Work.Top -or $b.lx + $b.lw -gt $Work.Right -or $b.ly + $b.lh -gt $Work.Bottom) {
-                    throw "corner ${n}: the label of $($b.id) is off the work area"
-                }
+                if ($b.x -lt $Work.Left -or $b.y -lt $Work.Top -or $b.x -gt $Work.Right -or $b.y -gt $Work.Bottom) { throw "corner ${n}: $($b.id) at ($($b.x),$($b.y)) is off the work area" }
             }
             Start-Sleep -Milliseconds 600
             Screenshot "menu-corner-$n.png" | Out-Null
             Send '{"type":"cmd","name":"menu-close"}' | Out-Null
-            Wait-Menu 'false' 1000 'menu closed' | Out-Null
+            Wait-Menu 'false' 1000 'card closed' | Out-Null
         }
         Pose-Body 900 450 | Out-Null
     }
@@ -1330,8 +1407,8 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Press 'play'
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'game-chase,game-hide,game-ball,game-stars,play-random,back') { throw "play ring: $ids" }
+        $ids = Ids (Menu)
+        if ($ids -ne 'game-chase,game-hide,game-ball,game-stars,play-random,back') { throw "play drill: $ids" }
         Press 'play-random'
         Wait-Menu 'false' 1000 'menu closed after play' | Out-Null
         Wait-State { param($st) $st.motion -notin 'Hover', 'EyesFollow' } 1500 'a move' | Out-Null
@@ -1362,8 +1439,10 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Press 'timer'
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        $ids = Ids (Menu)
         if ($ids -ne 'timer-5,timer-15,timer-25,timer-45,timer-custom,back') { throw "timer options: $ids" }
+        Start-Sleep -Milliseconds 400
+        Screenshot 'menu-timer.png' | Out-Null
         Press 'timer-25'
         $t = Kv 'debug-timer'
         if ($t.running -ne 'true' -or [int]$t.remaining -lt 1490 -or [int]$t.remaining -gt 1500) { throw "timer: running=$($t.running) remaining=$($t.remaining)" }
@@ -1374,7 +1453,7 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'menu open' | Out-Null
         Press 'timer'
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        $ids = Ids (Menu)
         if ($ids -ne 'timer-cancel,back') { throw "running timer options: $ids" }
         Press 'timer-cancel'
         if ((Kv 'debug-timer').running -ne 'false') { throw 'timer still running' }
@@ -1402,12 +1481,14 @@ function Stage-Menu {
         Wait-State { param($st) $st.expression -notin 'timer-done' } 2500 'timer face dismissed by a poke' | Out-Null
         Start-Sleep -Seconds 2
     }
-    Step 'do not disturb for 30 minutes' {
+    Step 'do not disturb for 30 minutes, and the tile turns it off' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Wait-Menu 'true' 1000 'card open' | Out-Null
         Press 'dnd'
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
+        $ids = Ids (Menu)
         if ($ids -ne 'dnd-30,dnd-60,dnd-120,dnd-on,back') { throw "dnd options: $ids" }
+        Start-Sleep -Milliseconds 400
+        Screenshot 'menu-hush.png' | Out-Null
         Press 'dnd-30'
         Wait-State { param($st) $st.expression -eq 'dnd' } 2000 'dnd face' | Out-Null
         if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd is off' }
@@ -1420,11 +1501,15 @@ function Stage-Menu {
         }
         Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ($m.hush -ne 'true') { throw "hush=$($m.hush) with do-not-disturb on" }
+        if ((Text64 $m.line64) -ne 'عم اسكت هلق') { throw "header line: $(Text64 $m.line64)" }
+        if ($m.fact -ne 'hush') { throw "fact: $($m.fact)" }
+        Start-Sleep -Milliseconds 400
+        Screenshot 'menu-hushed.png' | Out-Null
         Press 'dnd'
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'dnd-off,back') { throw "dnd-on options: $ids" }
-        Press 'dnd-off'
+        Wait-Menu 'false' 1000 'card closed after the hush tile' | Out-Null
+        if ((Kv 'debug-dnd').on -ne 'false') { throw 'the hush tile did not turn do-not-disturb off' }
         Wait-State { param($st) $st.expression -eq 'idle' } 2000 'dnd face gone' | Out-Null
     }
     Step 'fullscreen while DND is on keeps both' {
@@ -1441,7 +1526,6 @@ function Stage-Menu {
         if ((Kv 'debug-dnd').on -ne 'true') { throw 'dnd turned off by fullscreen' }
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'dnd'
-        Press 'dnd-off'
     }
     Step 'a quick note is saved and shown next time' {
         $notes = Join-Path $env:APPDATA 'Sahar\notes.json'
@@ -1528,17 +1612,16 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"life","args":{"gap":"600"}}' | Out-Null
         Start-Sleep -Seconds 2
     }
-    Step 'clicking a label presses its button' {
+    Step 'a click on a segment starts the timer' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-        Wait-Menu 'true' 1000 'menu open' | Out-Null
+        Wait-Menu 'true' 1000 'card open' | Out-Null
         Press 'timer'
         Start-Sleep -Milliseconds 500
         $b = (Menu).buttons | Where-Object id -eq 'timer-15'
-        if ($null -eq $b.lx) { throw 'debug-menu gives no label rectangle' }
-        [Mouse]::Click([int]($b.lx + $b.lw / 2), [int]($b.ly + $b.lh / 2), $false)
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
         Start-Sleep -Milliseconds 500
         $t = Kv 'debug-timer'
-        if ($t.running -ne 'true' -or [int]$t.remaining -lt 890) { throw "a click on the label '15 د' did not start the timer (running=$($t.running))" }
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 890) { throw "a click on «١٥ د» did not start the timer (running=$($t.running))" }
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'timer'
         Press 'timer-cancel'
@@ -1566,7 +1649,7 @@ function Stage-Menu {
         $c = Body-Centre
         foreach ($b in $m.buttons) {
             $d = [math]::Sqrt([math]::Pow($b.x - $c[0], 2) + [math]::Pow($b.y - $c[1], 2))
-            if ($d -gt 560) { throw "button $($b.id) is $([int]$d) px from her" }   # nine buttons: a corner's quarter ring reaches ~525 px
+            if ($d -gt 520) { throw "button $($b.id) is $([int]$d) px from her" }   # the card beside her: ~450 px at most
         }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Start-Sleep -Seconds 2
@@ -1607,7 +1690,7 @@ function Stage-Menu {
         $first = (State).workingSetBytes
         foreach ($i in 1..15) {
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-            Press 'activity'
+            Press 'play'
             Press 'back'
             Press 'note'
             Start-Sleep -Milliseconds 150
@@ -1622,6 +1705,7 @@ function Stage-Menu {
     }
     Stop-Engine
 }
+
 
 Add-Type @'
 using System;
@@ -1686,8 +1770,8 @@ function Stage-Senses {
     }
     Step 'the menu has the clipboard button and its list' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
-        $ids = ((Menu).buttons | ForEach-Object id) -join ','
-        if ($ids -ne 'timer,listen,prayer,note,clipboard,activity,dnd,hide,play') { throw "buttons: $ids" }
+        $ids = Ids (Menu)
+        if (($ids -split ',') -notcontains 'clipboard') { throw "no clipboard on the card: $ids" }
         Press 'clipboard'
         Start-Sleep -Milliseconds 500
         $l = Kv 'debug-list'

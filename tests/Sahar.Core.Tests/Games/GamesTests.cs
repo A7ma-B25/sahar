@@ -13,8 +13,8 @@ public class GamesTests
 
     [Fact]
     public void Menu_Play_OffersTheFourGamesAndARandomMove() =>
-        Assert.Equal(["game-chase", "game-hide", "game-ball", "game-stars", "play-random", "back"],
-            MenuItems.Options("play", false, false, ActivityLevel.Medium).Select(i => i.Id));
+        Assert.Equal(["game-chase", "game-hide", "game-ball", "game-stars", "play-random"],
+            MenuCatalog.Drill("play", new MenuState(false, false, false))!.Options.Select(i => i.Id));
 
     // ---- الحقني ----
 

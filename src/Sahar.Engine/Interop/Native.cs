@@ -388,6 +388,9 @@ internal static unsafe partial class Native
     public static partial nint CreateFont(int height, int width, int escapement, int orientation, int weight, uint italic,
         uint underline, uint strikeOut, uint charSet, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, char* face);
 
+    [LibraryImport("user32.dll")]
+    public static partial short GetKeyState(int vk);
+
     [LibraryImport("gdi32.dll")]
     public static partial nint AddFontMemResourceEx(void* data, uint size, nint reserved, uint* count);
 

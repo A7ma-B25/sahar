@@ -1,4 +1,5 @@
 using System.Numerics;
+using Sahar.Core.Menu;
 using Sahar.Engine.Host;
 
 namespace Sahar.Engine.Menu;
@@ -7,9 +8,9 @@ namespace Sahar.Engine.Menu;
 /// While the menu is open: an invisible window over her monitor, 1 px short on its taskbar's side only (a window covering a whole
 /// monitor is a fullscreen app to the shell and taskbar tools); no redirection bitmap and nothing drawn, so it costs
 /// no memory, but it still takes the mouse. A click on another monitor activates that app, which closes the menu.
-/// It takes the
-/// clicks (a button, or "outside" which closes the menu and goes no further), Esc, and closes the menu when
-/// another window becomes active.
+/// It takes the clicks (an item, or "outside" which closes the menu and goes no further), the card's keys (Tab, arrows,
+/// Enter, Esc, 1–3), and closes the menu when another window becomes active — unless it is one of
+/// <see cref="AllowedFocus"/> (the chat field).
 /// </summary>
 internal sealed class MenuCatcher : IWindowHandler
 {
@@ -19,6 +20,9 @@ internal sealed class MenuCatcher : IWindowHandler
     public Action<Vector2>? Clicked { get; set; }
     public Action<Vector2>? Moved { get; set; }
     public Action? Dismissed { get; set; }
+    public Action<MenuKey>? KeyPressed { get; set; }
+    /// <summary>Windows that may take the focus without closing the menu (the chat field's popup and edit).</summary>
+    public HashSet<nint> AllowedFocus { get; } = [];
 
     public MenuCatcher(bool capturable)
     {
@@ -42,6 +46,14 @@ internal sealed class MenuCatcher : IWindowHandler
         Native.SetFocus(Hwnd);
     }
 
+    /// <summary>Takes the keyboard back (after the chat field had it).</summary>
+    public void Focus()
+    {
+        if (!Visible) return;
+        Native.SetForegroundWindow(Hwnd);
+        Native.SetFocus(Hwnd);
+    }
+
     public void Hide()
     {
         Visible = false;
@@ -50,6 +62,21 @@ internal sealed class MenuCatcher : IWindowHandler
 
     private Vector2 Screen(nint lParam) =>
         new(_bounds.Left + (short)(lParam & 0xFFFF), _bounds.Top + (short)((lParam >> 16) & 0xFFFF));
+
+    private static MenuKey? Key(int vk) => vk switch
+    {
+        0x09 => Native.GetKeyState(0x10) < 0 ? MenuKey.ShiftTab : MenuKey.Tab,
+        0x25 => MenuKey.Left,
+        0x26 => MenuKey.Up,
+        0x27 => MenuKey.Right,
+        0x28 => MenuKey.Down,
+        0x0D => MenuKey.Enter,
+        Native.VK_ESCAPE => MenuKey.Escape,
+        0x31 or 0x61 => MenuKey.Digit1,
+        0x32 or 0x62 => MenuKey.Digit2,
+        0x33 or 0x63 => MenuKey.Digit3,
+        _ => null,
+    };
 
     public nint? OnMessage(nint hwnd, uint msg, nuint wParam, nint lParam)
     {
@@ -67,10 +94,12 @@ internal sealed class MenuCatcher : IWindowHandler
             case Native.WM_MOUSEMOVE:
                 Moved?.Invoke(Screen(lParam));
                 return 0;
-            case Native.WM_KEYDOWN when (int)wParam == Native.VK_ESCAPE:
-                Dismissed?.Invoke();
+            case Native.WM_KEYDOWN when Key((int)wParam) is { } key:
+                if (KeyPressed is { } k) k(key);
+                else if (key == MenuKey.Escape) Dismissed?.Invoke();
                 return 0;
             case Native.WM_ACTIVATE when (wParam & 0xFFFF) == 0 && Visible:   // WA_INACTIVE: another window took over
+                if (lParam != 0 && AllowedFocus.Contains(lParam)) return null;   // the chat field: the menu stays
                 Dismissed?.Invoke();
                 return null;
             default:

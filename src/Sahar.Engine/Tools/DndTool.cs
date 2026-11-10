@@ -26,6 +26,10 @@ internal sealed class DndTool
     }
 
     public bool On => _state.IsOn(DateTimeOffset.Now);
+    /// <summary>Time left of a timed hush (null when off or until turned off).</summary>
+    public TimeSpan? Remaining => On && _state.Until is { } u ? u - DateTimeOffset.Now : null;
+    /// <summary>On until you say so.</summary>
+    public bool UntilOff => On && _state.Until is null;
 
     /// <param name="length">null = until turned off.</param>
     public void TurnOn(TimeSpan? length)
