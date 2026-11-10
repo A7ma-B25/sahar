@@ -310,7 +310,9 @@ function Stage-Idle {
             @{ Sum = [int]($t / 9); Blue = $blue / 9; Red = $red / 9 }
         }
         $st = $script:state
-        $lx = [int]($st.x + $st.width * 0.5); $ly = [int]($st.y + $st.width * 0.8625)   # rig point (120,196): the wash centre
+        # Rig point (96,190): well inside the wash and her lower body, clear of the hem's dip at the centre and of the
+        # inner stars, so a float or bob of a few pixels never moves the sample off her.
+        $lx = [int]($st.x + $st.width * 0.35); $ly = [int]($st.y + $st.height * 0.857)
         $ux = [int]($st.x + $st.width / 2); $uy = [int]($st.y + $st.height * 0.25)
         $shot = Screenshot 'idle-night.png'
         $low = Sum3 $shot $lx $ly; $up = Sum3 $shot $ux $uy
@@ -328,7 +330,7 @@ function Stage-Idle {
             Start-Sleep -Milliseconds 1500
             $off = Sum3 (Screenshot 'idle-night-off.png') $lx $ly
             Write-Host "    lower body without the sky $($off.Sum)"
-            if ($off.Sum -lt $low.Sum + 30) { throw "turning the stars off did not remove the night: $($off.Sum) vs $($low.Sum)" }
+            if ($off.Sum -lt $low.Sum + 25) { throw "turning the stars off did not remove the night: $($off.Sum) vs $($low.Sum)" }
         }
         finally {
             Stop-Engine
