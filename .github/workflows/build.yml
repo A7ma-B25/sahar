@@ -19,6 +19,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet test tests/Sahar.Core.Tests -c Release
+      - run: python3 -I -m unittest discover -s tools/art -p 'test_*.py' -v
 
   engine:
     runs-on: windows-latest

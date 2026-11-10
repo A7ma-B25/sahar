@@ -108,6 +108,8 @@ MOODS['online']=dict(top='#FFFFFF', mid='#E9FBF8', bot='#A9E4DC', glow='#5CC9BC'
 MOODS['cold']=dict(top='#FFFFFF', mid='#EEF7FF', bot='#BFDDF7', glow='#8CC8F2', bud='#8CC8F2', blush='#C9D8F0')
 MOODS['love']=dict(top='#FFFFFF', mid='#FFEFF4', bot='#FFC2D3', glow='#FF8FA3', bud='#FF8FA3', blush='#FF8FA3')
 MOODS['night']=dict(top='#E9E4FF', mid='#B6A9EC', bot='#6E5CC0', glow='#9C86FF', bud='#FFE7A8', blush='#C9B8F0')
+MOODS['sick']=dict(top='#FFFFFF', mid='#EAF7E4', bot='#A8D99A', glow='#6CC25A', bud='#7FCF6A', blush='#B9E3A8')
+MOODS['angry']=dict(top='#FFFFFF', mid='#FFE3E0', bot='#F59A92', glow='#E0322B', bud='#E0322B', blush='#FF7A70')
 _E=eyes
 def eyes(kind):
     if kind=='worried': return ('<ellipse cx="100" cy="126" rx="8.5" ry="10" fill="#2A2350"/><ellipse cx="140" cy="126" rx="8.5" ry="10" fill="#2A2350"/>'

@@ -6,3 +6,4 @@ out/
 .superpowers/
 artifacts/
 TestResults/
+__pycache__/

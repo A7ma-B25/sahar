@@ -1,8 +1,8 @@
-"""Exports Sahar's rig, palette and the 25 v1 expressions from design.py to the Core assets.
+"""Exports Sahar's rig, palette and her 30 expressions from design.py to the Core assets.
 
-Run from the repo root:  python3 tools/art/export_rig.py
+Run from the repo root:  python3 tools/art/export_rig.py [--out DIR]   (default src/Sahar.Core/assets)
 """
-import json, os, re, sys
+import argparse, json, os, re, sys
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -75,11 +75,12 @@ def rig():
 
 def palette():
     names = {"calm": "Calm", "happy": "Happy", "focus": "Focus", "excited": "Excited", "sleepy": "Sleepy", "mystic": "Mystic",
-             "alert": "Alert", "dim": "Dim", "error": "Error", "online": "Online", "hot": "Hot", "cold": "Cold", "love": "Love", "night": "Night"}
+             "alert": "Alert", "dim": "Dim", "error": "Error", "online": "Online", "hot": "Hot", "cold": "Cold", "love": "Love", "night": "Night",
+             "sick": "Sick", "angry": "Angry"}
     return {names[k]: {"top": v["top"], "mid": v["mid"], "bottom": v["bot"], "glow": v["glow"], "bud": v["bud"], "blush": v["blush"]}
             for k, v in D.MOODS.items()}
 
-# (id, key, mood, eyes, mouth, orbGlyph, orbTop, orbBottom, extras) — expressions board 1–25 (spec §5)
+# (id, key, mood, eyes, mouth, orbGlyph, orbTop, orbBottom, extras) — expressions board 1–25 (spec §5), then 26–29
 EXPR = [
     (0, "idle", "Calm", "Open", "Smile", None, None, None, []),
     (1, "music", "Happy", "Happy", "Smile", "🎵", "#C77AD6", "#5A2468", ["Headphones", "Notes"]),
@@ -107,6 +108,10 @@ EXPR = [
     (23, "dragged", "Calm", "Wide", "BigO", None, None, None, []),
     (24, "break", "Happy", "Happy", "Smile", "☕", "#C9966A", "#7A4E2E", []),
     (25, "late-night", "Mystic", "Mystic", "Mystic", "✨", "#6E58C9", "#2A1C66", ["Stars"]),
+    (26, "quran", "Calm", "Closed", "Smile", "📖", "#5FB38A", "#1F5A3E", ["Headphones"]),
+    (27, "dizzy", "Calm", "Dizzy", "Wobble", "💫", "#FFE89A", "#C9A43A", ["Stars"]),
+    (28, "sick", "Sick", "Dizzy", "Puff", "🤢", "#CDEFC2", "#5E9E4E", ["Sweat"]),
+    (29, "angry", "Angry", "Half", "Puff", "💢", "#FFB3AC", "#B3261E", ["Steam"]),
 ]
 
 def expressions():
@@ -119,6 +124,10 @@ def write(name, data):
         f.write("\n")
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=OUT)
+    OUT = ap.parse_args().out
+    os.makedirs(os.path.join(OUT, "art"), exist_ok=True)
     write("art/sahar-rig.json", rig())
     write("palette.json", palette())
     write("expressions.json", expressions())
