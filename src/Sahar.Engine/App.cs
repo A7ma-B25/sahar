@@ -601,6 +601,15 @@ internal sealed unsafe class App
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
+            // Her size for pixel checks (0.11 face stage): a bigger body makes an eye tens of pixels, so two faces show.
+            pipe.Register("debug-size", r =>
+            {
+                float dip = Arg(r, "dip");
+                if (dip is < 32 or > 400) return new PipeReply(false, "dip 32–400");
+                sahar.SetSize(dip, sahar.DpiScale);
+                MoveTo(sahar.Position);
+                return new PipeReply(true, State: _state.Snapshot());
+            });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });

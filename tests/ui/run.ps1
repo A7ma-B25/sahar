@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -2719,6 +2719,108 @@ function Stage-Shell {
     if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
 }
 
+# Her face (0.11, the owner's "her new eye movements have a problem"): two faces must never show at once. FaceProbe
+# reads a grabbed frame (32bpp BGRA): Faint counts faint eye ink (navy mixed with her white body) that has no solid ink
+# within r px — a face fading in or out over the other — on rows where her white body is on both sides of the eye
+# columns (so the halo, the leaf and the backdrop never count); Edges counts sharp rises into her white body down one
+# column (one outline: 1; a second, translucent body: 2).
+Add-Type -TypeDefinition @"
+public static class FaceProbe {
+    static int L(byte[] p, int i) { return (int)(0.114 * p[i] + 0.587 * p[i + 1] + 0.299 * p[i + 2]); }
+    public static int Faint(byte[] p, int w, int h, int x0, int x1, int bodyL, int bodyR, int solid, int faintHi, int r) {
+        int n = 0;
+        for (int y = r; y < h - r; y++) {
+            bool left = false, right = false;
+            for (int x = bodyL; x < x0 && !left; x++) if (L(p, (y * w + x) * 4) >= 215) left = true;
+            for (int x = x1; x < bodyR && !right; x++) if (L(p, (y * w + x) * 4) >= 215) right = true;
+            if (!left || !right) continue;
+            for (int x = x0; x < x1; x++) {
+                int i = (y * w + x) * 4, l = L(p, i);
+                if (l < solid || l >= faintHi) continue;
+                int b = p[i], g = p[i + 1], rr = p[i + 2];
+                if (g > rr + 25 && g > b + 10) continue;   // the leaf
+                if (rr > b + 25) continue;                 // blush, warm washes
+                bool near = false;
+                for (int dy = -r; dy <= r && !near; dy++)
+                    for (int dx = -r; dx <= r && !near; dx++) {
+                        int xx = x + dx; if (xx < 0 || xx >= w) continue;
+                        if (L(p, ((y + dy) * w + xx) * 4) < solid) near = true;
+                    }
+                if (!near) n++;
+            }
+        }
+        return n;
+    }
+    public static int Edges(byte[] p, int w, int h, int x, int yMax, int jump) {
+        int n = 0;
+        for (int y = 0; y + 3 < yMax && y + 15 < h; y++) {
+            if (L(p, ((y + 3) * w + x) * 4) - L(p, (y * w + x) * 4) < jump) continue;
+            bool run = true;
+            for (int k = 3; k < 15 && run; k++) if (L(p, ((y + k) * w + x) * 4) < 215) run = false;
+            if (run) { n++; y += 15; }
+        }
+        return n;
+    }
+}
+"@
+
+function Stage-Face {
+    Step 'start engine on a plain window' {
+        Start-Engine
+        $script:faceWin = Start-TestWindow 'maximized'
+        $r = Send '{"type":"cmd","name":"debug-size","args":{"dip":"240"}}'
+        if (-not $r.ok) { throw "debug-size not ok: $($r.error)" }
+    }
+    Step 'a tap: one face at a time, one outline (60 fps burst)' {
+        # 240 DIP: 1.5 px per rig unit, so an eye is ~27 x 33 px. Canvas = body rect grown by the rig's 70/88 units.
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 392 262 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 2
+        $st = State
+        $s = $st.width / 160.0
+        $cl = [int]($st.x - 70 * $s); $ct = [int]($st.y - 88 * $s); $hop = 130
+        $gx = $cl; $gy = [math]::Max(0, $ct - $hop); $gw = [int](300 * $s); $gh = [int](300 * $s) + ($ct - $gy)
+        $u = { param($units) [int]($units * $s) }
+        $x0 = & $u 116; $x1 = & $u 184; $bl = & $u 74; $br = & $u 226
+        $colA = & $u 95; $colB = & $u 205; $yMax = ($ct - $gy) + (& $u 170)
+        $frames = @(); $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        while ($clock.ElapsedMilliseconds -lt 300) { $frames += , @($clock.ElapsedMilliseconds, (Grab $gx $gy $gw $gh)) }
+        $tap = $clock.ElapsedMilliseconds
+        [Mouse]::Click([int]($st.x + $st.width / 2), [int]($st.y + $st.height * 0.62), $false)
+        while ($clock.ElapsedMilliseconds -lt $tap + 1700) { $frames += , @($clock.ElapsedMilliseconds, (Grab $gx $gy $gw $gh)) }
+        [Mouse]::Move(5, 5)
+        $n = $frames.Count; $fps = [int]($n / ($clock.ElapsedMilliseconds / 1000.0))
+        $dir = Join-Path $Out 'face-tap'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $report = @(); $bad = @(); $base = 0; $tiles = @(); $k = 0
+        foreach ($f in $frames) {
+            $t = $f[0] - $tap
+            $b = Bytes $f[1]
+            $faint = [FaceProbe]::Faint($b, $gw, $gh, $x0, $x1, $bl, $br, 110, 195, 2)
+            $ea = [FaceProbe]::Edges($b, $gw, $gh, $colA, $yMax, 60); $eb = [FaceProbe]::Edges($b, $gw, $gh, $colB, $yMax, 60)
+            $report += "${t}:$faint/$ea$eb"
+            if ($t -lt 0) { $base = [math]::Max($base, $faint) }
+            $f += , $faint; $f += , ($ea -ge 2 -and $eb -ge 2)
+            $path = Join-Path $dir ('{0:D2}-t{1}ms.png' -f $k, $t); $k++
+            $f[1].Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            if ($t -ge -60 -and $tiles.Count -lt 30 -and ($k % 2 -eq 0)) { $tiles += $path }
+            $f[1].Dispose()
+            $frames[$k - 1] = $f
+        }
+        Contact-Sheet $tiles 6 240 (Join-Path $Out 'tap-strip.png')
+        Write-Host "    $n frames ($fps fps); baseline faint $base; t:faint/edgesAB = $($report -join ' ')"
+        foreach ($f in $frames) {
+            if ($f[0] - $tap -lt 0) { continue }
+            if ($f[2] -gt $base + 150) { $bad += "two faces at +$($f[0] - $tap) ms (faint eye ink $($f[2]) px, at rest $base)" }
+            if ($f[3]) { $bad += "two outlines at +$($f[0] - $tap) ms" }
+        }
+        if ($fps -lt 25) { $bad += "only $fps fps" }
+        if ($bad.Count) { throw ($bad -join '; ') }
+    }
+    Stop-Engine
+    if ($script:faceWin -and -not $script:faceWin.HasExited) { $script:faceWin.Kill() }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -2735,6 +2837,7 @@ try {
             'prayer' { Stage-Prayer }
             'games' { Stage-Games }
             'shell' { Stage-Shell }
+            'face' { Stage-Face }
         }
     }
 }
