@@ -391,6 +391,12 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial short GetKeyState(int vk);
 
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial int RegisterHotKey(nint hwnd, int id, uint modifiers, uint vk);
+
+    [LibraryImport("user32.dll")]
+    public static partial int UnregisterHotKey(nint hwnd, int id);
+
     [LibraryImport("gdi32.dll")]
     public static partial nint AddFontMemResourceEx(void* data, uint size, nint reserved, uint* count);
 

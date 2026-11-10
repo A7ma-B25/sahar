@@ -76,3 +76,17 @@ public static class MenuCatalog
         _ => null,
     };
 }
+
+/// <summary>What asked for the card.</summary>
+public enum MenuTrigger { DoubleClick, RightClick, Shortcut }
+
+/// <summary>Which triggers open the card for the "opens with" setting (spec §0.6): the shortcut always does.</summary>
+public static class MenuOpenRule
+{
+    public static bool Allows(Sahar.Core.Settings.MenuOpen setting, MenuTrigger t) => t switch
+    {
+        MenuTrigger.Shortcut => true,
+        MenuTrigger.RightClick => setting is Sahar.Core.Settings.MenuOpen.Right or Sahar.Core.Settings.MenuOpen.Both,
+        _ => setting is Sahar.Core.Settings.MenuOpen.Double or Sahar.Core.Settings.MenuOpen.Both,
+    };
+}

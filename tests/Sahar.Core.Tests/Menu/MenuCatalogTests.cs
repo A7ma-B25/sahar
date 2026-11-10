@@ -128,3 +128,17 @@ public class MenuCatalogTests
         Assert.Contains(page, c => c.Op == PathOp.CubicTo);
     }
 }
+
+public class MenuOpenRuleTests
+{
+    [Theory]
+    [InlineData(Sahar.Core.Settings.MenuOpen.Double, true, false, true)]
+    [InlineData(Sahar.Core.Settings.MenuOpen.Right, false, true, true)]
+    [InlineData(Sahar.Core.Settings.MenuOpen.Both, true, true, true)]
+    public void MenuOpenRule_Allows(Sahar.Core.Settings.MenuOpen setting, bool dbl, bool right, bool shortcut)
+    {
+        Assert.Equal(dbl, MenuOpenRule.Allows(setting, MenuTrigger.DoubleClick));
+        Assert.Equal(right, MenuOpenRule.Allows(setting, MenuTrigger.RightClick));
+        Assert.Equal(shortcut, MenuOpenRule.Allows(setting, MenuTrigger.Shortcut));
+    }
+}

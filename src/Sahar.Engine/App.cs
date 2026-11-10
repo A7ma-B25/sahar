@@ -5,6 +5,7 @@ using System.Numerics;
 using Sahar.Core.Art;
 using Sahar.Core.Expressions;
 using Sahar.Core.Geometry;
+using Sahar.Core.Menu;
 using Sahar.Core.Protocol;
 using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
@@ -175,8 +176,9 @@ internal sealed unsafe class App
         Action poke = () => { };
         _ = new InputController(input, motion, () => poke(), how =>
         {
-            // Opening (spec §0.6): a right-click (or the shortcut); a double-click stays two pokes unless chosen.
-            if (how == "double") { poke(); return; }
+            // Opening (spec §0.6): right-click and the shortcut by default; a refused double-click is a poke, as ever.
+            var trigger = how == "double" ? MenuTrigger.DoubleClick : MenuTrigger.RightClick;
+            if (!MenuOpenRule.Allows(settings.MenuOpen, trigger)) { if (trigger == MenuTrigger.DoubleClick) poke(); return; }
             if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
             if (showRunning()) stopShow?.Invoke(false);   // first, so the card opens around where she stays
             menu.Toggle(how);
@@ -452,6 +454,21 @@ internal sealed unsafe class App
         menu.Facts = () => new Sahar.Core.Menu.MenuFacts(timerTool.Remaining, director.CurrentKey == "claude-permission", prayer.Next(),
             quran.Playing, dndTool.Remaining, dndTool.UntilOff);
         menu.Mood = () => player.Current.Mood;
+        menu.Reload(settings, _ => true);
+        overlay.SettingChanged += () => Safe(menu.Refresh);   // light or dark apps changed (WM_SETTINGCHANGE ImmersiveColorSet)
+        // The shortcut (default Ctrl+Alt+S): opens the card with the focus in the chat row, or closes it.
+        var hotkey = new Hotkey(tray.Hwnd);
+        var shortcut = Shortcuts.Check(settings.MenuShortcut);
+        if (shortcut.Ok) hotkey.TryRegister(shortcut.Value, out _);
+        else Log.Write("hotkey: invalid");   // never the text
+        tray.HotkeyPressed += id => Safe(() =>
+        {
+            if (id != Hotkey.Id) return;
+            if (menu.IsOpen) { menu.Close(); return; }
+            if (_state.Hidden) return;
+            if (showRunning()) stopShow?.Invoke(false);
+            menu.Open("shortcut", caretInChat: true);
+        });
         lifeDirector.QuranOn = () => quran.Playing;
         menu.RingOpened += ring => Safe(() => { if (ring == "music") music.SayNowPlaying(); });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
@@ -496,6 +513,7 @@ internal sealed unsafe class App
                 case "activity-medium": SetActivity(ActivityLevel.Medium); break;
                 case "activity-lively": SetActivity(ActivityLevel.Lively); break;
                 case "hide": director.HideFor(TimeSpan.FromHours(1)); break;
+                case "settings": SettingsLauncher.Open(_options.TestMode); break;
                 case "timer-5": timerTool.Start(TimeSpan.FromMinutes(5)); break;
                 case "timer-15": timerTool.Start(TimeSpan.FromMinutes(15)); break;
                 case "timer-25": timerTool.Start(TimeSpan.FromMinutes(25)); break;

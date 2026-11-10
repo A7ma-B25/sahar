@@ -1703,9 +1703,120 @@ function Stage-Menu {
         Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
         if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
     }
+    # ---- The card follows its settings (Task 7): each step writes settings.json and restarts her. ----
+    $script:settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
+    $script:settingsKept = if (Test-Path $script:settingsPath) { Get-Content $script:settingsPath -Raw } else { $null }
+    function Restart-With([string]$json) {
+        Stop-Engine
+        New-Item -ItemType Directory -Force -Path (Split-Path $script:settingsPath) | Out-Null
+        Set-Content -Path $script:settingsPath -Value $json -Encoding UTF8
+        Start-Engine
+        Pose-Body 900 450 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Milliseconds 500
+    }
+    Step 'the shortcut opens the card with the focus in the chat row' {
+        Restart-With '{ "helloDone": true }'
+        [System.Windows.Forms.SendKeys]::SendWait('^%s')
+        $m = Wait-Menu 'true' 2000 'card open by Ctrl+Alt+S'
+        if ($m.focus -ne 'chat') { throw "focus: $($m.focus)" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'menu: open \(shortcut\)') { throw 'the log does not say the shortcut opened it' }
+        if ((Ids $m) -match 'settings') { throw 'a settings button without the settings app' }
+        [System.Windows.Forms.SendKeys]::SendWait('^%s')
+        Wait-Menu 'false' 1000 'card closed by the shortcut again' | Out-Null
+    }
+    Step 'only the chosen items show' {
+        Restart-With '{ "helloDone": true, "menuItems": ["play", "timer"] }'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ((Ids $m) -ne 'play,timer') { throw "buttons: $(Ids $m)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'right-click only' {
+        Restart-With '{ "helloDone": true, "menuOpen": "right" }'
+        $c = Body-Centre
+        [Mouse]::DoubleClick($c[0], $c[1])
+        Start-Sleep -Milliseconds 700
+        if ((Menu).open -ne 'false') { throw 'a double-click opened it' }
+        Start-Sleep -Milliseconds 1200
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open by a right-click' | Out-Null
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'double-click only' {
+        Restart-With '{ "helloDone": true, "menuOpen": "double" }'
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Start-Sleep -Milliseconds 700
+        if ((Menu).open -ne 'false') { throw 'a right-click opened it' }
+        [Mouse]::DoubleClick($c[0], $c[1])
+        Wait-Menu 'true' 2000 'card open by a double-click' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'menu: open \(double\)') { throw 'the log does not say a double-click opened it' }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'in the middle of the screen' {
+        Restart-With '{ "helloDone": true, "menuPlace": "center" }'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        $cx, $cy, $cw, $ch = $m.card -split ',' | ForEach-Object { [double]$_ }
+        $dx = $cx + $cw / 2 - ($Work.Left + $Work.Width / 2); $dy = $cy + $ch / 2 - ($Work.Top + $Work.Height / 2)
+        if ([math]::Abs($dx) -gt 2 -or [math]::Abs($dy) -gt 2) { throw "card centre is ($dx,$dy) from the work area's" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'the header shows nothing when asked' {
+        Restart-With '{ "helloDone": true, "menuHeader": "none" }'
+        Send '{"type":"cmd","name":"timer","args":{"seconds":"300"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ($m.fact -ne 'none') { throw "fact: $($m.fact)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'a dark card' {
+        Restart-With '{ "helloDone": true, "appearance": "dark" }'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ($m.dark -ne 'true') { throw "dark=$($m.dark)" }
+        Start-Sleep -Milliseconds 600
+        $shot = Screenshot 'menu-card-dark.png'
+        $cx, $cy, $cw, $ch = $m.card -split ',' | ForEach-Object { [double]$_ }
+        $px = Pixel $shot ([int]($cx + 70)) ([int]($cy + 84))
+        $want = [System.Drawing.ColorTranslator]::FromHtml('#3A3450')
+        if ([math]::Abs($px.R - $want.R) -gt 6 -or [math]::Abs($px.G - $want.G) -gt 6 -or [math]::Abs($px.B - $want.B) -gt 6) { throw "header pixel $($px.R),$($px.G),$($px.B), want 58,52,80" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'a taken shortcut is refused, and she carries on' {
+        $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-Command', @'
+Add-Type -TypeDefinition 'public static class HK { [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool RegisterHotKey(System.IntPtr h, int id, uint m, uint vk); }'
+[HK]::RegisterHotKey([System.IntPtr]::Zero, 7, 3, 0x4B) | Out-Null
+Start-Sleep -Seconds 40
+'@
+        try {
+            Start-Sleep -Seconds 4
+            Restart-With '{ "helloDone": true, "menuShortcut": "Ctrl+Alt+K" }'
+            Start-Sleep -Milliseconds 500
+            $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+            if ($log -notmatch 'hotkey: taken') { throw 'the log does not say the shortcut was taken' }
+            if ((Menu).open -ne 'false') { throw 'debug-menu: unexpected state' }
+        }
+        finally { $holder.Kill() }
+    }
+    Step 'nothing visible: the header and the Esc hint, and Esc still closes' {
+        Restart-With '{ "helloDone": true, "menuItems": [], "menuHeader": "none" }'
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $m = Wait-Menu 'true' 2000 'card open'
+        if ($m.buttons.Count -ne 0) { throw "buttons: $(Ids $m)" }
+        Start-Sleep -Milliseconds 400
+        Screenshot 'menu-empty.png' | Out-Null
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Menu 'false' 1000 'card closed by Esc' | Out-Null
+    }
     Stop-Engine
+    if ($null -ne $script:settingsKept) { Set-Content -Path $script:settingsPath -Value $script:settingsKept -Encoding UTF8 -NoNewline }
+    else { Remove-Item $script:settingsPath -ErrorAction SilentlyContinue }
 }
-
 
 Add-Type @'
 using System;

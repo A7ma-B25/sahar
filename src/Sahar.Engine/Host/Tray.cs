@@ -26,6 +26,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    /// <summary>A registered global hotkey was pressed (its id).</summary>
+    public event Action<int>? HotkeyPressed;
     /// <summary>A key went down or up (its virtual-key code only; for the screenshot keys). Nothing is kept.</summary>
     public event Action<int, bool>? KeyChanged;
 
@@ -118,6 +120,9 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
                 uint ev = (uint)(lParam & 0xFFFF);
                 if (ev is WM_CONTEXTMENU or WM_RBUTTONUP) ShowMenu();
                 else if (ev is NIN_SELECT or WM_LBUTTONUP) ShowNow?.Invoke();   // a click on the icon brings her back
+                return 0;
+            case 0x0312:   // WM_HOTKEY
+                HotkeyPressed?.Invoke((int)wParam);
                 return 0;
             case 0x031D:   // WM_CLIPBOARDUPDATE
                 ClipboardChanged?.Invoke();
