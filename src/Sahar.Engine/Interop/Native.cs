@@ -389,6 +389,9 @@ internal static unsafe partial class Native
         uint underline, uint strikeOut, uint charSet, uint outPrecision, uint clipPrecision, uint quality, uint pitchAndFamily, char* face);
 
     [LibraryImport("gdi32.dll")]
+    public static partial nint AddFontMemResourceEx(void* data, uint size, nint reserved, uint* count);
+
+    [LibraryImport("gdi32.dll")]
     public static partial nint CreateRoundRectRgn(int left, int top, int right, int bottom, int w, int h);
 
     [LibraryImport("user32.dll")]

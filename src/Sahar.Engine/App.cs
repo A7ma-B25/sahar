@@ -614,6 +614,7 @@ internal sealed unsafe class App
                 MoveTo(sahar.Position);
                 return new PipeReply(true, State: _state.Snapshot());
             });
+            pipe.Register("debug-font", _ => new PipeReply(true, Fonts.Describe()));
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });

@@ -286,6 +286,12 @@ function Stage-Smoke {
         if ($tail -notmatch 'previous run ended without exit \(last line \d{4}-\d{2}-\d{2} [0-9:.]+\)') { throw "no crash note after a kill:`n$tail" }
         Stop-Engine
     }
+    Step 'Rubik is loaded' {
+        Start-Engine
+        $f = Kv 'debug-font'
+        Stop-Engine
+        if ($f.rubik -ne 'true' -or $f.families -ne '1' -or $f.gdi -ne 'true') { throw "fonts: rubik=$($f.rubik) families=$($f.families) gdi=$($f.gdi)" }
+    }
 }
 
 function Stage-Idle {

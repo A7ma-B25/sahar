@@ -16,4 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Sahar.Core\Sahar.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Rubik (OFL, static instances cut by tools/fonts/make_rubik.py): the menu card's type, loaded from memory. -->
+    <EmbeddedResource Include="assets\fonts\*.ttf" LogicalName="Sahar.Fonts.%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

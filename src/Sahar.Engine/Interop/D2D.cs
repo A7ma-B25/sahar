@@ -24,6 +24,22 @@ internal struct D2DRect { public float Left, Top, Right, Bottom; }
 internal struct D2DEllipse { public D2DPoint Center; public float Rx, Ry; }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct D2DRoundedRect { public D2DRect Rect; public float Rx, Ry; }
+
+/// <summary>Logical text alignment (start = right in RTL).</summary>
+internal enum TextAlign { Start, Centre, End }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct DWriteTextMetrics
+{
+    public float Left, Top, Width, WidthIncludingTrailingWhitespace, Height, LayoutWidth, LayoutHeight;
+    public uint MaxBidiReorderingDepth, LineCount;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct DWriteTextRange { public uint Start, Length; }
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct D2DBezier { public D2DPoint P1, P2, P3; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -291,6 +307,36 @@ internal sealed unsafe class D2DContext : IDisposable
                 _dc, t, (uint)text.Length, format, &box, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT, 0);
     }
 
+    /// <summary>ID2D1RenderTarget::FillRoundedRectangle (slot 19).</summary>
+    public void FillRoundedRect(D2DRect r, float radius, nint brush)
+    {
+        var rr = new D2DRoundedRect { Rect = r, Rx = radius, Ry = radius };
+        ((delegate* unmanaged[Stdcall]<nint, D2DRoundedRect*, nint, void>)Com.Slot(_dc, 19))(_dc, &rr, brush);
+    }
+
+    /// <summary>ID2D1RenderTarget::DrawRoundedRectangle (slot 18).</summary>
+    public void DrawRoundedRect(D2DRect r, float radius, nint brush, float width)
+    {
+        var rr = new D2DRoundedRect { Rect = r, Rx = radius, Ry = radius };
+        ((delegate* unmanaged[Stdcall]<nint, D2DRoundedRect*, nint, float, nint, void>)Com.Slot(_dc, 18))(_dc, &rr, brush, width, 0);
+    }
+
+    /// <summary>
+    /// Text in Rubik (or Segoe UI when it did not load) laid out in <paramref name="box"/>, vertically centred, aligned to
+    /// the logical start/centre/end (mapped with <paramref name="rtl"/>); every run of digits (0–9, ٠–٩) gets fixed cells of
+    /// <paramref name="digitCell"/> em (plan Ruling 5: Rubik's Arabic-Indic digits are proportional).
+    /// Returns the laid-out text's size.
+    /// </summary>
+    public Vector2 TextLayout(string text, float size, int weight, D2DRect box, nint brush, TextAlign align, bool rtl, float digitCell = DWrite.DigitCell)
+    {
+        nint layout = DWrite.Layout(text, size, weight, box.Right - box.Left, box.Bottom - box.Top, align, rtl, digitCell);
+        Own(layout);
+        var origin = new D2DPoint { X = box.Left, Y = box.Top };
+        // ID2D1RenderTarget::DrawTextLayout(origin, layout, brush, options)
+        ((delegate* unmanaged[Stdcall]<nint, D2DPoint, nint, nint, int, void>)Com.Slot(_dc, 28))(_dc, origin, layout, brush, 0);
+        return DWrite.Size(layout);
+    }
+
     private nint Own(nint p) { _owned.Add(p); return p; }
 
     private static void Check(int hr, string call)
@@ -337,8 +383,14 @@ internal static unsafe partial class DWrite
         }
     }
 
-    /// <summary>A new IDWriteTextFormat (caller releases). Weight 400 normal, 600 semibold.</summary>
-    public static nint TextFormat(string family, float size, int weight)
+    /// <summary>Rubik's widest Arabic-Indic digit is 0.668 em (tools/fonts/make_rubik.py): a cell every digit fits.</summary>
+    public const float DigitCell = 0.67f;
+
+    /// <summary>The shared IDWriteFactory (not AddRef'd).</summary>
+    public static nint SharedFactory => Factory;
+
+    /// <summary>A new IDWriteTextFormat (caller releases). Weight 400 normal, 600 semibold. <paramref name="collection"/> 0 = system fonts.</summary>
+    public static nint TextFormat(string family, float size, int weight, nint collection = 0)
     {
         nint format;
         fixed (char* fam = family)
@@ -346,12 +398,75 @@ internal static unsafe partial class DWrite
         {
             // IDWriteFactory::CreateTextFormat(family, collection, weight, style, stretch, size, locale, out)
             int hr = ((delegate* unmanaged[Stdcall]<nint, char*, nint, int, int, int, float, char*, nint*, int>)Com.Slot(Factory, 15))(
-                Factory, fam, 0, weight, 0 /* normal */, 5 /* normal */, size, locale, &format);
+                Factory, fam, collection, weight, 0 /* normal */, 5 /* normal */, size, locale, &format);
             if (hr < 0) throw new D2DException(hr, "CreateTextFormat");
         }
         // SetTextAlignment(CENTER), SetParagraphAlignment(CENTER)
         ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 3))(format, 2);
         ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 4))(format, 2);
         return format;
+    }
+
+    /// <summary>A text layout in Rubik (caller releases): reading direction, logical alignment, centred vertically, no
+    /// wrapping, digit runs in fixed cells (IDWriteTextLayout1::SetCharacterSpacing min advance).</summary>
+    public static nint Layout(string text, float size, int weight, float width, float height, TextAlign align, bool rtl, float digitCell)
+    {
+        nint collection = Render.Fonts.Collection;
+        nint format = TextFormat(collection != 0 ? Render.Fonts.Family : "Segoe UI", size, weight, collection);
+        nint layout;
+        try
+        {
+            // DWRITE_TEXT_ALIGNMENT: leading 0, trailing 1, centre 2 (leading follows the reading direction)
+            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 3))(format, align switch { TextAlign.Start => 0, TextAlign.End => 1, _ => 2 });
+            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 4))(format, 2);   // paragraph: centre
+            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 5))(format, 1);   // no wrap
+            ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(format, 6))(format, rtl ? 1 : 0);
+            fixed (char* t = text)
+            {
+                // IDWriteFactory::CreateTextLayout(string, length, format, maxWidth, maxHeight, out)
+                int hr = ((delegate* unmanaged[Stdcall]<nint, char*, uint, nint, float, float, nint*, int>)Com.Slot(Factory, 18))(
+                    Factory, t, (uint)text.Length, format, width, height, &layout);
+                if (hr < 0) throw new D2DException(hr, "CreateTextLayout");
+            }
+        }
+        finally { Marshal.Release(format); }
+        nint layout1 = 0;
+        try
+        {
+            layout1 = Com.QueryInterface(layout, IID_IDWriteTextLayout1);
+            int i = 0;
+            while (i < text.Length)
+            {
+                if (!IsDigit(text[i])) { i++; continue; }
+                int start = i;
+                while (i < text.Length && IsDigit(text[i])) i++;
+                var range = new DWriteTextRange { Start = (uint)start, Length = (uint)(i - start) };
+                // IDWriteTextLayout1::SetCharacterSpacing(leading, trailing, minimumAdvance, range)
+                ((delegate* unmanaged[Stdcall]<nint, float, float, float, DWriteTextRange, int>)Com.Slot(layout1, 69))(layout1, 0, 0, digitCell * size, range);
+            }
+        }
+        catch (Exception) { }   // no IDWriteTextLayout1 (very old Windows): proportional digits
+        finally { if (layout1 != 0) Marshal.Release(layout1); }
+        return layout;
+    }
+
+    private static bool IsDigit(char c) => c is >= '0' and <= '9' or >= '٠' and <= '٩';
+
+    private static readonly Guid IID_IDWriteTextLayout1 = new("9064D822-80A7-465C-A986-DF65F78B8FEB");
+
+    /// <summary>The laid-out text's width and height (IDWriteTextLayout::GetMetrics, slot 60).</summary>
+    public static System.Numerics.Vector2 Size(nint layout)
+    {
+        DWriteTextMetrics m;
+        int hr = ((delegate* unmanaged[Stdcall]<nint, DWriteTextMetrics*, int>)Com.Slot(layout, 60))(layout, &m);
+        return hr < 0 ? default : new System.Numerics.Vector2(m.WidthIncludingTrailingWhitespace, m.Height);
+    }
+
+    /// <summary>Measures text as <see cref="Layout"/> would draw it.</summary>
+    public static System.Numerics.Vector2 Measure(string text, float size, int weight, bool rtl)
+    {
+        nint l = Layout(text, size, weight, 10000, 10000, TextAlign.Start, rtl, DigitCell);
+        try { return Size(l); }
+        finally { Marshal.Release(l); }
     }
 }
