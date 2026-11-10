@@ -132,7 +132,7 @@ internal sealed class ExpressionPlayer
     private static void Animate(CompositionObject target, string property, float to, bool fade)
     {
         var c = target.Compositor;
-        if (!fade)
+        if (!fade || Fade <= TimeSpan.Zero)   // reduced motion: instant (a key-frame animation needs ≥ 1 ms)
         {
             target.StopAnimation(property);
             if (target is CompositionPropertySet ps) ps.InsertScalar(property, to);

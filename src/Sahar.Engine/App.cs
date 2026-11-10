@@ -55,10 +55,12 @@ internal sealed unsafe class App
         sahar.SetInnerStars(settings.InnerStars);
         // Her soul (0.10a): float, sway, leaf lag, hop, look and blink on the compositor; her original loops beside it.
         var soul = new SoulLayer(sahar, ui);
-        // Windows "Animation effects" off: no idle motion, instant state changes (spec §2).
-        soul.SetReducedMotion(ReducedMotion.AnimationsOff());
+        // Windows "Animation effects" off: no idle motion, instant state changes (spec §2). A test machine (the CI
+        // runner has them off) ignores Windows here: only the pipe's debug-reduced-motion turns it on there.
+        bool machineReduced = ReducedMotion.AnimationsOff();
+        if (machineReduced) Log.Write(_options.TestMode ? "motion: Windows animation effects off (ignored in test mode)" : "motion: reduced on");
+        soul.SetReducedMotion(machineReduced && !_options.TestMode);
         ExpressionPlayer.Reduced = soul.Reduced;
-        if (soul.Reduced) Log.Write("motion: reduced on");
         IdleAnimations.Start(sahar, soul.Reduced);
         soul.Start();
         var player = new ExpressionPlayer(sahar, soul);
@@ -152,7 +154,7 @@ internal sealed unsafe class App
             IdleAnimations.Start(sahar, on);
             Log.Write($"motion: reduced {(on ? "on" : "off")}");
         }
-        overlay.SettingChanged += () => Safe(() => SetReduced(ReducedMotion.AnimationsOff()));
+        overlay.SettingChanged += () => Safe(() => { if (!_options.TestMode) SetReduced(ReducedMotion.AnimationsOff()); });
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);

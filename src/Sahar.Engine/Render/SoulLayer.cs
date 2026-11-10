@@ -20,7 +20,6 @@ internal sealed class SoulLayer
     private readonly Compositor _c;
     private long _hopStart = long.MinValue / 2;
     private float _hopPower = 1f;
-    private AnimationController? _floatClock, _hopClock;
     private double? _frozenFloat, _frozenHop;
     private readonly DispatcherQueueTimer? _happyTimer;
 
@@ -92,15 +91,7 @@ internal sealed class SoulLayer
         StopHop();
 
         // The clock.
-        var clock = _c.CreateScalarKeyFrameAnimation();
-        clock.InsertKeyFrame(0f, 0f);
-        clock.InsertKeyFrame(1f, (float)SoulMath.LoopSeconds, _c.CreateLinearEasingFunction());
-        clock.Duration = TimeSpan.FromSeconds(SoulMath.LoopSeconds);
-        clock.IterationBehavior = AnimationIterationBehavior.Forever;
-        _floatClock = _c.CreateAnimationController();
-        Props.StartAnimation("t", clock, _floatClock);
-        if (_frozenFloat is { } ft) { _floatClock.Pause(); _floatClock.Progress = (float)(ft / SoulMath.LoopSeconds); }
-        else if (Reduced) { _floatClock.Pause(); _floatClock.Progress = 0; }   // reduced motion: the clock (and leaf) rests
+        StartClock();
 
         // The leaf: lag behind the float, the hop's kick, and a little counter-lean (it reads the lean container).
         var leaf = Expr($"{F(SoulMath.LeafDeg)} * Sin(p.t * {F(w)} - {F(SoulMath.LeafLag)}) + p.kick - {F(SoulMath.LeafLeanDeg / SoulMath.LeanDeg)} * ln.RotationAngleInDegrees");
@@ -130,6 +121,24 @@ internal sealed class SoulLayer
         ApplyLookAnimations();
         _v.EyesLayer.Container.Offset = new Vector3(LookTarget * s, 0);
         _v.Lean.RotationAngleInDegrees = SoulMath.LeanDeg * LeanTarget;
+    }
+
+    /// <summary>The 25.2 s clock runs, or rests at a fixed time (reduced motion: 0; a test freeze: its time). The
+    /// expressions read it either way, so a frozen frame is the real composited pose at that time.</summary>
+    private void StartClock()
+    {
+        if (_frozenFloat is { } ft || Reduced)
+        {
+            Props.StopAnimation("t");
+            Props.InsertScalar("t", (float)(_frozenFloat ?? 0));
+            return;
+        }
+        var clock = _c.CreateScalarKeyFrameAnimation();
+        clock.InsertKeyFrame(0f, 0f);
+        clock.InsertKeyFrame(1f, (float)SoulMath.LoopSeconds, _c.CreateLinearEasingFunction());
+        clock.Duration = TimeSpan.FromSeconds(SoulMath.LoopSeconds);
+        clock.IterationBehavior = AnimationIterationBehavior.Forever;
+        Props.StartAnimation("t", clock);
     }
 
     private void StartFloat(float s, double w, double b)
@@ -178,6 +187,18 @@ internal sealed class SoulLayer
     private void PlayHop(float power, double? pausedAt)
     {
         float s = _v.Scale;
+        if (pausedAt is { } at)
+        {
+            // A frozen frame (test mode): the pose the baked keys hold at that time, set still.
+            foreach (var p in new[] { "Offset.Y", "Scale", "RotationAngleInDegrees" }) _v.Hop.StopAnimation(p);
+            Props.StopAnimation("kick");
+            var pose = SoulMath.Hop(at, power);
+            _v.Hop.Offset = new Vector3(0, pose.RiseUnits * s, 0);
+            _v.Hop.Scale = new Vector3(1 / pose.ScaleY, pose.ScaleY, 1);
+            _v.Hop.RotationAngleInDegrees = pose.TiltDeg;
+            Props.InsertScalar("kick", SoulMath.LeafKick(at, power));
+            return;
+        }
         var keys = SoulMath.HopKeys(power);
         var linear = _c.CreateLinearEasingFunction();
         var rise = _c.CreateScalarKeyFrameAnimation();
@@ -193,12 +214,10 @@ internal sealed class SoulLayer
         }
         var d = TimeSpan.FromSeconds(SoulMath.HopSeconds);
         foreach (var a in new KeyFrameAnimation[] { rise, scale, tilt, kick }) a.Duration = d;
-        _hopClock = _c.CreateAnimationController();
-        _v.Hop.StartAnimation("Offset.Y", rise, _hopClock);
-        _v.Hop.StartAnimation("Scale", scale, _hopClock);
-        _v.Hop.StartAnimation("RotationAngleInDegrees", tilt, _hopClock);
-        Props.StartAnimation("kick", kick, _hopClock);
-        if (pausedAt is { } t) { _hopClock.Pause(); _hopClock.Progress = (float)(t / SoulMath.HopSeconds); }
+        _v.Hop.StartAnimation("Offset.Y", rise);
+        _v.Hop.StartAnimation("Scale", scale);
+        _v.Hop.StartAnimation("RotationAngleInDegrees", tilt);
+        Props.StartAnimation("kick", kick);
     }
 
     private void StopHop()
@@ -233,18 +252,14 @@ internal sealed class SoulLayer
         Start();
     }
 
-    /// <summary>Test mode: pause the float clock at <paramref name="floatT"/> s and/or show the baked hop paused at
-    /// <paramref name="hopT"/> s, so a screenshot shows the real composited pose; nulls resume.</summary>
+    /// <summary>Test mode: hold the float clock at <paramref name="floatT"/> s (the expressions still compute the
+    /// pose) and/or hold the hop's pose at <paramref name="hopT"/> s, so a screenshot shows that instant; nulls resume.</summary>
     public void Freeze(double? floatT, double? hopT, float power = 1f)
     {
         _frozenFloat = floatT;
         _frozenHop = hopT;
         _hopPower = power;
-        if (_floatClock != null)
-        {
-            if (floatT is { } ft) { _floatClock.Pause(); _floatClock.Progress = (float)(ft / SoulMath.LoopSeconds); }
-            else _floatClock.Resume();
-        }
+        StartClock();
         if (hopT is { } ht) PlayHop(power, ht);
         else StopHop();
     }
