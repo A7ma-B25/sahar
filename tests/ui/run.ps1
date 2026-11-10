@@ -426,7 +426,7 @@ function Grab([int]$x, [int]$y, [int]$w, [int]$h) {
     $g.Dispose()
     $bmp
 }
-function Soul-Freeze([string]$args) { Send ('{"type":"cmd","name":"debug-soul-freeze","args":{' + $args + '}}') }
+function Soul-Freeze([string]$kv) { Send ('{"type":"cmd","name":"debug-soul-freeze","args":{' + $kv + '}}') }
 # A screenshot of her place with her moved away (the backdrop), then her back where she was.
 function Backdrop([string]$name) {
     $i = Info
