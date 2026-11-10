@@ -6,6 +6,18 @@ Inputs: `docs/design/2026-11-08-sahar-design-study.md` (UI study, "Porcelain"),
 `docs/design/2026-11-08-sahar-character-study.md` (character audit), `PRODUCT.md`.
 Supersedes for these surfaces: spec 2026-11-06 §7 (radial menu look) and §13 (settings app tech).
 
+## 0. Owner rulings after the independent review (2026-11-10) — binding over the text below
+
+1. **One release per plan:** 0.10a ships alone as **0.10.0**, 0.10b as **0.11.0**, 0.10c as **0.12.0** (each published only after the owner's word).
+2. **Motion is tested by its pixels**, not only by state flags (§8).
+3. **Colours:** the Calm wash is exactly L2 (`#8E7BE0`@0.55 → `#A897EA`@0.28 → transparent), never darkened. The other 15 moods' washes come from **one reviewed hex table in the rig data**, shown to the owner as a 16-mood sheet (`docs/design/character/06-moods-sheet.svg/.png`); no colour maths in C#. The menu header tints are likewise a reviewed table (§5).
+4. **Settings pages not yet seen by the owner** (General, Privacy, Listening, About) are drawn as mockups for approval before they are built.
+5. **Two programs write `settings.json`:** saves are serialised across processes, retried on sharing violations, and an unreadable file is never overwritten with defaults (§6).
+6. **Menu opening:** right-click and the global shortcut by default; double-click stays for play/poke. Default shortcut **`Ctrl+Alt+S`**.
+7. **Hop** is one baked keyframe animation; **look** is an implicit animation (§4).
+8. **CI** runs only the stages a change touches; the full run precedes each release (§8).
+9. **Chat** also starts games and her moves (§5.1).
+
 ## 1. Scope
 
 1. **Sahar's look:** keep the original rig exactly; fix star visibility on white; add stars inside her; a new elastic motion layer.
@@ -45,7 +57,7 @@ Out of scope here: real AI answers (the "smart" phase), Sahar's voice output (vo
 | L3 | Inner stars: 6 white four-point stars and 5 white dots inside the wash | stars at scale 0.32–0.55, opacity 0.15→1 and scale 0.6→1.1, periods 2.3–3.8 s with staggered starts; dots r 0.9–1.3, opacity 0.2→0.85 |
 | L4 | Happy face while she hops or is tapped | eyes become up-arcs `M90 127 Q100 115 110 127` / `M130 127 Q140 115 150 127` (stroke 3.6, round) + small lash ticks; smile `M110 138 Q120 152 130 138`; blush opacity 0.55→0.85; lasts 1.1 s |
 
-The wash tints with mood: inner stop = `palette[mood].glow` darkened by 0.12 OKLab L (Calm gives ≈`#8E7BE0`), mid stop = `palette[mood].glow`, outer = `palette[mood].bottom` at 0 opacity. Verify per mood that the white inner stars keep ≥ 1.8:1 against the wash centre (decorative, but must read).
+The wash tints with mood (ruling 0.3): Calm uses L2 exactly; every other mood reads its inner and mid stops from one hex table in the rig data (`sky.washStops`, written in `tools/art/design.py`), outer = `palette[mood].bottom` at 0 opacity. The table is reviewed on the 16-mood sheet; the white inner stars must visibly read on every wash (decorative).
 
 ## 4. Motion layer (the "soul")
 
@@ -66,8 +78,8 @@ Everything is relative to her resting pose. Pivot = bottom centre of the body.
 
 **Engine mapping:**
 - Float, sway, follow-through and leaf lag: looping expression animations on the body and leaf visuals.
-- Hop: one keyframe animation set (scale.y, offset.y, rotation) plus a spring (`NaturalMotion`, damping 0.35) for the landing.
-- Look: an expression bound to a property set fed by the pointer (updated only on mouse move, throttled to 30 Hz).
+- Hop: one keyframe animation set (scale, offset.y, rotation, leaf kick) baked from the whole 1.2 s curve, landing included — no spring hand-off, no timer (ruling 0.7).
+- Look: implicit animations on the eyes' offset and on a separate lean container; the pointer (≤ 30 Hz, only on mouse move, only when the target changes) just sets the target values — no animation is restarted per update.
 - These replace today's idle clocks (≈10 unrelated timers); existing motions and expressions keep working on top.
 
 ## 5. The menu (replaces the radial ring)
@@ -80,7 +92,7 @@ Everything is relative to her resting pose. Pivot = bottom centre of the body.
 **Moon clasp:** while the card is open, a 20 DIP moon rests on the card corner nearest her. Her own orbiting moon is hidden during that time.
 
 **Header (mood region):**
-- Min 84 tall, radius 14, background = mood tint (light: `#EEE8FF` for Calm, from `palette[mood].mid`; dark: `#3A3450`), three tiny star dots.
+- Min 84 tall, radius 14, background = mood tint (light: `#EEE8FF` for Calm; dark: `#3A3450`; other moods from a reviewed hex table, ruling 0.3), three tiny star dots.
 - Line 1 (17/600), in her voice: «شو بدك نعمل؟». It changes to her reply to a chat message (6 s), «عم اسمعك…» while listening, or «عم اسكت هلق» while hushed.
 - Line 2: the single most urgent fact, with a moon dot, in `moon` colour, tabular digits. Order: running timer › Claude waiting › next prayer › Quran playing › hush remaining. Clicking it opens that item.
 
@@ -92,7 +104,7 @@ Everything is relative to her resting pose. Pivot = bottom centre of the body.
   - Recognised text goes through the same parser.
   - Whether Arabic dictation works offline must be checked on the owner's machine; if it doesn't, the mic stays hidden for Arabic.
 
-**Tiles (hers):** 3 × 86 tall, radius 12, hand-drawn stroke icons.
+**Tiles (hers):** 3 × 86 tall, radius 12, hand-drawn stroke icons (the mockup's wobble baked into the path data).
 - «نلعب؟» opens the games list.
 - «بسكت شوي» drills in to «قديش بدك ياني اسكت؟» with نص ساعة / ساعة / ساعتين / لحد ما تقلي. Once active, the tile reads «رجّعيني احكي».
 - «بغفى شوي» hides her until woken; 1 h by default.
@@ -104,7 +116,8 @@ Everything is relative to her resting pose. Pivot = bottom centre of the body.
 **Visibility:** every item can be turned on or off from Settings → القائمة. Items whose feature isn't available are hidden.
 
 **Keyboard:**
-- The global shortcut (default `Alt+S`, changeable) opens the menu with the caret in the chat field.
+- **Opening (ruling 0.6):** by default a right-click or the global shortcut opens the card; a double-click stays for play/poke (two pokes). The engine logs how it was opened: `menu: open (right|shortcut|double)`.
+- The global shortcut (default `Ctrl+Alt+S`, changeable) opens the menu with the caret in the chat field.
 - Tab / arrow keys move through the items (mirrored in RTL). `1`–`3` pick the tiles; `Enter` activates.
 - `Esc` goes back, then closes. On close, focus returns to the previous window.
 
@@ -124,7 +137,9 @@ Parsed in Core with Arabic and English patterns. Any number can be written in Ar
 | «اسكتي» or «اسكتي ساعة» | hush | «ماشي، رح اسكت…» |
 | «نامي» | sleep | «تصبح على خير» (gendered) |
 | «نلعب» | opens the games list | «يلا!» |
-| «الصلاة» | shows the next prayer | «العصر بعد …» |
+| «نلعب الحقني» / «نلعب غمّضلي» / «نلعب الطابة» / «نلعب النجوم» | starts that game | «يلا!» |
+| «ارقصي» / «نطّي» / «تمطّي» | she dances / hops / stretches | «هيك؟» |
+| «الصلاة» | shows the next prayer | «العصر بعد …» (prayer names spelled «الضهر»، «العشا» as in the mockups) |
 | greetings («كيفك», «شلونك», "hi") | — | a short friendly line |
 | anything else | — | «سمعتك! لسا عم اتعلّم الحكي، وقريباً بجاوبك على كل شي.» |
 
@@ -166,15 +181,19 @@ Page contents follow the UI study §3.2, plus:
 
 All copy is in her voice, first person («هون بتظبطني متل ما بدك…»). Every change applies instantly. Light and dark follow Windows, with an override in General.
 
+Pages the owner has not seen yet (General, Privacy, Listening, About) are first drawn as mockups and approved (ruling 0.4).
+
+**Two writers (ruling 0.5):** `SettingsStore` serialises every save and read-modify-write across processes with a named mutex, retries sharing violations, and never writes over a file it could not parse (it keeps a `.bad` copy and refuses the save).
+
 **New settings fields** (`SaharSettings`, all with defaults so old files keep working):
 
 | Field | Type / default |
 |---|---|
 | `MenuItems` | set of item ids; default: all available |
 | `MenuHeader` | `Urgent` · `Prayer` · `None` |
-| `MenuOpen` | `Double` · `Right` · `Both`; default `Both` |
+| `MenuOpen` | `Double` · `Right` · `Both`; default `Right` (ruling 0.6) |
 | `MenuPlace` | `Beside` · `Center` |
-| `MenuShortcut` | default `Alt+S` |
+| `MenuShortcut` | default `Ctrl+Alt+S` |
 | `Appearance` | `System` · `Light` · `Dark` |
 | `InnerStars` | bool; default `true` |
 
@@ -211,7 +230,9 @@ All copy is in her voice, first person («هون بتظبطني متل ما بد
 - The export-rig completeness test (§3 prerequisite).
 
 **Windows UI CI:**
-- The `menu` stage is updated for the card. Steps: open via double-click and the shortcut → the caret is in chat → type «مؤقت ٥» → the timer is running; Esc closes the card; drill into «بسكت»; check that hidden items are hidden.
+- **Motion by pixels (ruling 0.2):** her top edge rises ≈ 19 DIP (Medium) at +0.29 s into a hop; two captures 1 s apart differ while she floats; the leaf rotates; an 8-frame hop strip PNG is kept as an artifact.
+- `ui-test.yml` takes a `stages` input: a task runs only the stages it touches; every release runs all stages.
+- The `menu` stage is updated for the card. Steps: open via right-click and the shortcut → the caret is in chat → type «مؤقت ٥» → the timer is running; Esc closes the card; drill into «بسكت»; check that hidden items are hidden.
 - A new `settings` stage: launch the settings app → navigate all pages → change size → the engine size changes over the pipe → close → the process exits and memory is released.
 - Screenshots are kept as CI artifacts.
 
@@ -233,4 +254,4 @@ All copy is in her voice, first person («هون بتظبطني متل ما بد
 4. The settings app shell and bridge.
 5. The settings pages.
 6. CI stages and checks.
-7. Test build 0.10.0, published after the owner's word.
+7. Releases (ruling 0.1): 0.10.0 after items 1–2 (plan 0.10a), 0.11.0 after item 3 (0.10b), 0.12.0 after items 4–6 (0.10c); each published after the owner's word.

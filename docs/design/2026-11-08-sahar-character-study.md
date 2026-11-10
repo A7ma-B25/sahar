@@ -229,6 +229,8 @@ The next three notes come from classic animation principles, which the installed
 
 **Face swaps:** make-interfaces-feel-better crossfades icon swaps with opacity, scale and blur; the 250 ms face crossfade can add a 0.96 → 1 scale.
 
+> **Superseded (2026-11-10):** §5–6 below (removing glows, an outline, a simpler small face) were not adopted. The approved spec `docs/superpowers/specs/2026-11-08-sahar-look-menu-settings-design.md` keeps every original glow and the halo (owner rule: nothing of her original look is removed); read §5–6 as history.
+
 ## 5. Verification before shipping
 
 - [ ] Each mood measured **on device** at 48/80/120 px and 100%/150%, over white Chrome, VS Code dark, the Windows 11 wallpaper and a photo: outline ≥ 3:1 on white and on `#202020`.
