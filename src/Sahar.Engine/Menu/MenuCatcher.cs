@@ -20,6 +20,8 @@ internal sealed class MenuCatcher : IWindowHandler
     public Action<Vector2>? Clicked { get; set; }
     public Action<Vector2>? Moved { get; set; }
     public Action? Dismissed { get; set; }
+    /// <summary>Another app became active: close without taking the focus back from it.</summary>
+    public Action? Deactivated { get; set; }
     public Action<MenuKey>? KeyPressed { get; set; }
     /// <summary>Windows that may take the focus without closing the menu (the chat field's popup and edit).</summary>
     public HashSet<nint> AllowedFocus { get; } = [];
@@ -100,7 +102,7 @@ internal sealed class MenuCatcher : IWindowHandler
                 return 0;
             case Native.WM_ACTIVATE when (wParam & 0xFFFF) == 0 && Visible:   // WA_INACTIVE: another window took over
                 if (lParam != 0 && AllowedFocus.Contains(lParam)) return null;   // the chat field: the menu stays
-                Dismissed?.Invoke();
+                (Deactivated ?? Dismissed)?.Invoke();
                 return null;
             default:
                 return null;

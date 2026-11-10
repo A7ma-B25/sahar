@@ -73,13 +73,14 @@ internal sealed class MenuCard : IDisposable
             Clicked = p => Safe(() => Click(p)),
             Moved = p => Safe(() => Hover(p)),
             Dismissed = () => Safe(Close),
+            Deactivated = () => Safe(() => Close(restoreFocus: false)),
             KeyPressed = k => Safe(() => Key(k)),
         };
         _chat = new ChatField(capturable);
         _chat.Submitted += text => Safe(() => Send(text));
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
-        _chat.Deactivated += next => Safe(() => { if (next != _catcher.Hwnd && !Win.Own.Contains(next)) Close(); });
+        _chat.Deactivated += next => Safe(() => { if (next != _catcher.Hwnd && !Win.Own.Contains(next)) Close(restoreFocus: false); });
         _tick = ui.CreateTimer();
         _tick.Interval = TimeSpan.FromSeconds(1);
         _tick.Tick += (_, _) => Safe(Refresh);
@@ -148,7 +149,10 @@ internal sealed class MenuCard : IDisposable
         UpdateTick();
     }
 
-    public void Close()
+    public void Close() => Close(restoreFocus: true);
+
+    /// <param name="restoreFocus">false when another app took over (its click must keep it in front).</param>
+    public void Close(bool restoreFocus)
     {
         if (!IsOpen) return;
         IsOpen = false;
@@ -165,7 +169,7 @@ internal sealed class MenuCard : IDisposable
         Log.Write("menu: closed");
         OpenChanged?.Invoke(false);
         // Focus goes back to the window that had it.
-        if (_previous != 0 && Native.IsWindow(_previous) != 0) Native.SetForegroundWindow(_previous);
+        if (restoreFocus && _previous != 0 && Native.IsWindow(_previous) != 0) Native.SetForegroundWindow(_previous);
         _previous = 0;
     }
 

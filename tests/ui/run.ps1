@@ -1222,6 +1222,21 @@ function Stage-Menu {
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Wait-Menu 'false' 1000 'card closed by the second Esc' | Out-Null
     }
+    Step 'a click on another app closes the card and leaves that app in front' {
+        $w = Start-TestWindow 'typing'
+        try {
+            $c = Body-Centre
+            [Mouse]::Click($c[0], $c[1], $true)
+            Wait-Menu 'true' 2000 'card open' | Out-Null
+            Start-Sleep -Milliseconds 300
+            & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # inside the test window (other monitor parts are the catcher's)
+            Wait-Menu 'false' 2000 'card closed by the click on another app' | Out-Null
+            Start-Sleep -Milliseconds 400
+            $fg = [Fg]::Get()
+            if ($fg -ne $w.MainWindowHandle) { throw "foreground is $fg, the test window is $($w.MainWindowHandle)" }
+        }
+        finally { $w.Kill() }
+    }
     Step 'focus goes back to the window that had it' {
         $w = Start-TestWindow 'typing'
         try {
