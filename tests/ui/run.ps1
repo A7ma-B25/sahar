@@ -733,10 +733,14 @@ function Stage-Motion {
         Start-Sleep -Milliseconds 300
         $st = State
         $xy = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $before = (State).expression
+        $hops = [int](Kv 'debug-soul').hops
         & agent-desktop --headed mouse-click --xy $xy | Out-Null
         Start-Sleep -Milliseconds 300
         $st = State
-        if ($st.expression -ne 'poked') { throw "expression after click is '$($st.expression)'" }
+        # 0.11: a tap does one thing — the hop with her joy face; no "poked" expression on top.
+        if ($st.expression -ne $before) { throw "expression after click is '$($st.expression)' (was '$before')" }
+        if ([int](Kv 'debug-soul').hops -ne $hops + 1 -and (Info).face -ne 'Joy/Joy') { throw 'a click neither hopped nor showed her joy face' }
     }
     Step 'a tap hops with her joy face' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
@@ -747,7 +751,7 @@ function Stage-Motion {
         & agent-desktop --headed mouse-click --xy $xy | Out-Null
         $sw = [Diagnostics.Stopwatch]::StartNew()
         do { $face = (Info).face } while ($face -ne 'Joy/Joy' -and $sw.ElapsedMilliseconds -lt 800)
-        if ((State).expression -ne 'poked') { throw "expression after the tap: $((State).expression)" }
+        if ((State).expression -eq 'poked') { throw 'a plain tap still plays the poked expression' }
         if ($face -ne 'Joy/Joy') { throw "face right after the tap: $face" }
         if ([int](Kv 'debug-soul').hops -ne $hops + 1) { throw 'the tap did not hop' }
         Start-Sleep -Milliseconds 1600
@@ -2961,12 +2965,13 @@ function Stage-Face {
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 1
         $st = State
-        $gx = [int]$st.x - 30; $gy = [int]$st.y + 10; $gw = [int]$st.width + 60; $gh = [int]$st.height + 30
+        $gx = [int]$st.x - 40; $gy = [int]$st.y + 10; $gw = [int]$st.width + 80; $gh = [int]$st.height + 40
         $burst = [Burst]::Start($gx, $gy, $gw, $gh, 1200)
         Start-Sleep -Milliseconds 250
         Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
         $frames = $burst.Result
-        $range = [FaceProbe]::Range($frames[0].Px, $frames[-1].Px, $gw, $gh, 3)
+        # 12 px of tolerance: the game's squish and her new face stay inside it; a stale window offset (hundreds of px) does not.
+        $range = [FaceProbe]::Range($frames[0].Px, $frames[-1].Px, $gw, $gh, 12)
         $report = @(); $bad = @()
         foreach ($f in $frames) {
             $x = [FaceProbe]::Beyond($f.Px, $range, $gw, $gh, 60)
@@ -3000,6 +3005,8 @@ function Stage-Face {
         Pose-Body 470 330 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 1
+        $deadline = (Get-Date).AddSeconds(8)   # the game's last line goes first (a white bubble moves the centroid)
+        while ((Kv 'debug-comment').showing -eq 'true' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
         # Below the test window's white title bar (the centroid counts white pixels).
         $gx = [math]::Max(0, $Work.Left); $gy = $Work.Top + 40; $gw = $Work.Width; $gh = $Work.Height - 40
         $burst = [Burst]::Start($gx, $gy, $gw, $gh, 2500)

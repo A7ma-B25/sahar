@@ -177,9 +177,9 @@ internal sealed unsafe class App
             // A poke on the timer's face says "seen": it goes away.
             if (dismissDirector?.CurrentKey == "timer-done") dismissDirector.End(EventKind.TimerDone);
             if (dismissDirector?.CurrentKey == "reminder") dismissDirector.End(EventKind.Reminder);
-            Express("poked", true);
             life?.OnPoked();
-            // Expression first, hop second: her joy face lands on top of "poked" (a hop shows it itself).
+            // A tap does one thing (0.11, the owner's report): the hop with her joy face; no "poked" face or mood
+            // flash on top (that was three face changes in a second). Refused hop: the joy face alone.
             if (!soul.Hop(1f)) soul.HappyFace();
         }, () =>
         {

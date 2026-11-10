@@ -54,6 +54,9 @@ internal sealed class SaharVisual
     public FadeLayer BodyB { get; }
     /// <summary>Eyes and mouth together (looking and peeking move this).</summary>
     public ContainerVisual FaceGroup { get; }
+    /// <summary>Between the face group and the eyes: a face change closes and reopens the eyes here (scaleY, eye line),
+    /// apart from the blink loop and the look on the eyes' own container.</summary>
+    public ContainerVisual EyeSwap { get; }
     public FadeLayer EyesLayer { get; }
     public FadeLayer MouthLayer { get; }
     public FadeLayer BlushLayer { get; }
@@ -145,7 +148,9 @@ internal sealed class SaharVisual
         BlushLayer.Container.Opacity = BlushRest;
         FaceGroup = _c.CreateContainerVisual();
         Hop.Children.InsertAtTop(FaceGroup);
-        EyesLayer = Layer(_eyesS, FaceGroup);
+        EyeSwap = _c.CreateContainerVisual();
+        FaceGroup.Children.InsertAtTop(EyeSwap);
+        EyesLayer = Layer(_eyesS, EyeSwap);
         MouthLayer = Layer(_mouthS, FaceGroup);
         Headphones = Layer(_headphones, Hop);
         Headphones.Container.IsVisible = false;
@@ -168,6 +173,7 @@ internal sealed class SaharVisual
         DrawStatic();
         DrawMood(TimeSpan.Zero);
         DrawFace(TimeSpan.Zero);
+        _faceIndex = _eyesS.Current;
     }
 
     /// <summary>An area (screen pixels) a feature draws in while it runs — the overlay grows to it; null when it ends.</summary>
@@ -214,14 +220,41 @@ internal sealed class SaharVisual
     /// <summary>Face changes so far (test diagnostics: how often her face swapped in a moment).</summary>
     public int FaceSwaps { get; private set; }
 
+    /// <summary>A face change, as a blink (0.11; <see cref="FaceSwap"/>): the eyes close, eyes and mouth swap hard while
+    /// they are shut, the new eyes open. Never two faces at once; <paramref name="fade"/> zero (reduced motion) swaps
+    /// at once. A newer face during a running swap wins (it replaces the face about to show, or closes again).</summary>
     public void SetFace(Eyes e, Mouth m, TimeSpan fade)
     {
         if (e == _eyes && m == _mouth) return;
         FaceSwaps++;
-        bool eyes = e != _eyes, mouth = m != _mouth;
         (_eyes, _mouth) = (e, m);
-        DrawFace(fade, eyes, mouth);
+        double now = System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+        var plan = FaceSwap.Plan(now, _facePlan, reduced: fade <= TimeSpan.Zero);
+        _facePlan = plan;
+        var colors = Palette.Get(_mood);
+        var eyes = _rig.EyesFor(e).ToArray();
+        var mouth = _rig.MouthFor(m).ToArray();
+        if (!plan.Retarget) _faceIndex = 1 - _faceIndex;
+        _eyesS.DrawAt(_faceIndex, dc => PartRenderer.Shapes(dc, Scale, _rig, colors, eyes));
+        _mouthS.DrawAt(_faceIndex, dc => PartRenderer.Shapes(dc, Scale, _rig, colors, mouth));
+        if (plan.Retarget) return;   // the swap already scheduled shows the face just drawn
+        var at = TimeSpan.FromSeconds(Math.Max(0, plan.SwapAt - now));
+        EyesLayer.SwapAt(_faceIndex, at);
+        MouthLayer.SwapAt(_faceIndex, at);
+        EyeSwap.StopAnimation("Scale");
+        if (plan.Instant) { EyeSwap.Scale = Vector3.One; return; }
+        var a = _c.CreateVector3KeyFrameAnimation();
+        float swapFrac = (float)((plan.SwapAt - plan.Start) / (plan.End - plan.Start));
+        a.InsertKeyFrame(0f, new Vector3(1, plan.From, 1));
+        a.InsertKeyFrame(swapFrac, new Vector3(1, 0, 1), _c.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f)));
+        a.InsertKeyFrame(1f, Vector3.One, _c.CreateCubicBezierEasingFunction(new Vector2(0f, 0f), new Vector2(0.2f, 1f)));
+        a.Duration = TimeSpan.FromSeconds(plan.End - plan.Start);
+        EyeSwap.Scale = Vector3.One;
+        EyeSwap.StartAnimation("Scale", a);
     }
+
+    private FaceSwapPlan? _facePlan;
+    private int _faceIndex;
 
     /// <summary>The night and its stars inside her (settings "InnerStars").</summary>
     public void SetInnerStars(bool on)
@@ -290,6 +323,8 @@ internal sealed class SaharVisual
             soul.CenterPoint = new Vector3(150 * Scale, (BodyUnits.Y + BodyUnits.Height) * Scale, 0);      // her pivot: bottom-centre
         }
         FaceGroup.Size = canvas;
+        EyeSwap.Size = canvas;
+        EyeSwap.CenterPoint = new Vector3(150 * Scale, (124 + _rig.OffsetY) * Scale, 0);   // eye line
         Orb.Size = canvas;
         Extras.Size = canvas;
         Leaf.Size = canvas;

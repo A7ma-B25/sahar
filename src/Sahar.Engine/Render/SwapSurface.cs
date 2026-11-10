@@ -44,6 +44,15 @@ internal sealed class SwapSurface : IDisposable
         return next;
     }
 
+    /// <summary>Draws into surface <paramref name="index"/> and makes it current (a face swap draws the face it will
+    /// show into the hidden surface; a newer face before the swap redraws that same one).</summary>
+    public void DrawAt(int index, Action<D2DContext> draw)
+    {
+        _draws[index] = draw;
+        Render(index);
+        Current = index;
+    }
+
     /// <summary>Draws into the current surface (first content, or a static layer).</summary>
     public void DrawCurrent(Action<D2DContext> draw)
     {
@@ -126,6 +135,35 @@ internal sealed class FadeLayer
         var v = new System.Numerics.Vector2(size.Width, size.Height);
         Container.Size = v;
         foreach (var s in _sprites) s.Size = v;
+    }
+
+    /// <summary>A hard swap to surface <paramref name="index"/> in <paramref name="at"/> (on the compositor's clock):
+    /// the old sprite is fully shown until then and gone after, the new one the other way round — never both at
+    /// once (0.11: a face swaps while her eyes are shut, no cross-fade).</summary>
+    public void SwapAt(int index, TimeSpan at)
+    {
+        int old = _shown;
+        _shown = index;
+        foreach (var s in _sprites) s.StopAnimation("Opacity");
+        if (old < 0 || old == index || at.TotalMilliseconds < 2)
+        {
+            for (int i = 0; i < 2; i++) _sprites[i].Opacity = i == index ? 1 : 0;
+            return;
+        }
+        Step(_sprites[old], 1, 0, at);
+        Step(_sprites[index], 0, 1, at);
+    }
+
+    private void Step(SpriteVisual v, float from, float to, TimeSpan at)
+    {
+        double ms = at.TotalMilliseconds;
+        var a = _c.CreateScalarKeyFrameAnimation();
+        a.InsertKeyFrame(0f, from);
+        a.InsertKeyFrame((float)((ms - 1) / ms), from);   // holds, then flips within the last millisecond
+        a.InsertKeyFrame(1f, to);
+        a.Duration = at;
+        v.Opacity = from;
+        v.StartAnimation("Opacity", a);
     }
 
     /// <summary>Shows surface <paramref name="index"/>: it fades in on top; the old one disappears once covered.</summary>
