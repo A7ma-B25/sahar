@@ -2625,13 +2625,16 @@ function Stage-Shell {
         Start-Sleep -Milliseconds 500
         $before = Screenshot 'shell-before-game.png'
         Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball","seconds":"20"}}' | Out-Null
-        Start-Sleep -Milliseconds 1500
+        Start-Sleep -Milliseconds 800
         try {
-            $g = Game
+            # The ball falls to the bottom of the screen first: wait until it rests, then look.
+            $g = Game; $deadline = (Get-Date).AddSeconds(4)
+            do { Start-Sleep -Milliseconds 300; $p = $g; $g = Game } while (($g.ballY -ne $p.ballY -or $g.ballX -ne $p.ballX) -and (Get-Date) -lt $deadline)
             $after = Screenshot 'shell-game.png'
             Assert-Shell 'game' -Tray
             # The ball rests near the pointer, far from her: drawn only if the overlay grew to the game's screen.
-            Assert-Drawn $before $after ([int]$g.ballX + 15) ([int]$g.ballY + 15) "the ball ($($g.ball))"
+            # The glyph sits low in its sprite (text box), so look up to 30 px around its logical centre.
+            Assert-Drawn $before $after ([int]$g.ballX + 15) ([int]$g.ballY + 15) "the ball ($($g.ball))" 30
         }
         finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
     }

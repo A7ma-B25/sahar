@@ -457,8 +457,8 @@ internal sealed unsafe class App
             {
                 // A double-click is a poke, then the menu: the hop and the joy face are cut (eased) and a passing face
                 // (poked) goes, so the buttons pop around her settled, with one face (0.10.1, the owner's report).
+                if (revert.IsRunning) Express("", false);   // first: the joy face ends straight into her own face
                 soul.Settle();
-                if (revert.IsRunning) Express("", false);
                 show.Stop(flyHome: false);
             }
             lifeDirector.Paused = open || show.Running;
