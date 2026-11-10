@@ -1,4 +1,6 @@
 name: ui-test
+# "ui-test all" is the title test-build looks for: a full pass on the same commit spares it the same run.
+run-name: ui-test ${{ inputs.stages || 'all' }}
 
 # Windows minutes are precious: on main pushes, or run by hand for a branch (gh workflow run ui-test.yml --ref <branch>).
 on:
@@ -7,39 +9,74 @@ on:
   workflow_dispatch:
     inputs:
       stages:
-        description: Stages to run (comma-separated); a task runs the ones it touches, a release runs them all
+        description: Stages to run (comma-separated), or all; a task runs the ones it touches, a release runs them all
         type: string
-        default: smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games,shell
+        default: all
 
 concurrency:
   group: ui-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  windows:
+  # The stage list → parallel Windows jobs (tools/ci/ui_groups.py): all → four balanced groups, ≤ 3 stages → one job.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        shell: bash
+        env:
+          STAGES: ${{ inputs.stages || 'all' }}
+        run: python3 -I tools/ci/ui_groups.py "$STAGES" | tee -a "$GITHUB_OUTPUT"
+
+  # The engine is built once and shared with every UI job.
+  build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - name: Settings store on Windows (two writers, sharing violations, File.Replace)
+        run: dotnet test tests/Sahar.Core.Tests -c Release --filter FullyQualifiedName~SettingsStore
+      - name: Publish engine (Native AOT)
+        run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine
+          path: artifacts/engine/
+          retention-days: 3
+
+  ui:
+    needs: [plan, build]
+    name: ui (${{ matrix.group.name }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install agent-desktop
         run: npm i -g agent-desktop@1.2.0
-      - name: Settings store on Windows (two writers, sharing violations, File.Replace)
-        run: dotnet test tests/Sahar.Core.Tests -c Release --filter FullyQualifiedName~SettingsStore
-      - name: Publish engine (Native AOT)
-        run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
-      - name: UI tests
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine
+          path: artifacts/engine
+      - name: UI tests (${{ matrix.group.stages }})
         shell: pwsh
         env:
-          STAGES: ${{ inputs.stages || 'smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games,shell' }}
+          STAGES: ${{ matrix.group.stages }}
         run: ./tests/ui/run.ps1 -Stage ($env:STAGES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui
+          name: ui-${{ matrix.group.name }}
           path: artifacts/ui/
