@@ -2722,39 +2722,51 @@ function Stage-Shell {
 # The owner's glitch reports on 0.10.1 (0.11): two faces at once, things in the menu flashing in the wrong place, her
 # drawing jumping while she moves. Burst grabs whole frames at screen rate in C# (PowerShell loops reach ~17 fps) and can
 # act at a moment: a left or right click, or a drag that moves the cursor a fixed step per frame.
-Add-Type -ReferencedAssemblies ([System.Drawing.Bitmap].Assembly.Location), ([System.Drawing.Rectangle].Assembly.Location) -TypeDefinition @"
+Add-Type -TypeDefinition @"
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Runtime.InteropServices;
-public sealed class Frame { public long Ms; public int CursorX; public byte[] Px; public int W, H; public Bitmap Bmp; }
+public sealed class Frame { public long Ms; public int CursorX; public byte[] Px; public int W, H; }
 public static class Burst {
     [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
-    static byte[] Bytes(Bitmap b) {
-        var d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        var buf = new byte[d.Stride * b.Height]; Marshal.Copy(d.Scan0, buf, 0, buf.Length); b.UnlockBits(d); return buf;
-    }
+    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr o);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
+    [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr d, int x, int y, int w, int h, IntPtr s, int sx, int sy, uint rop);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateDIBSection(IntPtr dc, byte[] bmi, uint usage, out IntPtr bits, IntPtr sec, uint off);
     /// act: 0 none, 1 left click, 2 right click, 3 drag (press at ax,ay at actMs, then stepPx right per frame, release at the end).
+    /// Frames are 32-bit BGRX, top-down (GDI BitBlt of the screen: what DWM composed).
     public static List<Frame> Run(int x, int y, int w, int h, int totalMs, int actMs, int ax, int ay, int act, int stepPx) {
+        var bmi = new byte[40];
+        BitConverter.GetBytes(40).CopyTo(bmi, 0); BitConverter.GetBytes(w).CopyTo(bmi, 4); BitConverter.GetBytes(-h).CopyTo(bmi, 8);
+        BitConverter.GetBytes((short)1).CopyTo(bmi, 12); BitConverter.GetBytes((short)32).CopyTo(bmi, 14);
+        IntPtr screen = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(screen), bits;
+        IntPtr dib = CreateDIBSection(screen, bmi, 0, out bits, IntPtr.Zero, 0), old = SelectObject(mem, dib);
         var list = new List<Frame>(); var clock = System.Diagnostics.Stopwatch.StartNew(); bool acted = false; int cx = ax;
-        while (clock.ElapsedMilliseconds < totalMs) {
-            if (!acted && clock.ElapsedMilliseconds >= actMs) {
-                acted = true;
-                if (act != 0) { SetCursorPos(ax, ay); System.Threading.Thread.Sleep(30); }
-                if (act == 1 || act == 3) mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
-                if (act == 2) mouse_event(0x0008, 0, 0, 0, UIntPtr.Zero);
-                System.Threading.Thread.Sleep(20);
-                if (act == 1) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
-                if (act == 2) mouse_event(0x0010, 0, 0, 0, UIntPtr.Zero);
+        try {
+            while (clock.ElapsedMilliseconds < totalMs) {
+                if (!acted && clock.ElapsedMilliseconds >= actMs) {
+                    acted = true;
+                    if (act != 0) { SetCursorPos(ax, ay); System.Threading.Thread.Sleep(30); }
+                    if (act == 1 || act == 3) mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+                    if (act == 2) mouse_event(0x0008, 0, 0, 0, UIntPtr.Zero);
+                    if (act != 0) System.Threading.Thread.Sleep(20);
+                    if (act == 1) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+                    if (act == 2) mouse_event(0x0010, 0, 0, 0, UIntPtr.Zero);
+                }
+                if (acted && act == 3) { cx += stepPx; SetCursorPos(cx, ay); }
+                BitBlt(mem, 0, 0, w, h, screen, x, y, 0x00CC0020 | 0x40000000);
+                var px = new byte[w * h * 4]; Marshal.Copy(bits, px, 0, px.Length);
+                list.Add(new Frame { Ms = clock.ElapsedMilliseconds - actMs, CursorX = cx, Px = px, W = w, H = h });
             }
-            if (acted && act == 3) { cx += stepPx; SetCursorPos(cx, ay); }
-            var bmp = new Bitmap(w, h);
-            using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(x, y, 0, 0, new Size(w, h));
-            list.Add(new Frame { Ms = clock.ElapsedMilliseconds - actMs, CursorX = cx, Bmp = bmp, W = w, H = h });
+        } finally {
+            if (act == 3) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+            SelectObject(mem, old); DeleteObject(dib); DeleteDC(mem); ReleaseDC(IntPtr.Zero, screen);
         }
-        if (act == 3) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
-        foreach (var f in list) f.Px = Bytes(f.Bmp);
         return list;
     }
     /// The same on a worker thread, so the script can send a pipe command while frames are grabbed.
@@ -2845,13 +2857,16 @@ function Save-Frames($frames, [string]$dir, [int]$every, [int]$max) {
     foreach ($f in $frames) {
         if ($k % $every -eq 0 -and $tiles.Count -lt $max) {
             $path = Join-Path $dir ('{0:D3}-t{1}ms.png' -f $k, $f.Ms)
-            $f.Bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $tiles += $path
+            $bmp = [System.Drawing.Bitmap]::new($f.W, $f.H, [System.Drawing.Imaging.PixelFormat]::Format32bppRgb)
+            $d = $bmp.LockBits([System.Drawing.Rectangle]::new(0, 0, $f.W, $f.H), [System.Drawing.Imaging.ImageLockMode]::WriteOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppRgb)
+            [System.Runtime.InteropServices.Marshal]::Copy($f.Px, 0, $d.Scan0, $f.Px.Length); $bmp.UnlockBits($d)
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose(); $tiles += $path
         }
         $k++
     }
     $tiles
 }
-function Dispose-Frames($frames) { foreach ($f in $frames) { $f.Bmp.Dispose() } }
+function Dispose-Frames($frames) { }
 
 # Smooth motion: each body position must lie where its neighbours put it (time-interpolated), within 3 px plus a quarter
 # of the move across the three frames: a frame drawn at a stale window/content place is off by a whole step and back.
