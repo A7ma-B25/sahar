@@ -17,12 +17,24 @@ public static class OverlayPlan
             canvas.Width + 2 * MarginXDip * dpiScale, canvas.Height + 2 * MarginYDip * dpiScale));
 
     /// <summary>The overlay rect: <see cref="Follow"/> joined with every area needed now, never covering a monitor.</summary>
+    /// <summary>While a feature needs an area, her own part is snapped outward to this grid (px): flying inside it
+    /// never resizes the window every frame.</summary>
+    public const int NeedGridPx = 128;
+
     public static RectI Plan(RectF canvas, float dpiScale, IEnumerable<RectF> needs, IReadOnlyList<RectI> monitors)
     {
-        var r = Follow(canvas, dpiScale);
-        foreach (var n in needs) r = Union(r, Outward(n));
+        var follow = Follow(canvas, dpiScale);
+        var r = follow;
+        bool any = false;
+        foreach (var n in needs) { r = Union(r, Outward(n)); any = true; }
+        if (any) r = Union(r, Snap(follow, NeedGridPx));
         return Uncover(r, monitors);
     }
+
+    private static RectI Snap(RectI r, int g) =>
+        new(FloorTo(r.Left, g), FloorTo(r.Top, g), -FloorTo(-r.Right, g), -FloorTo(-r.Bottom, g));
+
+    private static int FloorTo(int v, int g) => (int)Math.Floor(v / (double)g) * g;
 
     /// <summary>
     /// While the rect contains a monitor, pulls in the one side (of the four that reach that monitor's edges) that

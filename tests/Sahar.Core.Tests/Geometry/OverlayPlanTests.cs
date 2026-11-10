@@ -41,6 +41,25 @@ public class OverlayPlanTests
     }
 
     [Fact]
+    public void Plan_WithANeed_DoesNotResizeAsSheMovesALittle()
+    {
+        // Showcase at the bottom-right: her margins pass the screen edge; flying a few pixels must not resize the window.
+        RectF work = new(0, 0, 1024, 728);
+        var a = OverlayPlan.Plan(new RectF(900, 560, 150, 150), 1f, [work], [new RectI(0, 0, 1024, 768)]);
+        var b = OverlayPlan.Plan(new RectF(904, 563, 150, 150), 1f, [work], [new RectI(0, 0, 1024, 768)]);
+        Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public void Plan_WithANeed_StillHoldsHerAndHerMargins()
+    {
+        var canvas = new RectF(900, 560, 150, 150);
+        var r = OverlayPlan.Plan(canvas, 1f, [new RectF(0, 0, 1024, 728)], [new RectI(0, 0, 1024, 768)]);
+        var f = OverlayPlan.Follow(canvas, 1f);
+        Assert.True(r.Left <= f.Left && r.Top <= f.Top && r.Right >= f.Right && r.Bottom >= f.Bottom, $"{r} does not hold {f}");
+    }
+
+    [Fact]
     public void Uncover_TwoMonitors_UnionIsInsetSoNeitherIsCovered()
     {
         RectI a = new(0, 0, 1920, 1080), b = new(1920, 0, 4480, 1440);
