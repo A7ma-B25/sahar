@@ -45,12 +45,17 @@ public static class SettingsStore
         string full = Path.GetFullPath(path);
         if (!File.Exists(path)) { Succeeded(full); return new SaharSettings(); }
         string text;
+        // Reads take the same cross-process lock as saves: on Windows a read racing File.Replace hits a sharing
+        // violation (the Windows CI run showed retries alone run out under many writers).
+        using (Lock())
+        {
         try { text = Retry(() => read(path)); }
         catch (FileNotFoundException) { Succeeded(full); return new SaharSettings(); }   // deleted meanwhile: missing
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             LoadFailed(path);
             throw;
+        }
         }
         Succeeded(full);
         if (string.IsNullOrWhiteSpace(text)) return new SaharSettings();
