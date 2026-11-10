@@ -1,7 +1,21 @@
-سَحَر · Sahar — نسخة تجريبية 0.10.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.10.1 (ويندوز)
 =============================================
 
-شو الجديد بـ 0.10.0 — شكلها الجديد وروحها ✨
+شو الجديد بـ 0.10.1 — صارت لطيفة مع شريط المهام 🧩
+-------------------------------------------------
+- قبل كانت سَحَر ترسم على نافذة شفافة قد الشاشة كلها، فالويندوز وبرامج شريط المهام (متل Now Bar) كانوا يحسبوها
+  برنامج ملء شاشة: Now Bar كان يختفي، والإشعارات ممكن تسكت. هلق نافذتها قدّها هي وبتمشي معها،
+  وبتكبر بس وقت يلزم (القائمة، الألعاب، العرض، الفراشة) — ودايماً أصغر من الشاشة ولو ببكسل.
+- بتختفي بس إذا برنامج ملء الشاشة على نفس الشاشة يلي هي عليها. على الشاشات التانية بتضل، بس ساكتة (بلا تعليقات).
+  إذا انتقلت لشاشة فيها ملء شاشة بتختفي، ولما يخلص بترجع. السجل بيكتب رقم الشاشة (مو اسم البرنامج).
+
+جرّب بإيدك (ما منقدر نجربها عالسيرفر):
+  ١. شغّل Now Bar مع سَحَر: اتركها ترتاح، افتح قائمتها، العب «الحقني» — حبة Now Bar لازم تضل ظاهرة.
+  ٢. خلّي إشعار يطلع وهي عالشاشة (مثلاً مؤقّت من تطبيق الساعة) — لازم يبيّن.
+  ٣. إذا عندك شاشتين: شغّل فيديو ملء شاشة عالشاشة التانية — لازم تضل ظاهرة؛ وعلى شاشتها — لازم تختفي.
+  ٤. افتح قائمتها وهي بزاوية الشاشة، وخلّيها تحكي، والعب «الطابة» — ما لازم ينقص شي من رسمها.
+
+من 0.10.0 — شكلها الجديد وروحها ✨
 -------------------------------------------
 - شكلها الأصلي كلو باقي، ومعو:
   🌟 النجوم يلي حواليها صار إلها حافة دافية، فبتبيّن حتى فوق الشبابيك البيضا.
@@ -115,7 +129,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.10.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.10.1-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -171,10 +185,26 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.10.0 (Windows)
+Sahar — test build 0.10.1 (Windows)
 ==================================
 
-What's new in 0.10.0 — her new look and her soul ✨
+What's new in 0.10.1 — friendly to the taskbar 🧩
+-----------------------------------------------
+- Sahar used to draw on a transparent window as big as the whole screen, so Windows and taskbar tools (such as
+  Now Bar) took her for a fullscreen app: Now Bar hid, and notifications could go quiet. Now her window is her size
+  and moves with her; it grows only while something needs it (her menu, a game, her showcase, the butterfly) and is
+  always at least a pixel short of a whole screen.
+- She hides only when the fullscreen app is on the screen she is on. On other screens she stays, quietly (no
+  comments). Moved onto a screen with a fullscreen app she hides, and comes back when it ends. The log names the
+  screen by number (never the app's title).
+
+Please check by hand (CI cannot):
+  1. Run Now Bar with Sahar: leave her resting, open her menu, play the chase — Now Bar's pill must stay.
+  2. Let a notification appear while she is on screen (e.g. a timer in the Clock app) — it must show.
+  3. With two screens: a fullscreen video on the other screen — she stays; on her screen — she hides.
+  4. Open her menu with her in a corner, let her talk, play the ball game — nothing of her drawing is cut off.
+
+From 0.10.0 — her new look and her soul ✨
 -------------------------------------------------
 - All of her original look stays, plus: a warm edge on her stars (they read on white windows), a little night sky
   inside her lower body with six twinkling white stars and dots (it takes her mood's colour), and a happy face
@@ -280,7 +310,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.10.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.10.1-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
