@@ -243,13 +243,21 @@ internal sealed class SaharVisual
         MouthLayer.SwapAt(_faceIndex, at);
         EyeSwap.StopAnimation("Scale");
         if (plan.Instant) { EyeSwap.Scale = Vector3.One; return; }
-        FaceAnimationsMade++;
-        var a = _c.CreateVector3KeyFrameAnimation();
-        float swapFrac = (float)((plan.SwapAt - plan.Start) / (plan.End - plan.Start));
-        a.InsertKeyFrame(0f, new Vector3(1, plan.From, 1));
-        a.InsertKeyFrame(swapFrac, new Vector3(1, 0, 1), _c.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f)));
-        a.InsertKeyFrame(1f, Vector3.One, _c.CreateCubicBezierEasingFunction(new Vector2(0f, 0f), new Vector2(0.2f, 1f)));
-        a.Duration = TimeSpan.FromSeconds(plan.End - plan.Start);
+        // Built once per starting openness (to 2 decimals) and reused (review 0.11 #11).
+        float from = MathF.Round(plan.From, 2);
+        if (!_blinks.TryGetValue(from, out var a))
+        {
+            FaceAnimationsMade++;
+            _closeEase ??= _c.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f));
+            _openEase ??= _c.CreateCubicBezierEasingFunction(new Vector2(0f, 0f), new Vector2(0.2f, 1f));
+            a = _c.CreateVector3KeyFrameAnimation();
+            double close = FaceSwap.CloseSeconds * from, total = close + FaceSwap.OpenSeconds;
+            a.InsertKeyFrame(0f, new Vector3(1, from, 1));
+            a.InsertKeyFrame((float)(close / total), new Vector3(1, 0, 1), _closeEase);
+            a.InsertKeyFrame(1f, Vector3.One, _openEase);
+            a.Duration = TimeSpan.FromSeconds(total);
+            _blinks[from] = a;
+        }
         EyeSwap.Scale = Vector3.One;
         EyeSwap.StartAnimation("Scale", a);
     }
@@ -257,6 +265,8 @@ internal sealed class SaharVisual
     /// <summary>Animations made for face swaps so far (test diagnostics: they are reused).</summary>
     public int FaceAnimationsMade { get; private set; }
     private FaceSwapPlan? _facePlan;
+    private readonly Dictionary<float, Vector3KeyFrameAnimation> _blinks = [];
+    private CompositionEasingFunction? _closeEase, _openEase;
     private int _faceIndex;
 
     /// <summary>The night and its stars inside her (settings "InnerStars").</summary>

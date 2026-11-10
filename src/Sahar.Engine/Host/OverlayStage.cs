@@ -145,7 +145,7 @@ internal sealed class OverlayStage
         var move = _spare.MoveTo(target);
         Win.Apply(move);
         Native.ShowWindow(_spare.Hwnd, Native.SW_SHOWNOACTIVATE);
-        AfterCommit(() => AfterCommit(() =>
+        AfterCommit(() => AfterCommit(() => Guarded(() =>
         {
             if (ThrowOnNextSwap) { ThrowOnNextSwap = false; throw new InvalidOperationException("test: a failing swap"); }
             if (_hidden)
@@ -164,14 +164,42 @@ internal sealed class OverlayStage
             Native.SetWindowText(_active.Hwnd, "Sahar");
             Native.SetWindowText(_spare.Hwnd, "Sahar spare");
             Swaps++;
-            AfterCommit(() =>
+            AfterCommit(() => Guarded(() =>
             {
                 Native.ShowWindow(_spare.Hwnd, Native.SW_HIDE);
                 _swapping = false;
                 // She may have moved, or a need changed, while the swap ran: catch up (a corner change swaps again).
                 if (!Apply(null, swap: true)) RunWaiting();
-            });
-        }));
+            }));
+        })));
+    }
+
+    /// <summary>A swap step that throws must never leave the overlay frozen (review 0.11 #4): the root goes back to
+    /// whichever window holds it, the spare hides, the stage moves the window directly, and the waiting features run.</summary>
+    private void Guarded(Action step)
+    {
+        try { step(); }
+        catch (Exception e)
+        {
+            Log.Write($"stage error: swap failed ({e.GetType().Name})");
+            try
+            {
+                if (_spareTarget.Root == _root)
+                {
+                    (_active, _spare) = (_spare, _active);
+                    (_activeTarget, _spareTarget) = (_spareTarget, _activeTarget);
+                }
+                else if (_activeTarget.Root != _root) _activeTarget.Root = _root;
+                Native.ShowWindow(_spare.Hwnd, Native.SW_HIDE);
+            }
+            catch (Exception) { }
+            finally
+            {
+                _swapping = false;
+                try { Apply(null, swap: false); } catch (Exception) { }
+                RunWaiting();
+            }
+        }
     }
 
     private void AfterCommit(Action then)

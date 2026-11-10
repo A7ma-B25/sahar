@@ -160,15 +160,22 @@ internal sealed class FadeLayer
     /// <summary>Animations made for face swaps so far (test diagnostics: they are reused).</summary>
     public static int StepAnimationsMade { get; private set; }
 
+    // Flips by (from, to, whole milliseconds), built once and reused (review 0.11 #11).
+    private readonly Dictionary<(float, float, int), ScalarKeyFrameAnimation> _steps = [];
+
     private void Step(SpriteVisual v, float from, float to, TimeSpan at)
     {
-        double ms = at.TotalMilliseconds;
-        StepAnimationsMade++;
-        var a = _c.CreateScalarKeyFrameAnimation();
-        a.InsertKeyFrame(0f, from);
-        a.InsertKeyFrame((float)((ms - 1) / ms), from);   // holds, then flips within the last millisecond
-        a.InsertKeyFrame(1f, to);
-        a.Duration = at;
+        int ms = Math.Max(2, (int)Math.Round(at.TotalMilliseconds));
+        if (!_steps.TryGetValue((from, to, ms), out var a))
+        {
+            StepAnimationsMade++;
+            a = _c.CreateScalarKeyFrameAnimation();
+            a.InsertKeyFrame(0f, from);
+            a.InsertKeyFrame((ms - 1f) / ms, from);   // holds, then flips within the last millisecond
+            a.InsertKeyFrame(1f, to);
+            a.Duration = TimeSpan.FromMilliseconds(ms);
+            _steps[(from, to, ms)] = a;
+        }
         v.Opacity = from;
         v.StartAnimation("Opacity", a);
     }

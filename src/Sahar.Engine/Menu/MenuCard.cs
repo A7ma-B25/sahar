@@ -79,7 +79,15 @@ internal sealed class MenuCard : IDisposable
             KeyPressed = k => Safe(() => Key(k)),
         };
         _chat = new ChatField(capturable);
-        _visual.Opened += () => Safe(() => { if (_openEnd < 0) _openEnd = _openClock.ElapsedMilliseconds; });
+        // The chat popup is a window of its own: it shows only once the card has finished opening, so it never stands
+        // alone ahead of the card (review 0.11 #2).
+        _visual.Opened += () => Safe(() =>
+        {
+            if (!IsOpen) return;
+            if (_openEnd < 0) _openEnd = _openClock.ElapsedMilliseconds;
+            ShowChat();
+            if (_focus == "chat") _chat.Focus();
+        });
         _chat.Submitted += text => Safe(() => Send(text));
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
@@ -145,8 +153,6 @@ internal sealed class MenuCard : IDisposable
             if (!IsOpen || gen != _openGen) return;
             _sahar.MoonProps.InsertScalar("moon", 0);   // her own moon rests on the card instead
             _visual.Open(place.Card, place.Near, place.MoonCentre);
-            ShowChat();
-            if (_focus == "chat") FocusChat();
             ShowFocus();
         });
         Log.Write($"menu: open ({how})");
@@ -166,8 +172,9 @@ internal sealed class MenuCard : IDisposable
         _catcher.Hide();
         _chat.Hide();
         _chat.Clear();
-        _visual.Close();
-        Need("menu", null, null);
+        // The overlay lets go of the card's area only once it has faded (review 0.11 #1: it was torn mid-fade).
+        int gen = _openGen;
+        _visual.Close(() => { if (!IsOpen && gen == _openGen) Need("menu", null, null); });
         _sahar.MoonProps.InsertScalar("moon", _moonBefore);
         _view = null;
         _layout = null;
@@ -220,7 +227,7 @@ internal sealed class MenuCard : IDisposable
     private void FocusChat()
     {
         _focus = "chat";
-        if (_visual.Shown) _chat.Focus();
+        if (_chat.Shown) _chat.Focus();
     }
 
     /// <summary>Her reply to a chat line: header line 1 for 6 s.</summary>
@@ -238,7 +245,7 @@ internal sealed class MenuCard : IDisposable
         if (!IsOpen || _view is null) return;
         Build(_view.View);
         _visual.Draw(_content!, _dpi, fade: false, Key());
-        if (_visual.Shown) ShowChat();
+        if (_openEnd >= 0) ShowChat();
         ShowFocus();
         UpdateTick();
     }
@@ -251,7 +258,7 @@ internal sealed class MenuCard : IDisposable
         _hovered = null;
         _visual.SetHover(null, false, null);
         _visual.Draw(_content!, _dpi, fade, Key());
-        if (_visual.Shown) ShowChat();
+        if (_openEnd >= 0) ShowChat();
         ShowFocus();
     }
 

@@ -466,7 +466,8 @@ internal sealed unsafe class App
         {
             if (id != Hotkey.Id) return;
             if (menu.IsOpen) { menu.Close(); return; }
-            if (_state.Hidden) return;
+            // As a right-click: not while hidden, dragged or thrown; and a game keeps the screen (review 0.11 #5).
+            if (_state.Hidden || games.Running || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
             if (showRunning()) stopShow?.Invoke(false);
             menu.Open("shortcut", caretInChat: true);
         });
@@ -893,6 +894,7 @@ internal sealed unsafe class App
         Log.Write($"engine running (test mode {_options.TestMode}, capturable {_options.Capturable})");
 
         int code = Loop(ticker);
+        hotkey.Unregister();
         Log.Write("message loop ended");
         Foreground.Stop();
         Native.DestroyWindow(input.Hwnd);

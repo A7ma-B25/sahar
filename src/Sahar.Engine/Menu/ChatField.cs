@@ -33,6 +33,7 @@ internal sealed unsafe class ChatField : IWindowHandler
     private readonly bool _capturable;
     private nint _hwnd, _edit, _brush;
     private uint _bg, _ink;
+    private RectI _placed;
 
     public ChatField(bool capturable) => _capturable = capturable;
 
@@ -60,6 +61,10 @@ internal sealed unsafe class ChatField : IWindowHandler
     /// <summary>Shows the field over <paramref name="field"/> (screen px), in the theme's colours.</summary>
     public void Show(RectI field, float dpi, ThemeTokens t, bool rtl)
     {
+        // Same place and colours: nothing to do (a countdown redraws the card every second; re-placing, re-topmosting
+        // and erasing the field each time made it flicker — review 0.11 #7).
+        if (Shown && field == _placed && Bgr(t.Sunken) == _bg && Bgr(t.Ink) == _ink && rtl == s_rtl) return;
+        _placed = field;
         _bg = Bgr(t.Sunken);
         _ink = Bgr(t.Ink);
         s_placeholderColor = Bgr(t.Text3);
@@ -144,6 +149,12 @@ internal sealed unsafe class ChatField : IWindowHandler
             case Native.WM_ACTIVATE when (wParam & 0xFFFF) == 0 && Shown:   // the field lost the foreground
                 Deactivated?.Invoke(lParam);
                 return null;
+            case WM_SETFOCUS:
+            case Native.WM_LBUTTONDOWN:
+                // A click on the padding around the EDIT (or the popup getting the focus) gives the caret to the EDIT
+                // (review 0.11 #3: the keyboard went nowhere).
+                if (_edit != 0) Native.SetFocus(_edit);
+                return 0;
             case WM_ERASEBKGND:
             {
                 RECT r;

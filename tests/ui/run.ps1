@@ -1835,6 +1835,8 @@ function Stage-Menu {
         Press 'timer-cancel'
     }
     Step 'a Windows setting change keeps the card and the draft' {
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Start-Sleep -Milliseconds 500
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $true)
         Wait-Menu 'true' 2000 'card open' | Out-Null

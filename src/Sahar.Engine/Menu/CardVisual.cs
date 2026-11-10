@@ -163,14 +163,15 @@ internal sealed class CardVisual : IDisposable
         return a;
     }
 
-    public void Close()
+    /// <param name="closed">Runs once the card has faded (at once under reduced motion, or when it never showed).</param>
+    public void Close(Action? closed = null)
     {
-        if (!Shown) return;
+        if (!Shown) { _generation++; closed?.Invoke(); return; }
         Shown = false;
         SetHover(null, false, null);
         SetFocus(null, 0);
         int gen = ++_generation;
-        if (ExpressionPlayer.Reduced) { _root.IsVisible = false; return; }
+        if (ExpressionPlayer.Reduced) { _root.IsVisible = false; closed?.Invoke(); return; }
         var batch = _c.CreateScopedBatch(CompositionBatchTypes.Animation);
         _root.StartAnimation("Opacity", Anim("close-opacity", () => Scalar(1, 0, 120, CloseEase)));
         _root.StartAnimation("Scale", Anim("close-scale", () =>
@@ -181,7 +182,12 @@ internal sealed class CardVisual : IDisposable
             return scale;
         }));
         batch.End();
-        batch.Completed += (_, _) => { if (_generation == gen) _root.IsVisible = false; };
+        batch.Completed += (_, _) =>
+        {
+            if (_generation != gen) return;
+            _root.IsVisible = false;
+            closed?.Invoke();
+        };
     }
 
     /// <summary>The hover (or press) highlight on a card-relative rect (DIP), or none.</summary>

@@ -162,9 +162,13 @@ internal sealed class OverlayWindow : IWindowHandler
             case Native.WM_DPICHANGED:
                 return 0; // the stage sizes it; never let Windows resize it for a new DPI
             case Native.WM_DISPLAYCHANGE:
-            case Native.WM_SETTINGCHANGE:
                 DisplayChanged?.Invoke();
-                if (msg == Native.WM_SETTINGCHANGE) SettingChanged?.Invoke();
+                return null;
+            case Native.WM_SETTINGCHANGE:
+                // Only a work-area change (the taskbar moved or resized) re-plans the screens; any other setting (light or
+                // dark apps, animation effects…) must not close her menu (review 0.11 #8).
+                if ((uint)wParam == 0x002F /* SPI_SETWORKAREA */) DisplayChanged?.Invoke();
+                SettingChanged?.Invoke();
                 return null;
             default:
                 return null;
