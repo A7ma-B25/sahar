@@ -2,9 +2,9 @@ using Sahar.Core.Art;
 
 namespace Sahar.Core.Expressions;
 
-public enum Eyes { Open, Happy, Closed, Focus, Sparkle, Mystic, Worried, Wide, Look, Up, Wink, Half, Dizzy, Heart, Sad, Scan }
+public enum Eyes { Open, Happy, Closed, Focus, Sparkle, Mystic, Worried, Wide, Look, Up, Wink, Half, Dizzy, Heart, Sad, Scan, Joy }
 
-public enum Mouth { Smile, Grin, Flat, O, Sleepy, Mystic, Wobble, BigO, Frown, Tongue, Puff, Sing, Yawn, None }
+public enum Mouth { Smile, Grin, Flat, O, Sleepy, Mystic, Wobble, BigO, Frown, Tongue, Puff, Sing, Yawn, None, Joy }
 
 [Flags]
 public enum Extras

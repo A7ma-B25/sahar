@@ -146,4 +146,12 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(SettingsStore.Tries, calls);
         Assert.Throws<FileNotFoundException>(() => SettingsStore.Retry<int>(() => throw new FileNotFoundException()));   // not a sharing problem: no retry
     }
+    [Fact]
+    public void OldFile_InnerStarsDefaultsOn()
+    {
+        File.WriteAllText(PathOf, """{ "version": 1, "size": "small" }""");
+        Assert.True(SettingsStore.Load(PathOf).InnerStars);
+        File.WriteAllText(PathOf, """{ "innerStars": false }""");
+        Assert.False(SettingsStore.Load(PathOf).InnerStars);
+    }
 }

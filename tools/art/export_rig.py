@@ -44,9 +44,9 @@ def shapes(fragment, inherited=None):
 
 EYES = {"Open": "open", "Happy": "happy", "Closed": "closed", "Focus": "focus", "Sparkle": "sparkle", "Mystic": "mystic",
         "Worried": "worried", "Wide": "wide", "Look": "look", "Up": "up", "Wink": "wink", "Half": "half", "Dizzy": "dizzy",
-        "Heart": "heart", "Sad": "sad"}
+        "Heart": "heart", "Sad": "sad", "Joy": "joy"}
 MOUTHS = {"Smile": "smile", "Grin": "grin", "Flat": "flat", "O": "o", "Sleepy": "sleepy", "Mystic": "mystic",
-          "Wobble": "wobble", "BigO": "bigo", "Frown": "frown", "Tongue": "tongue", "Puff": "puff", "Sing": "sing", "Yawn": "yawn"}
+          "Wobble": "wobble", "BigO": "bigo", "Frown": "frown", "Tongue": "tongue", "Puff": "puff", "Sing": "sing", "Yawn": "yawn", "Joy": "joy"}
 
 def rig():
     eyes = {k: shapes(D.eyes(v)) for k, v in EYES.items()}
@@ -71,12 +71,28 @@ def rig():
                              '<path d="M184 123 a9 9 0 0 1 9 -9 h2 a9 9 0 0 1 9 9 v16 a9 9 0 0 1 -9 9 h-2 a9 9 0 0 1 -9 -9 Z" fill="#2F3363"/>'),
     }
     return {"canvas": 300, "offsetX": 30, "offsetY": 30, "bodyWidth": 160,
-            "leafGradient": ["#C4ECC2", "#6FB683"], "parts": parts, "eyes": eyes, "mouths": mouths}
+            "leafGradient": ["#C4ECC2", "#6FB683"], "parts": parts, "eyes": eyes, "mouths": mouths, "sky": sky()}
 
-def palette():
-    names = {"calm": "Calm", "happy": "Happy", "focus": "Focus", "excited": "Excited", "sleepy": "Sleepy", "mystic": "Mystic",
+def sky():
+    """The 0.10a sky as shape data (not SVG): outer-star edge, the night wash, inner stars and dots, wash colours."""
+    spot = lambda t: {"x": t[0], "y": t[1], "scale": t[2], "period": t[3], "begin": t[4]}
+    dot = lambda t: {"x": t[0], "y": t[1], "r": t[2], "period": t[3], "begin": t[4]}
+    names = palette_names()
+    return {"star": {"d": D.STAR_D, "fill": "#FFE7A8", "edge": D.STAR_EDGE, "edgeWidth": D.STAR_EDGE_W},
+            "outerStars": [spot(t) for t in D.OUTER_STARS],
+            "innerStar": {"d": D.INNER_STAR_D, "fill": "#FFFFFF", "edge": None, "edgeWidth": 0},
+            "innerStars": [spot(t) for t in D.INNER_STARS],
+            "innerDots": [dot(t) for t in D.INNER_DOTS],
+            "wash": dict(D.WASH),
+            "washStops": {names[k]: [v[0], v[1], D.MOODS[k]["bot"]] for k, v in D.WASH_STOPS.items()}}
+
+def palette_names():
+    return {"calm": "Calm", "happy": "Happy", "focus": "Focus", "excited": "Excited", "sleepy": "Sleepy", "mystic": "Mystic",
              "alert": "Alert", "dim": "Dim", "error": "Error", "online": "Online", "hot": "Hot", "cold": "Cold", "love": "Love", "night": "Night",
              "sick": "Sick", "angry": "Angry"}
+
+def palette():
+    names = palette_names()
     return {names[k]: {"top": v["top"], "mid": v["mid"], "bottom": v["bot"], "glow": v["glow"], "bud": v["bud"], "blush": v["blush"]}
             for k, v in D.MOODS.items()}
 

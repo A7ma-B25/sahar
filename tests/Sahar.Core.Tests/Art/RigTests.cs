@@ -37,4 +37,27 @@ public class RigTests
 
     [Fact]
     public void Rig_Geometry_Constants() => Assert.Equal((300, 30, 30, 160), (R.Canvas, R.OffsetX, R.OffsetY, R.BodyWidth));
+    [Fact]
+    public void Rig_Sky_IsLoaded()
+    {
+        Assert.Equal((5, 6, 5), (R.Sky.OuterStars.Length, R.Sky.InnerStars.Length, R.Sky.InnerDots.Length));
+        Assert.Equal((120f, 196f), (R.Sky.Wash.Cx, R.Sky.Wash.Cy));
+        Assert.Equal(("#C9963A", 1.3f), (R.Sky.Star.Edge, R.Sky.Star.EdgeWidth));
+        Assert.Null(R.Sky.InnerStar.Edge);
+        Assert.NotEmpty(PathData.Parse(R.Sky.Star.D));
+        Assert.NotEmpty(PathData.Parse(R.Sky.InnerStar.D));
+    }
+
+    [Fact]
+    public void Rig_InnerSky_LiesInsideTheBody()
+    {
+        // Body bbox in rig units (39.4,58)–(200.6,207.9); the sky lives in her lower half.
+        foreach (var s in R.Sky.InnerStars)
+        {
+            float e = 8 * s.Scale;
+            Assert.True(s.X - e > 39.4f && s.X + e < 200.6f && s.Y + e < 207.9f && s.Y - e > 160f, $"star at {s.X},{s.Y}");
+        }
+        foreach (var d in R.Sky.InnerDots)
+            Assert.True(d.X - d.R > 39.4f && d.X + d.R < 200.6f && d.Y + d.R < 207.9f && d.Y - d.R > 160f, $"dot at {d.X},{d.Y}");
+    }
 }

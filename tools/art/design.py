@@ -10,6 +10,50 @@ MOODS={
  'hot':    dict(top='#FFFFFF', mid='#FFE6DA', bot='#FFAE8E', glow='#FF8A5C', bud='#FF9466', blush='#FF8F78'),
  'mystic': dict(top='#B7A8F0', mid='#7C69C9', bot='#3E2E86', glow='#7B5CFF', bud='#C6B5FF', blush='#9B7FE0'),
 }
+# ---- 0.10a sky (spec L1–L3) — outer stars in canvas units; inner stars, dots and wash in rig units (+30 to place) ----
+STAR_D="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2Z"
+STAR_EDGE='#C9963A'; STAR_EDGE_W=1.3
+INNER_STAR_D="M0 -8 L1.6 -1.6 L8 0 L1.6 1.6 L0 8 L-1.6 1.6 L-8 0 L-1.6 -1.6Z"
+OUTER_STARS=[(150,22,0.9,2.6,0),(272,120,0.6,3.4,0),(46,70,0.7,2.2,0),(240,236,0.5,3,0),(36,214,0.55,2.8,0)]   # x,y,scale,period,begin
+INNER_STARS=[(84,176,0.55,2.8,0),(108,192,0.42,3.4,1.1),(138,182,0.5,2.5,0.5),(162,170,0.38,3.8,1.8),(124,168,0.32,3.1,2.4),(178,188,0.4,2.9,0.9)]
+INNER_DOTS=[(96,168,1.3,2.2,0.3),(150,194,1.1,2.9,1.4),(70,186,1.0,3.3,0.7),(118,200,1.2,2.6,2.0),(190,176,0.9,3.1,1.0)]   # x,y,r,period,begin
+WASH=dict(cx=120, cy=196, rx=86, ry=44, gradCx=0.5, gradCy=0.7, gradR=0.6, offsets=[0,0.6,1], opacities=[0.55,0.28,0])
+# The night wash per mood: (inner, mid); outer = the mood's `bot` at 0 opacity. ONE reviewed table (owner ruling
+# 2026-11-10): Calm is the spec's L2 exactly and is never darkened; the other moods are a first proposal for the
+# owner (docs/design/character/06-moods-sheet.png) — change a colour here, then re-export.
+WASH_STOPS={
+    'calm':    ('#8E7BE0', '#A897EA'),
+    'happy':   ('#C15F2A', '#D07F57'),
+    'focus':   ('#3B6BC5', '#5D85CE'),
+    'excited': ('#956C12', '#B18323'),
+    'sleepy':  ('#342471', '#473F7E'),
+    'hot':     ('#C95D30', '#D77E5C'),
+    'mystic':  ('#5142A3', '#665FAD'),
+    'alert':   ('#C66314', '#D48351'),
+    'dim':     ('#9084BA', '#A79ECB'),
+    'error':   ('#A02E32', '#AE5351'),
+    'online':  ('#13867B', '#12A194'),
+    'cold':    ('#227BAF', '#5393BD'),
+    'love':    ('#D15B74', '#DF7F90'),
+    'night':   ('#705DC0', '#867ACA'),
+    'sick':    ('#449134', '#6AA65E'),
+    'angry':   ('#95241E', '#A34A41'),
+}
+
+def night(mood, uidp):
+    """The night sky inside her lower body (L2–L3), clipped to the body path: returns (defs, group)."""
+    c=MOODS[mood]; inner,mid=WASH_STOPS[mood]; w=WASH; g=f'{uidp}w'; cl=f'{uidp}c'
+    stops=''.join(f'<stop offset="{o}" stop-color="{col}" stop-opacity="{a}"/>' for o,col,a in zip(w['offsets'],(inner,mid,c['bot']),w['opacities']))
+    defs=(f'<radialGradient id="{g}" cx="{w["gradCx"]*100:g}%" cy="{w["gradCy"]*100:g}%" r="{w["gradR"]*100:g}%">{stops}</radialGradient>'
+          f'<clipPath id="{cl}"><path d="{BODY}"/></clipPath>')
+    stars=''.join(f'<g transform="translate({x} {y}) scale({k})"><path d="{INNER_STAR_D}" fill="#FFFFFF">'
+                  f'<animate attributeName="opacity" values="0.15;1;0.15" dur="{d}s" begin="{b}s" repeatCount="indefinite"/>'
+                  f'<animateTransform attributeName="transform" type="scale" values="0.6;1.1;0.6" dur="{d}s" begin="{b}s" repeatCount="indefinite"/></path></g>'
+                  for x,y,k,d,b in INNER_STARS)
+    dots=''.join(f'<circle cx="{x}" cy="{y}" r="{r}" fill="#FFFFFF"><animate attributeName="opacity" values="0.2;0.85;0.2" dur="{d}s" begin="{b}s" repeatCount="indefinite"/></circle>'
+                 for x,y,r,d,b in INNER_DOTS)
+    return defs, (f'<g clip-path="url(#{cl})"><ellipse cx="{w["cx"]}" cy="{w["cy"]}" rx="{w["rx"]}" ry="{w["ry"]}" fill="url(#{g})"/>{stars}{dots}</g>')
+
 BODY ="M40 176 C 34 112, 72 58, 120 58 C 168 58, 206 112, 200 176 C 200 196, 184 206, 170 196 C 158 210, 136 212, 120 200 C 104 212, 82 210, 70 196 C 56 206, 40 196, 40 176 Z"
 BODY2="M40 176 C 34 112, 72 58, 120 58 C 168 58, 206 112, 200 176 C 200 192, 186 210, 170 200 C 156 206, 136 214, 120 202 C 104 208, 84 214, 70 200 C 56 210, 40 192, 40 176 Z"
 _n=[0]
@@ -40,12 +84,13 @@ def mouth(kind):
      'mystic':'<path d="M114 141 q6 3 12 -1" fill="none" stroke="#1A1240" stroke-width="2.4" stroke-linecap="round"/>',
      'none':''}[kind]
 
-def sahar(mood='calm', e='open', m='smile', moon=True, stars=True, floaty=True, headphones=False, extra_front='', extra_back='', leaf_anim=True, squish=False, size=(300,300), vb="0 0 300 300", aria=""):
+def sahar(mood='calm', e='open', m='smile', moon=True, stars=True, floaty=True, headphones=False, extra_front='', extra_back='', leaf_anim=True, squish=False, size=(300,300), vb="0 0 300 300", aria="", inner=True):
     c=MOODS[mood]; g=uid('g'); gl=uid('gl'); lf=uid('lf'); mn=uid('mn')
+    ndefs, nsky = night(mood, uid('n')) if inner else ('', '')
     defs=(f'<defs><radialGradient id="{g}" cx="38%" cy="26%" r="90%"><stop offset="0" stop-color="{c["top"]}"/><stop offset="0.55" stop-color="{c["mid"]}"/><stop offset="1" stop-color="{c["bot"]}"/></radialGradient>'
           f'<radialGradient id="{gl}"><stop offset="0" stop-color="{c["glow"]}" stop-opacity="0.75"/><stop offset="1" stop-color="{c["glow"]}" stop-opacity="0"/></radialGradient>'
           f'<linearGradient id="{lf}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C4ECC2"/><stop offset="1" stop-color="#6FB683"/></linearGradient>'
-          f'<radialGradient id="{mn}" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#FFF6D8"/><stop offset="1" stop-color="#F2C86A"/></radialGradient></defs>')
+          f'<radialGradient id="{mn}" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#FFF6D8"/><stop offset="1" stop-color="#F2C86A"/></radialGradient>{ndefs}</defs>')
     orbit="M262 150 A 112 26 0 1 1 38 150 A 112 26 0 1 1 262 150"
     def moonsvg(front):
         vals = "1;0" if front else "0;1"
@@ -60,8 +105,8 @@ def sahar(mood='calm', e='open', m='smile', moon=True, stars=True, floaty=True, 
         back+=moonsvg(False); front+=moonsvg(True)
     if stars:
         back+=('<g><animateTransform attributeName="transform" type="rotate" values="0 150 140;360 150 140" dur="40s" repeatCount="indefinite"/>'
-          +''.join(f'<use href="#s2Star" fill="#FFE7A8" transform="translate({x} {y}) scale({s})"><animate attributeName="opacity" values="0.3;1;0.3" dur="{d}s" repeatCount="indefinite"/></use>'
-                   for x,y,s,d in [(150,22,0.9,2.6),(272,120,0.6,3.4),(46,70,0.7,2.2),(240,236,0.5,3),(36,214,0.55,2.8)])+'</g>')
+          +''.join(f'<use href="#s2Star" fill="#FFE7A8" stroke="{STAR_EDGE}" stroke-width="{STAR_EDGE_W}" stroke-linejoin="round" transform="translate({x} {y}) scale({s})"><animate attributeName="opacity" values="0.3;1;0.3" dur="{d}s" repeatCount="indefinite"/></use>'
+                   for x,y,s,d,_b in OUTER_STARS)+'</g>')
     leaf=(f'<path d="M120 60 C 120 48, 121 38, 124 28" fill="none" stroke="#5E9E70" stroke-width="4" stroke-linecap="round"/>'
           f'<path d="M123 38 C 106 40, 94 30, 92 16 C 108 14, 120 24, 123 38 Z" fill="url(#{lf})"/><path d="M123 38 C 112 34, 102 26, 96 18" fill="none" stroke="#8CC795" stroke-width="1.2"/>'
           f'<path d="M124 32 C 138 30, 150 20, 152 8 C 136 8, 126 18, 124 32 Z" fill="url(#{lf})"/>'
@@ -74,7 +119,7 @@ def sahar(mood='calm', e='open', m='smile', moon=True, stars=True, floaty=True, 
             '<rect x="36" y="114" width="20" height="34" rx="9" fill="#2F3363"/><rect x="184" y="114" width="20" height="34" rx="9" fill="#2F3363"/>'
             f'<rect x="40" y="120" width="6" height="22" rx="3" fill="{c["bud"]}"/><rect x="194" y="120" width="6" height="22" rx="3" fill="{c["bud"]}"/>')
     body=(f'<path d="{BODY}" fill="url(#{g})">'+(f'<animate attributeName="d" values="{BODY};{BODY2};{BODY}" dur="2.2s" repeatCount="indefinite"/>' if floaty else '')+'</path>'
-          f'<g fill="none" stroke="{c["bot"]}" stroke-width="1.8" stroke-linecap="round" opacity="0.4"><path d="M120 62 q-9 3 -16 10"/><path d="M120 62 q9 3 16 10"/></g>'
+          f'{nsky}<g fill="none" stroke="{c["bot"]}" stroke-width="1.8" stroke-linecap="round" opacity="0.4"><path d="M120 62 q-9 3 -16 10"/><path d="M120 62 q9 3 16 10"/></g>'
           f'<path d="M58 104 C 70 78, 92 66, 112 64" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" opacity="0.75"/>'
           f'<ellipse cx="78" cy="142" rx="12" ry="6.5" fill="{c["blush"]}" opacity="0.55" filter="url(#s2Blur)"/><ellipse cx="162" cy="142" rx="12" ry="6.5" fill="{c["blush"]}" opacity="0.55" filter="url(#s2Blur)"/>')
     char=f'<g transform="translate(30 30)">{leaf}{body}{eyes(e)}{mouth(m)}{hp}</g>'
@@ -130,6 +175,9 @@ def eyes(kind):
         '<path d="M100 124 m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0"><animateTransform attributeName="transform" type="rotate" values="0 100 124;360 100 124" dur="1.2s" repeatCount="indefinite"/></path>'
         '<path d="M140 124 m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0"><animateTransform attributeName="transform" type="rotate" values="0 140 124;360 140 124" dur="1.2s" repeatCount="indefinite"/></path></g>')
     if kind=='heart': return ''.join(f'<path d="M{x} 132 c-7 -6 -14 -12 -9 -18 c3 -4 8 -3 9 1 c1 -4 6 -5 9 -1 c5 6 -2 12 -9 18 Z" fill="#E5486D"/>' for x in (100,140))
+    if kind=='joy': return ('<path d="M90 127 Q 100 115 110 127" fill="none" stroke="#2A2350" stroke-width="3.6" stroke-linecap="round"/>'
+        '<path d="M130 127 Q 140 115 150 127" fill="none" stroke="#2A2350" stroke-width="3.6" stroke-linecap="round"/>'
+        '<path d="M86 119 l-4 -3 M154 119 l4 -3" fill="none" stroke="#2A2350" stroke-width="2" stroke-linecap="round" opacity="0.55"/>')
     if kind=='sad': return ('<ellipse cx="100" cy="127" rx="8.5" ry="9.5" fill="#2A2350"/><ellipse cx="140" cy="127" rx="8.5" ry="9.5" fill="#2A2350"/>'
         '<circle cx="102" cy="123" r="3" fill="#FFFFFF"/><circle cx="142" cy="123" r="3" fill="#FFFFFF"/>'
         '<path d="M89 114 l17 -6 M151 114 l-17 -6" stroke="#2A2350" stroke-width="2.4" stroke-linecap="round"/>'
@@ -143,7 +191,8 @@ def mouth(kind):
      'tongue':'<path d="M111 139 q9 9 18 0 Z" fill="#2A2350"/><path d="M116 143 q4 6 8 0 Z" fill="#FF8FA3"/>',
      'puff':'<path d="M113 142 h14" stroke="#2A2350" stroke-width="2.6" stroke-linecap="round"/><circle cx="108" cy="141" r="3" fill="none" stroke="#2A2350" stroke-width="1.6"/>',
      'sing':'<ellipse cx="120" cy="143" rx="5" ry="6" fill="#2A2350"/>',
-     'yawn':'<ellipse cx="120" cy="145" rx="7" ry="9" fill="#2A2350"/>'}
+     'yawn':'<ellipse cx="120" cy="145" rx="7" ry="9" fill="#2A2350"/>',
+     'joy':'<path d="M110 138 Q 120 152 130 138" fill="none" stroke="#2A2350" stroke-width="2.6" stroke-linecap="round"/>'}
     return extra.get(kind) or _M(kind)
 
 def mini(mood='calm', e='open', m='smile', s=70, **kw):

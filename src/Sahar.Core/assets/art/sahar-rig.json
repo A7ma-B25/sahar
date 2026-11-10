@@ -607,6 +607,32 @@
     "opacity": 1.0
    }
   ],
+  "Joy": [
+   {
+    "kind": "path",
+    "d": "M90 127 Q 100 115 110 127",
+    "stroke": "#2A2350",
+    "strokeWidth": 3.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M130 127 Q 140 115 150 127",
+    "stroke": "#2A2350",
+    "strokeWidth": 3.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   },
+   {
+    "kind": "path",
+    "d": "M86 119 l-4 -3 M154 119 l4 -3",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.0,
+    "lineCap": "round",
+    "opacity": 0.55
+   }
+  ],
   "Scan": [
    {
     "kind": "ellipse",
@@ -807,6 +833,249 @@
     "opacity": 1.0
    }
   ],
+  "Joy": [
+   {
+    "kind": "path",
+    "d": "M110 138 Q 120 152 130 138",
+    "stroke": "#2A2350",
+    "strokeWidth": 2.6,
+    "lineCap": "round",
+    "opacity": 1.0
+   }
+  ],
   "None": []
+ },
+ "sky": {
+  "star": {
+   "d": "M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2Z",
+   "fill": "#FFE7A8",
+   "edge": "#C9963A",
+   "edgeWidth": 1.3
+  },
+  "outerStars": [
+   {
+    "x": 150,
+    "y": 22,
+    "scale": 0.9,
+    "period": 2.6,
+    "begin": 0
+   },
+   {
+    "x": 272,
+    "y": 120,
+    "scale": 0.6,
+    "period": 3.4,
+    "begin": 0
+   },
+   {
+    "x": 46,
+    "y": 70,
+    "scale": 0.7,
+    "period": 2.2,
+    "begin": 0
+   },
+   {
+    "x": 240,
+    "y": 236,
+    "scale": 0.5,
+    "period": 3,
+    "begin": 0
+   },
+   {
+    "x": 36,
+    "y": 214,
+    "scale": 0.55,
+    "period": 2.8,
+    "begin": 0
+   }
+  ],
+  "innerStar": {
+   "d": "M0 -8 L1.6 -1.6 L8 0 L1.6 1.6 L0 8 L-1.6 1.6 L-8 0 L-1.6 -1.6Z",
+   "fill": "#FFFFFF",
+   "edge": null,
+   "edgeWidth": 0
+  },
+  "innerStars": [
+   {
+    "x": 84,
+    "y": 176,
+    "scale": 0.55,
+    "period": 2.8,
+    "begin": 0
+   },
+   {
+    "x": 108,
+    "y": 192,
+    "scale": 0.42,
+    "period": 3.4,
+    "begin": 1.1
+   },
+   {
+    "x": 138,
+    "y": 182,
+    "scale": 0.5,
+    "period": 2.5,
+    "begin": 0.5
+   },
+   {
+    "x": 162,
+    "y": 170,
+    "scale": 0.38,
+    "period": 3.8,
+    "begin": 1.8
+   },
+   {
+    "x": 124,
+    "y": 168,
+    "scale": 0.32,
+    "period": 3.1,
+    "begin": 2.4
+   },
+   {
+    "x": 178,
+    "y": 188,
+    "scale": 0.4,
+    "period": 2.9,
+    "begin": 0.9
+   }
+  ],
+  "innerDots": [
+   {
+    "x": 96,
+    "y": 168,
+    "r": 1.3,
+    "period": 2.2,
+    "begin": 0.3
+   },
+   {
+    "x": 150,
+    "y": 194,
+    "r": 1.1,
+    "period": 2.9,
+    "begin": 1.4
+   },
+   {
+    "x": 70,
+    "y": 186,
+    "r": 1.0,
+    "period": 3.3,
+    "begin": 0.7
+   },
+   {
+    "x": 118,
+    "y": 200,
+    "r": 1.2,
+    "period": 2.6,
+    "begin": 2.0
+   },
+   {
+    "x": 190,
+    "y": 176,
+    "r": 0.9,
+    "period": 3.1,
+    "begin": 1.0
+   }
+  ],
+  "wash": {
+   "cx": 120,
+   "cy": 196,
+   "rx": 86,
+   "ry": 44,
+   "gradCx": 0.5,
+   "gradCy": 0.7,
+   "gradR": 0.6,
+   "offsets": [
+    0,
+    0.6,
+    1
+   ],
+   "opacities": [
+    0.55,
+    0.28,
+    0
+   ]
+  },
+  "washStops": {
+   "Calm": [
+    "#8E7BE0",
+    "#A897EA",
+    "#CBC1F0"
+   ],
+   "Happy": [
+    "#C15F2A",
+    "#D07F57",
+    "#FFC9B5"
+   ],
+   "Focus": [
+    "#3B6BC5",
+    "#5D85CE",
+    "#AFC9F2"
+   ],
+   "Excited": [
+    "#956C12",
+    "#B18323",
+    "#FFD889"
+   ],
+   "Sleepy": [
+    "#342471",
+    "#473F7E",
+    "#8E88B8"
+   ],
+   "Hot": [
+    "#C95D30",
+    "#D77E5C",
+    "#FFAE8E"
+   ],
+   "Mystic": [
+    "#5142A3",
+    "#665FAD",
+    "#3E2E86"
+   ],
+   "Alert": [
+    "#C66314",
+    "#D48351",
+    "#FFC7A6"
+   ],
+   "Dim": [
+    "#9084BA",
+    "#A79ECB",
+    "#ABA3CC"
+   ],
+   "Error": [
+    "#A02E32",
+    "#AE5351",
+    "#F4B5B8"
+   ],
+   "Online": [
+    "#13867B",
+    "#12A194",
+    "#A9E4DC"
+   ],
+   "Cold": [
+    "#227BAF",
+    "#5393BD",
+    "#BFDDF7"
+   ],
+   "Love": [
+    "#D15B74",
+    "#DF7F90",
+    "#FFC2D3"
+   ],
+   "Night": [
+    "#705DC0",
+    "#867ACA",
+    "#6E5CC0"
+   ],
+   "Sick": [
+    "#449134",
+    "#6AA65E",
+    "#A8D99A"
+   ],
+   "Angry": [
+    "#95241E",
+    "#A34A41",
+    "#F59A92"
+   ]
+  }
  }
 }

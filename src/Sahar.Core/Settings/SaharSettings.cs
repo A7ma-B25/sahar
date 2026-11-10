@@ -49,4 +49,6 @@ public sealed record SaharSettings
     public bool HelloDone { get; set; }
     public bool UpdateCheckEnabled { get; set; } = true;
     public SeasonalIcon Seasonal { get; set; } = SeasonalIcon.Auto;
+    /// <summary>The little night sky with stars inside her (0.10a); on unless you turn it off.</summary>
+    public bool InnerStars { get; set; } = true;
 }
