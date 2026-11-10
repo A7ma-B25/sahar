@@ -409,7 +409,8 @@ internal sealed unsafe class App
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
-        soul.Busy = () => _state.Hidden || Sulking() || games.Running || menu.IsOpen;   // nothing hops her while the menu is open
+        bool chatHop = false;   // her answer to a chat line is a hop, with the card open (spec §5)
+        soul.Busy = () => _state.Hidden || Sulking() || games.Running || (menu.IsOpen && !chatHop);   // nothing else hops her while the menu is open
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
 
         // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
@@ -554,6 +555,55 @@ internal sealed unsafe class App
                     break;
             }
         });
+        // Her chat row (spec §5.1): local commands; engine.log gets the kind only, never the text.
+        int greetings = 0;
+        var sleepTimer = ui.CreateTimer();
+        sleepTimer.IsRepeating = false;
+        sleepTimer.Interval = TimeSpan.FromSeconds(1.2);
+        sleepTimer.Tick += (_, _) => Safe(() => director.HideFor(TimeSpan.FromHours(1)));
+        void ChatHop()
+        {
+            chatHop = true;
+            try { if (!soul.Hop(1f)) soul.HappyFace(); }
+            finally { chatHop = false; }
+        }
+        menu.ChatSent += text => Safe(() =>
+        {
+            var c = Sahar.Core.Chat.ChatCommands.Parse(text);
+            Log.Write($"chat: {c.Kind}");
+            if (c.Kind == Sahar.Core.Chat.ChatKind.Empty) return;
+            var reply = Sahar.Core.Chat.ChatReply.For(c, new Sahar.Core.Chat.ChatContext(prayer.Next(), greetings), Address.You);
+            switch (c.Kind)
+            {
+                case Sahar.Core.Chat.ChatKind.Greeting: greetings++; break;
+                case Sahar.Core.Chat.ChatKind.Timer:
+                    if (!c.OutOfRange && c.Minutes is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
+                    break;
+                case Sahar.Core.Chat.ChatKind.Note when c.Text is { } note: notes.Save(note); break;
+                case Sahar.Core.Chat.ChatKind.Note: menu.Close(); notes.Open(); return;   // «ملاحظة» alone: the note bubble (Ruling 9)
+                case Sahar.Core.Chat.ChatKind.Hush: dndTool.TurnOn(c.HushFor); break;
+                case Sahar.Core.Chat.ChatKind.Sleep:
+                    menu.Close();
+                    speech.Say(reply);
+                    sleepTimer.Stop();
+                    sleepTimer.Start();
+                    return;
+                case Sahar.Core.Chat.ChatKind.Play: menu.Press("play"); break;
+                case Sahar.Core.Chat.ChatKind.Game when c.Game is { } game:
+                    menu.Close();
+                    speech.Say(reply);
+                    games.Start(game);
+                    return;
+                case Sahar.Core.Chat.ChatKind.Move when c.Move is { } move:
+                    menu.Close();
+                    speech.Say(reply);
+                    motion.Play(move);
+                    return;
+                case Sahar.Core.Chat.ChatKind.Prayer when prayer.Next() is null: menu.Close(); prayer.Open(); return;
+            }
+            menu.SetReply(reply);
+            ChatHop();
+        });
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
         // The PC just started (or a test says so): she flies in and says hello (motion 18).
@@ -667,6 +717,13 @@ internal sealed unsafe class App
                 return new PipeReply(true, menu.Describe(), _state.Snapshot());
             });
             pipe.Register("debug-menu", _ => new PipeReply(true, menu.Describe()));
+            pipe.Register("menu-chat", r =>
+            {
+                if (!menu.IsOpen) return new PipeReply(false, "menu is closed");
+                var text = r.Args?.TryGetValue("text64", out var t) == true ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)) : "";
+                menu.Send(text);
+                return new PipeReply(true, menu.Describe(), _state.Snapshot());
+            });
             pipe.Register("debug-timer", _ => new PipeReply(true, timerTool.Describe()));
             pipe.Register("debug-clipboard", _ =>
             {

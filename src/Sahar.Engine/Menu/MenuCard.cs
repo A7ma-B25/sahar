@@ -23,6 +23,7 @@ namespace Sahar.Engine.Menu;
 internal sealed class MenuCard : IDisposable
 {
     private readonly CardVisual _visual;
+    private readonly ChatField _chat;
     private readonly MenuCatcher _catcher;
     private readonly Func<RectF> _body;
     private readonly SaharVisual _sahar;
@@ -59,6 +60,8 @@ internal sealed class MenuCard : IDisposable
     public event Action<bool>? OpenChanged;
     /// <summary>A drill opened (the music drill says what is playing).</summary>
     public event Action<string>? RingOpened;
+    /// <summary>A chat line was sent (Enter or send). The text is the user's: never logged.</summary>
+    public event Action<string>? ChatSent;
 
     public MenuCard(CompositionHost host, bool capturable, Func<RectF> body, SaharVisual sahar, DispatcherQueue ui)
     {
@@ -72,6 +75,11 @@ internal sealed class MenuCard : IDisposable
             Dismissed = () => Safe(Close),
             KeyPressed = k => Safe(() => Key(k)),
         };
+        _chat = new ChatField(capturable);
+        _chat.Submitted += text => Safe(() => Send(text));
+        _chat.Escaped += () => Safe(Close);
+        _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
+        _chat.Deactivated += next => Safe(() => { if (next != _catcher.Hwnd && !Win.Own.Contains(next)) Close(); });
         _tick = ui.CreateTimer();
         _tick.Interval = TimeSpan.FromSeconds(1);
         _tick.Tick += (_, _) => Safe(Refresh);
@@ -119,7 +127,7 @@ internal sealed class MenuCard : IDisposable
         Build("main");
         var monitor = Monitors.At(centre);
         _dpi = monitor.DpiScale;
-        _visual.Draw(_content!, _dpi, fade: false);
+        _visual.Draw(_content!, _dpi, fade: false, Key());
         var place = MenuCardLayout.Place(body, monitor.WorkF, new Vector2(MenuCardLayout.Width, _layout!.Height) * _dpi, Placement, _dpi);
         _moon = place.MoonCentre;
         _card = place.Card;
@@ -131,6 +139,8 @@ internal sealed class MenuCard : IDisposable
             if (!IsOpen || gen != _openGen) return;
             _sahar.MoonProps.InsertScalar("moon", 0);   // her own moon rests on the card instead
             _visual.Open(place.Card, place.Near, place.MoonCentre);
+            ShowChat();
+            if (_focus == "chat") FocusChat();
             ShowFocus();
         });
         Log.Write($"menu: open ({how})");
@@ -145,6 +155,8 @@ internal sealed class MenuCard : IDisposable
         _openGen++;
         _tick.Stop();
         _catcher.Hide();
+        _chat.Hide();
+        _chat.Clear();
         _visual.Close();
         Need("menu", null, null);
         _sahar.MoonProps.InsertScalar("moon", _moonBefore);
@@ -166,12 +178,39 @@ internal sealed class MenuCard : IDisposable
             if (_content?.Fact?.OpensId is { } opens) Press(opens);
             return;
         }
-        if (id is "chat" or "send" or "mic") { _focus = id; ShowFocus(); return; }   // the chat row comes in Task 6
+        if (id == "chat") { FocusChat(); ShowFocus(); return; }
+        if (id == "send") { Send(_chat.Text); return; }
+        if (id == "mic") return;   // deferred to the voice phase (never shown)
         if (MenuCatalog.Drill(id, State()) is not null) { Show(id, fade: true); return; }
         if (id == "dnd" && State().HushOn) id = "dnd-off";
         Log.Write($"menu: {id}");
         Close();
         Pressed?.Invoke(id);
+    }
+
+    /// <summary>Sends a chat line as Enter would (the pipe's menu-chat in test mode).</summary>
+    public void Send(string text)
+    {
+        if (!IsOpen) return;
+        _chat.Clear();
+        if (string.IsNullOrWhiteSpace(text)) return;
+        ChatSent?.Invoke(text);
+    }
+
+    private void ShowChat()
+    {
+        if (!IsOpen || _layout is null || _content is null || !_layout.Rects.TryGetValue("chat", out var r)) { _chat.Hide(); return; }
+        var px = Screen(r);
+        _chat.Show(new RectI((int)MathF.Round(px.X), (int)MathF.Round(px.Y), (int)MathF.Round(px.Right), (int)MathF.Round(px.Bottom)),
+            _dpi, _content.T, true);
+        AllowedFocus.Add(_chat.Hwnd);
+        AllowedFocus.Add(_chat.EditHwnd);
+    }
+
+    private void FocusChat()
+    {
+        _focus = "chat";
+        if (_visual.Shown) _chat.Focus();
     }
 
     /// <summary>Her reply to a chat line: header line 1 for 6 s.</summary>
@@ -188,7 +227,8 @@ internal sealed class MenuCard : IDisposable
     {
         if (!IsOpen || _view is null) return;
         Build(_view.View);
-        _visual.Draw(_content!, _dpi, fade: false);
+        _visual.Draw(_content!, _dpi, fade: false, Key());
+        if (_visual.Shown) ShowChat();
         ShowFocus();
         UpdateTick();
     }
@@ -200,7 +240,8 @@ internal sealed class MenuCard : IDisposable
         _focus = _layout!.FocusOrder.Count > 0 && _focus is not null ? _layout.FocusOrder[0] : null;
         _hovered = null;
         _visual.SetHover(null, false, null);
-        _visual.Draw(_content!, _dpi, fade);
+        _visual.Draw(_content!, _dpi, fade, Key());
+        if (_visual.Shown) ShowChat();
         ShowFocus();
     }
 
@@ -215,6 +256,14 @@ internal sealed class MenuCard : IDisposable
         _layout = MenuCardLayout.Layout(_view);
         _content = new CardContent(_layout, _view, Tokens.For(dark), Tokens.HeaderTint(Mood(), dark),
             MenuHeaderFact.Greeting(false, _reply, state.HushOn), fact, state.HushOn, true);
+    }
+
+    /// <summary>Everything the drawing depends on (the same key = the same pixels).</summary>
+    private string Key()
+    {
+        var c = _content!;
+        return string.Join('|', c.View.View, string.Join(',', c.Layout.FocusOrder), c.Line1, c.Fact?.Text ?? "", c.Hushed, c.T == Tokens.Dark,
+            c.Tint, _dpi, Address.You);
     }
 
     /// <summary>The card plus its shadow (e1: 32 DIP blur, 12 down) and the clasp, in screen px.</summary>
@@ -275,7 +324,12 @@ internal sealed class MenuCard : IDisposable
         if (r.Close) { Close(); return; }
         if (r.Back) { Show("main", fade: true); return; }
         if (r.Activate is { } id) { Press(id); return; }
-        if (r.Focus != _focus) { _focus = r.Focus; ShowFocus(); }
+        if (r.Focus != _focus)
+        {
+            _focus = r.Focus;
+            if (_focus == "chat") FocusChat();
+            ShowFocus();
+        }
     }
 
     private void ShowFocus()
@@ -308,9 +362,9 @@ internal sealed class MenuCard : IDisposable
         var card = _card;
         string B(bool b) => b ? "true" : "false";
         return FormattableString.Invariant(
-            $"open=true view={View} focus={_focus ?? "none"} caret=false mic={B(_view.MicShown)} hush={B(_content.Hushed)} dark={B(_content.T == Tokens.Dark)} ") +
+            $"open=true view={View} focus={_focus ?? "none"} caret={B(_chat.HasFocus)} mic={B(_view.MicShown)} hush={B(_content.Hushed)} dark={B(_content.T == Tokens.Dark)} ") +
             $"fact={_content.Fact?.Kind ?? "none"} openMs={OpenMs} " +
-            FormattableString.Invariant($"card={card.X:0},{card.Y:0},{card.Width:0},{card.Height:0} clasp={_moon.X:0},{_moon.Y:0} chat=0 ") +
+            FormattableString.Invariant($"card={card.X:0},{card.Y:0},{card.Width:0},{card.Height:0} clasp={_moon.X:0},{_moon.Y:0} chat={(long)_chat.EditHwnd} draft={_chat.Text.Length} ") +
             $"line64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_content.Line1))} buttons={buttons}";
     }
 

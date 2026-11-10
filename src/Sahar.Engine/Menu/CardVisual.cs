@@ -83,20 +83,35 @@ internal sealed class CardVisual : IDisposable
     /// <summary>The card's place on screen (px) while shown.</summary>
     public RectF Card { get; private set; }
 
-    /// <summary>Draws a view into fresh surfaces; <paramref name="fade"/> cross-fades from the one showing (a drill).</summary>
-    public void Draw(CardContent content, float dpi, bool fade)
+    /// <summary>Shows a view: drawn into the spare surfaces, or — when one of the two already holds exactly this
+    /// content (<paramref name="key"/>) — just shown again (opening the menu, main ↔ a drill, costs no drawing);
+    /// <paramref name="fade"/> cross-fades from the one showing (a drill).</summary>
+    public void Draw(CardContent content, float dpi, bool fade, string key)
     {
         Ensure(dpi);
         var size = new SizeI((int)MathF.Ceiling(MenuCardLayout.Width * dpi), (int)MathF.Ceiling(MaxHeightDip * dpi));
-        var scale = Matrix3x2.CreateScale(dpi);
-        int bi = _bg!.Draw(dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Background(dc, content); });
-        int fi = _fg!.Draw(dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Foreground(dc, content); });
         var fadeTime = fade && !ExpressionPlayer.Reduced ? TimeSpan.FromMilliseconds(160) : TimeSpan.Zero;
-        _bgLayer!.Show(bi, fadeTime);
-        _fgLayer!.Show(fi, fadeTime);
-        foreach (var s in new[] { _shadowNear, _shadowFar }) { s.Brush = _bg.Brushes[bi]; s.Size = new Vector2(size.Width, size.Height); }
+        int index;
+        if (_keys[_bg!.Current] == key) index = _bg.Current;
+        else if (_keys[1 - _bg.Current] == key) index = 1 - _bg.Current;
+        else
+        {
+            var scale = Matrix3x2.CreateScale(dpi);
+            index = _bg.Draw(dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Background(dc, content); });
+            _fg!.DrawAt(index, dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Foreground(dc, content); });
+            _keys[index] = key;
+            Drawn++;
+        }
+        _bg.DrawnIndex(index);
+        _bgLayer!.Show(index, fadeTime);
+        _fgLayer!.Show(index, fadeTime);
+        foreach (var s in new[] { _shadowNear, _shadowFar }) { s.Brush = _bg.Brushes[index]; s.Size = new Vector2(size.Width, size.Height); }
         Theme(content.T, content.Layout, dpi);
     }
+
+    private readonly string?[] _keys = new string?[2];
+    /// <summary>Card drawings so far (test diagnostics: opening again draws nothing new).</summary>
+    public int Drawn { get; private set; }
 
     /// <summary>Shows the card at <paramref name="card"/> (px): opens from <paramref name="near"/>; the clasp rests at <paramref name="moon"/>.</summary>
     public void Open(RectF card, Corner near, Vector2 moon)
@@ -238,6 +253,7 @@ internal sealed class CardVisual : IDisposable
     {
         if (_bg is not null && dpi == _dpi) return;
         _dpi = dpi;
+        _keys[0] = _keys[1] = null;
         var size = new SizeI((int)MathF.Ceiling(MenuCardLayout.Width * dpi), (int)MathF.Ceiling(MaxHeightDip * dpi));
         if (_bg is null)
         {
@@ -260,6 +276,7 @@ internal sealed class CardVisual : IDisposable
     /// <summary>After a device loss: surfaces are redrawn from what they last drew.</summary>
     public void Redraw()
     {
+        _keys[0] = _keys[1] = null;
         _bg?.Redraw();
         _fg?.Redraw();
     }

@@ -53,6 +53,9 @@ internal sealed class SwapSurface : IDisposable
         Current = index;
     }
 
+    /// <summary>Makes <paramref name="index"/> current without drawing (it already holds what is wanted).</summary>
+    public void DrawnIndex(int index) => Current = index;
+
     /// <summary>Draws into the current surface (first content, or a static layer).</summary>
     public void DrawCurrent(Action<D2DContext> draw)
     {

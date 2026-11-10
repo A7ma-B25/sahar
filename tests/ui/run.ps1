@@ -1703,6 +1703,76 @@ function Stage-Menu {
         Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
         if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
     }
+    # ---- Her chat row (Task 6; the mic is deferred to the voice phase) ----
+    function Chat-Type([string]$text) {
+        $m = Menu
+        $b = $m.buttons | Where-Object id -eq 'chat'
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Start-Sleep -Milliseconds 300
+        $edit = [IntPtr][long](Menu).chat
+        if ($edit -eq [IntPtr]::Zero) { throw 'no chat field' }
+        foreach ($ch in $text.ToCharArray()) { [Shell]::PostMessage($edit, 0x0102, [IntPtr][int]$ch, [IntPtr]1) | Out-Null }
+        Start-Sleep -Milliseconds 200
+        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null
+        Start-Sleep -Milliseconds 500
+    }
+    Step 'typing «مؤقت ٥» starts a timer, she answers and hops' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 900 450 | Out-Null
+        Start-Sleep -Milliseconds 1200
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $hops = [int](Kv 'debug-soul').hops
+        Chat-Type (-join ([char[]](0x0645, 0x0624, 0x0642, 0x062A, 0x0020, 0x0665)))   # مؤقت ٥
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -lt 290 -or [int]$t.remaining -gt 300) { throw "timer: running=$($t.running) remaining=$($t.remaining)" }
+        $m = Menu
+        if ((Text64 $m.line64) -ne 'تمام! شغّلت مؤقت ٥ دقيقة.') { throw "reply: $(Text64 $m.line64)" }
+        if ($m.draft -ne '0') { throw "the field still holds $($m.draft) characters" }
+        if ([int](Kv 'debug-soul').hops -ne $hops + 1) { throw 'she did not hop' }
+        Start-Sleep -Milliseconds 300
+        Screenshot 'menu-chat-reply.png' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -notmatch 'chat: Timer') { throw 'the log does not say a timer command came' }
+        if ($log -match [string][char]0x0645 + [char]0x0624 + [char]0x0642 + [char]0x062A) { throw 'the log holds what was typed' }
+        Press 'timer'
+        Press 'timer-cancel'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'card open again' | Out-Null
+    }
+    Step 'an unknown line gets her learning reply, then her question again' {
+        Chat-Type (-join ([char[]](0x0634, 0x0648, 0x0020, 0x0627, 0x0633, 0x0645, 0x0643)))   # شو اسمك
+        $m = Menu
+        if ((Text64 $m.line64) -ne 'سمعتك! لسا عم اتعلّم الحكي، وقريباً بجاوبك على كل شي.') { throw "reply: $(Text64 $m.line64)" }
+        Start-Sleep -Milliseconds 6500
+        if ((Text64 (Menu).line64) -ne 'شو بدك نعمل؟') { throw "after 6.5 s: $(Text64 (Menu).line64)" }
+    }
+    Step '«نلعب» opens the games' {
+        Chat-Type (-join ([char[]](0x0646, 0x0644, 0x0639, 0x0628)))   # نلعب
+        if ((Menu).view -ne 'play') { throw "view: $((Menu).view)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+    }
+    Step 'no mic on this machine (deferred to the voice phase)' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ($m.mic -ne 'false' -or (Ids $m) -match 'mic') { throw "mic=$($m.mic) ids=$(Ids $m)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'Esc in the chat field closes the card' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 300
+        $b = (Menu).buttons | Where-Object id -eq 'chat'
+        [Mouse]::Click([int]$b.x, [int]$b.y, $false)
+        Start-Sleep -Milliseconds 300
+        if ((Menu).caret -ne 'true') { throw 'no caret in the chat field after a click on it' }
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Menu 'false' 1000 'card closed by Esc from the chat field' | Out-Null
+    }
     # ---- The card follows its settings (Task 7): each step writes settings.json and restarts her. ----
     $script:settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
     $script:settingsKept = if (Test-Path $script:settingsPath) { Get-Content $script:settingsPath -Raw } else { $null }
@@ -1719,7 +1789,9 @@ function Stage-Menu {
         Restart-With '{ "helloDone": true }'
         [System.Windows.Forms.SendKeys]::SendWait('^%s')
         $m = Wait-Menu 'true' 2000 'card open by Ctrl+Alt+S'
-        if ($m.focus -ne 'chat') { throw "focus: $($m.focus)" }
+        Start-Sleep -Milliseconds 400
+        $m = Menu
+        if ($m.focus -ne 'chat' -or $m.caret -ne 'true') { throw "focus: $($m.focus) caret: $($m.caret)" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -notmatch 'menu: open \(shortcut\)') { throw 'the log does not say the shortcut opened it' }
         if ((Ids $m) -match 'settings') { throw 'a settings button without the settings app' }
@@ -1787,13 +1859,20 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
     }
     Step 'a taken shortcut is refused, and she carries on' {
-        $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-Command', @'
+        $marker = Join-Path $env:TEMP 'sahar-hotkey-holder.txt'
+        Remove-Item $marker -ErrorAction SilentlyContinue
+        $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-Command', @"
 Add-Type -TypeDefinition 'public static class HK { [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool RegisterHotKey(System.IntPtr h, int id, uint m, uint vk); }'
-[HK]::RegisterHotKey([System.IntPtr]::Zero, 7, 3, 0x4B) | Out-Null
-Start-Sleep -Seconds 40
-'@
+`$ok = [HK]::RegisterHotKey([System.IntPtr]::Zero, 7, 3, 0x4B)
+Set-Content -Path '$marker' -Value `$ok
+Start-Sleep -Seconds 60
+"@
         try {
-            Start-Sleep -Seconds 4
+            $deadline = (Get-Date).AddSeconds(20)
+            while (-not (Test-Path $marker) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+            $held = if (Test-Path $marker) { (Get-Content $marker -Raw).Trim() } else { 'no marker' }
+            Write-Host "    the helper holds Ctrl+Alt+K: $held"
+            if ($held -ne 'True') { throw "the helper could not take Ctrl+Alt+K ($held)" }
             Restart-With '{ "helloDone": true, "menuShortcut": "Ctrl+Alt+K" }'
             Start-Sleep -Milliseconds 500
             $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
@@ -1974,6 +2053,9 @@ function Stage-Senses {
             & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # the test window in front again
             Start-Sleep -Milliseconds 500
             Write-Host "    app in front: $((Kv 'debug-apptime').app)"
+            # A session counts from midnight at the latest: near midnight (CI runs at any hour), step past it first.
+            $toMidnight = ((Get-Date).Date.AddDays(1) - (Get-Date)).TotalMinutes
+            if ($toMidnight -lt 130) { Send ('{"type":"cmd","name":"apptime-skip","args":{"minutes":"' + [int]($toMidnight + 1) + '"}}') | Out-Null }
             Send '{"type":"cmd","name":"apptime-skip","args":{"minutes":"125"}}' | Out-Null
             $r = Send '{"type":"cmd","name":"comment-now"}'
             if (-not $r.ok) { throw "no comment after a long session: $($r.error)" }

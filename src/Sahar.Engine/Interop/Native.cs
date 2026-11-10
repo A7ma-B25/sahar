@@ -391,6 +391,30 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial short GetKeyState(int vk);
 
+    [LibraryImport("user32.dll")]
+    public static partial nint GetDC(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial int ReleaseDC(nint hwnd, nint dc);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial int SetBkMode(nint dc, int mode);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint SelectObject(nint dc, nint obj);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial nint CreateSolidBrush(uint color);
+
+    [LibraryImport("user32.dll", EntryPoint = "DrawTextW")]
+    public static partial int DrawText(nint dc, char* text, int count, RECT* rect, uint format);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetFocus();
+
+    [LibraryImport("user32.dll")]
+    public static partial int InvalidateRect(nint hwnd, RECT* rect, int erase);
+
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial int RegisterHotKey(nint hwnd, int id, uint modifiers, uint vk);
 
