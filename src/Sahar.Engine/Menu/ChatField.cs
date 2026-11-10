@@ -39,6 +39,15 @@ internal sealed unsafe class ChatField : IWindowHandler
     public nint Hwnd => _hwnd;
     public nint EditHwnd => _edit;
     public bool Shown { get; private set; }
+    /// <summary>Times the popup was placed and shown (test diagnostics: a countdown must not re-place it).</summary>
+    public int Shows { get; private set; }
+
+    /// <summary>The popup's rect on screen ("l,t,r,b"), or "none".</summary>
+    public string Rect()
+    {
+        RECT r;
+        return _hwnd != 0 && Shown && Native.GetWindowRect(_hwnd, &r) != 0 ? $"{r.Left},{r.Top},{r.Right},{r.Bottom}" : "none";
+    }
     public bool HasFocus => _edit != 0 && Native.GetFocus() == _edit;
 
     public event Action<string>? Submitted;
@@ -78,6 +87,7 @@ internal sealed unsafe class ChatField : IWindowHandler
         Native.ShowWindow(_hwnd, Native.SW_SHOWNOACTIVATE);
         Native.InvalidateRect(_edit, null, 1);
         Shown = true;
+        Shows++;
     }
 
     public void Hide()

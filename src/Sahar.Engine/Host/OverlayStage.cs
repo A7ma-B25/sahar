@@ -57,6 +57,8 @@ internal sealed class OverlayStage
     public int Resizes { get; private set; }
     public int Swaps { get; private set; }
     public bool Visible => Native.IsWindowVisible(_active.Hwnd) != 0;
+    /// <summary>Test mode: the next swap's callback throws (a failure must never freeze the overlay).</summary>
+    public bool ThrowOnNextSwap { get; set; }
 
     /// <summary>Her canvas moved (screen pixels); <paramref name="with"/> is moved in the same batch (her input window).</summary>
     public void Follow(RectF canvas, float dpiScale, WindowMove? with = null)
@@ -106,7 +108,7 @@ internal sealed class OverlayStage
     public string Describe()
     {
         var r = Rect;
-        return $"x={r.Left} y={r.Top} w={r.Width} h={r.Height} moves={Moves} resizes={Resizes} swaps={Swaps} " +
+        return $"x={r.Left} y={r.Top} w={r.Width} h={r.Height} moves={Moves} resizes={Resizes} swaps={Swaps} swapping={(_swapping ? "true" : "false")} " +
             $"needs={(_needs.Count == 0 ? "none" : string.Join(',', _needs.Keys))}";
     }
 
@@ -145,6 +147,7 @@ internal sealed class OverlayStage
         Native.ShowWindow(_spare.Hwnd, Native.SW_SHOWNOACTIVATE);
         AfterCommit(() => AfterCommit(() =>
         {
+            if (ThrowOnNextSwap) { ThrowOnNextSwap = false; throw new InvalidOperationException("test: a failing swap"); }
             if (_hidden)
             {
                 Native.ShowWindow(_spare.Hwnd, Native.SW_HIDE);

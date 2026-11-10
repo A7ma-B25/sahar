@@ -243,6 +243,7 @@ internal sealed class SaharVisual
         MouthLayer.SwapAt(_faceIndex, at);
         EyeSwap.StopAnimation("Scale");
         if (plan.Instant) { EyeSwap.Scale = Vector3.One; return; }
+        FaceAnimationsMade++;
         var a = _c.CreateVector3KeyFrameAnimation();
         float swapFrac = (float)((plan.SwapAt - plan.Start) / (plan.End - plan.Start));
         a.InsertKeyFrame(0f, new Vector3(1, plan.From, 1));
@@ -253,6 +254,8 @@ internal sealed class SaharVisual
         EyeSwap.StartAnimation("Scale", a);
     }
 
+    /// <summary>Animations made for face swaps so far (test diagnostics: they are reused).</summary>
+    public int FaceAnimationsMade { get; private set; }
     private FaceSwapPlan? _facePlan;
     private int _faceIndex;
 

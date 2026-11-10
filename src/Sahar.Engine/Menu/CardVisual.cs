@@ -80,6 +80,8 @@ internal sealed class CardVisual : IDisposable
     }
 
     public bool Shown { get; private set; }
+    /// <summary>The open animation finished (or the card showed at once).</summary>
+    public event Action? Opened;
     /// <summary>The card's place on screen (px) while shown.</summary>
     public RectF Card { get; private set; }
 
@@ -129,10 +131,14 @@ internal sealed class CardVisual : IDisposable
         _root.StopAnimation("Opacity");
         _root.StopAnimation("Scale");
         _root.IsVisible = true;
+        int gen = _generation;
+        var batch = _c.CreateScopedBatch(CompositionBatchTypes.Animation);
+        batch.Completed += (_, _) => { if (_generation == gen && Shown) Opened?.Invoke(); };
         if (ExpressionPlayer.Reduced)
         {
             _root.Scale = Vector3.One;
             _root.StartAnimation("Opacity", Anim("open-reduced", () => Scalar(0, 1, 100, null)));
+            batch.End();
             return;
         }
         _root.StartAnimation("Opacity", Anim("open-opacity", () => Scalar(0, 1, 180, OpenEase)));
@@ -144,6 +150,7 @@ internal sealed class CardVisual : IDisposable
             scale.Duration = TimeSpan.FromMilliseconds(180);
             return scale;
         }));
+        batch.End();
     }
 
     private CompositionEasingFunction? _openEase, _closeEase;

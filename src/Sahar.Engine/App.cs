@@ -672,7 +672,7 @@ internal sealed unsafe class App
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(stage.Visible ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
-                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} faceAnims={sahar.FaceAnimationsMade + FadeLayer.StepAnimationsMade} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
@@ -686,6 +686,7 @@ internal sealed unsafe class App
                 return new PipeReply(true, State: _state.Snapshot());
             });
             pipe.Register("debug-font", _ => new PipeReply(true, Fonts.Describe()));
+            pipe.Register("debug-swap-throw", _ => { stage.ThrowOnNextSwap = true; return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });

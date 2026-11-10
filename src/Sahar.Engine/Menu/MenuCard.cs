@@ -37,6 +37,8 @@ internal sealed class MenuCard : IDisposable
     private float _dpi = 1;
     private int _openGen;
     private Vector2 _moon;
+    private readonly Stopwatch _openClock = new();
+    private long _chatAt = -1, _openEnd = -1;
     private RectF _card;
 
     public Func<MenuState> State { get; set; } = () => new(false, false, false);
@@ -77,6 +79,7 @@ internal sealed class MenuCard : IDisposable
             KeyPressed = k => Safe(() => Key(k)),
         };
         _chat = new ChatField(capturable);
+        _visual.Opened += () => Safe(() => { if (_openEnd < 0) _openEnd = _openClock.ElapsedMilliseconds; });
         _chat.Submitted += text => Safe(() => Send(text));
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
@@ -117,6 +120,8 @@ internal sealed class MenuCard : IDisposable
     {
         if (IsOpen) return;
         var clock = Stopwatch.StartNew();
+        _openClock.Restart();
+        _chatAt = _openEnd = -1;
         IsOpen = true;
         var fg = Native.GetForegroundWindow();
         _previous = Win.Own.Contains(fg) ? 0 : fg;
@@ -207,6 +212,7 @@ internal sealed class MenuCard : IDisposable
         var px = Screen(r);
         _chat.Show(new RectI((int)MathF.Round(px.X), (int)MathF.Round(px.Y), (int)MathF.Round(px.Right), (int)MathF.Round(px.Bottom)),
             _dpi, _content.T, true);
+        if (_chatAt < 0) _chatAt = _openClock.ElapsedMilliseconds;
         AllowedFocus.Add(_chat.Hwnd);
         AllowedFocus.Add(_chat.EditHwnd);
     }
@@ -367,7 +373,7 @@ internal sealed class MenuCard : IDisposable
         string B(bool b) => b ? "true" : "false";
         return FormattableString.Invariant(
             $"open=true view={View} focus={_focus ?? "none"} caret={B(_chat.HasFocus)} mic={B(_view.MicShown)} hush={B(_content.Hushed)} dark={B(_content.T == Tokens.Dark)} ") +
-            $"fact={_content.Fact?.Kind ?? "none"} openMs={OpenMs} " +
+            $"fact={_content.Fact?.Kind ?? "none"} openMs={OpenMs} shown={B(_visual.Shown)} openEnd={_openEnd} chatShown={B(_chat.Shown)} chatAt={_chatAt} chatRect={_chat.Rect()} chatShows={_chat.Shows} " +
             FormattableString.Invariant($"card={card.X:0},{card.Y:0},{card.Width:0},{card.Height:0} clasp={_moon.X:0},{_moon.Y:0} chat={(long)_chat.EditHwnd} draft={_chat.Text.Length} ") +
             $"line64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_content.Line1))} buttons={buttons}";
     }

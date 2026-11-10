@@ -1789,6 +1789,106 @@ function Stage-Menu {
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Wait-Menu 'false' 1000 'card closed by Esc from the chat field' | Out-Null
     }
+    # ---- Review fixes (0.11 fix pass): what the owner would see ----
+    Step 'closing keeps the overlay until the card has faded' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 700
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        $o = Overlay
+        if ($o.needs -notmatch 'menu') { throw "the overlay let go of the card at once (needs=$($o.needs)): the closing card is torn" }
+        Start-Sleep -Milliseconds 700
+        if ((Overlay).needs -ne 'none') { throw "needs left after the close: $((Overlay).needs)" }
+    }
+    Step 'the chat field appears with the card, exactly over its field' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $deadline = (Get-Date).AddSeconds(3)
+        do { $m = Menu; Start-Sleep -Milliseconds 50 } while ($m.chatShown -ne 'true' -and (Get-Date) -lt $deadline)
+        Write-Host "    chatAt=$($m.chatAt) openEnd=$($m.openEnd) chatRect=$($m.chatRect)"
+        if ([int]$m.openEnd -lt 0 -or [int]$m.chatAt -lt [int]$m.openEnd) { throw "the chat field showed at $($m.chatAt) ms, the card finished opening at $($m.openEnd) ms" }
+        $b = $m.buttons | Where-Object id -eq 'chat'
+        $l, $t, $r, $bt = $m.chatRect -split ',' | ForEach-Object { [double]$_ }
+        if ([math]::Abs(($l + $r) / 2 - $b.x) -gt 1 -or [math]::Abs(($t + $bt) / 2 - $b.y) -gt 1 -or [math]::Abs(($r - $l) - $b.w) -gt 2 -or [math]::Abs(($bt - $t) - $b.h) -gt 2) {
+            throw "the chat popup $($m.chatRect) is not over the drawn field ($($b.x),$($b.y) $($b.w)x$($b.h))"
+        }
+    }
+    Step 'a click on the field''s padding still gives the caret' {
+        $l, $t, $r, $bt = (Menu).chatRect -split ',' | ForEach-Object { [int]$_ }
+        [Mouse]::Click($l + 3, [int](($t + $bt) / 2), $false)
+        Start-Sleep -Milliseconds 300
+        if ((Menu).caret -ne 'true') { throw 'no caret after a click on the field''s padding' }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+    }
+    Step 'a countdown in the header does not redraw the chat field' {
+        Send '{"type":"cmd","name":"timer","args":{"seconds":"300"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 800
+        $first = [int](Menu).chatShows
+        Start-Sleep -Milliseconds 3200
+        $m = Menu
+        if ($m.fact -ne 'timer') { throw "fact: $($m.fact)" }
+        if ([int]$m.chatShows -ne $first) { throw "the chat field was placed again $([int]$m.chatShows - $first) times in 3 s (flicker)" }
+        Press 'timer'
+        Press 'timer-cancel'
+    }
+    Step 'a Windows setting change keeps the card and the draft' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Start-Sleep -Milliseconds 500
+        $edit = [IntPtr][long](Menu).chat
+        foreach ($ch in 'abc'.ToCharArray()) { [Shell]::PostMessage($edit, 0x0102, [IntPtr][int]$ch, [IntPtr]1) | Out-Null }
+        Start-Sleep -Milliseconds 200
+        $h = [Shell]::FindWindow('Sahar.Engine', 'Sahar')
+        [Shell]::PostMessage($h, 0x001A, [IntPtr]0, [IntPtr]0) | Out-Null   # WM_SETTINGCHANGE
+        Start-Sleep -Milliseconds 600
+        $m = Menu
+        if ($m.open -ne 'true') { throw 'a setting change closed the card' }
+        if ($m.draft -ne '3') { throw "the draft holds $($m.draft) characters" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+    }
+    Step 'the shortcut does nothing during a game' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
+        Start-Sleep -Milliseconds 800
+        [System.Windows.Forms.SendKeys]::SendWait('^%s')
+        Start-Sleep -Milliseconds 700
+        $open = (Menu).open; $running = (Game).running
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        if ($open -ne 'false') { throw 'the shortcut opened the card over a game' }
+        if ($running -ne 'true') { throw 'the shortcut ended the game' }
+        Start-Sleep -Seconds 3
+    }
+    Step 'a failing swap never freezes the overlay' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 900 450 | Out-Null
+        Start-Sleep -Milliseconds 500
+        Send '{"type":"cmd","name":"debug-swap-throw"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Start-Sleep -Milliseconds 1500
+        $m = Menu; $o = Overlay
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        if ($o.swapping -ne 'false') { throw 'the overlay is stuck mid-swap' }
+        if ($m.shown -ne 'true') { throw 'the card never appeared after a failing swap' }
+        Start-Sleep -Milliseconds 600
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Start-Sleep -Milliseconds 1000
+        if ((Menu).shown -ne 'true') { throw 'the card did not appear the next time' }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'face changes reuse their animations' {
+        $before = [int](Info).faceAnims
+        foreach ($i in 1..10) {
+            Send '{"type":"cmd","name":"expression","args":{"key":"back"}}' | Out-Null; Start-Sleep -Milliseconds 300
+            Send '{"type":"cmd","name":"expression","args":{"key":"idle"}}' | Out-Null; Start-Sleep -Milliseconds 300
+        }
+        $made = [int](Info).faceAnims - $before
+        if ($made -gt 12) { throw "20 face changes made $made new animations" }
+    }
     # ---- The card follows its settings (Task 7): each step writes settings.json and restarts her. ----
     $script:settingsPath = Join-Path $env:APPDATA 'Sahar\settings.json'
     $script:settingsKept = if (Test-Path $script:settingsPath) { Get-Content $script:settingsPath -Raw } else { $null }

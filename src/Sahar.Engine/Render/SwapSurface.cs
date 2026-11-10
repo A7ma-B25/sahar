@@ -157,9 +157,13 @@ internal sealed class FadeLayer
         Step(_sprites[index], 0, 1, at);
     }
 
+    /// <summary>Animations made for face swaps so far (test diagnostics: they are reused).</summary>
+    public static int StepAnimationsMade { get; private set; }
+
     private void Step(SpriteVisual v, float from, float to, TimeSpan at)
     {
         double ms = at.TotalMilliseconds;
+        StepAnimationsMade++;
         var a = _c.CreateScalarKeyFrameAnimation();
         a.InsertKeyFrame(0f, from);
         a.InsertKeyFrame((float)((ms - 1) / ms), from);   // holds, then flips within the last millisecond
