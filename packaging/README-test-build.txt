@@ -1,7 +1,29 @@
-سَحَر · Sahar — نسخة تجريبية 0.10.1 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.11.0 (ويندوز)
 =============================================
 
-شو الجديد بـ 0.10.1 — صارت لطيفة مع شريط المهام 🧩
+شو الجديد بـ 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
+-------------------------------------------------
+- القائمة الدائرية راحت. كبسة يمين عليها (أو Ctrl+Alt+S من أي مكان) بتفتح بطاقة هادية جنبها:
+  فوق سطرها هي «شو بدك نعمل؟» وتحتو أهم شي هلق (المؤقت، الصلاة الجاية، القرآن، أو قديش باقي لترجع تحكي)،
+  وتحتو صندوق حكي، وبلاطاتها التلاتة (نلعب؟ · بسكت شوي · بغفى شوي)، وأربع أدوات (مؤقت · ملاحظة · استماع · الحافظة).
+  قمرها بيقعد على زاوية البطاقة يلي جنبها لما تكون مفتوحة.
+- الكبستين عليها ما عادوا يفتحوا القائمة: صاروا نكشتين (نطّة وضحكة) متل ما طلبت.
+- بالكيبورد: Tab والأسهم بيتنقّلوا، ١–٣ بيختاروا البلاطات، Enter بيفتح، Esc بيرجع وبعدين بيسكّر، والتركيز بيرجع للبرنامج يلي كنت فيه.
+- صندوق الحكي (محلي، بلا ذكاء اصطناعي لسا) — جرّب تكتب:
+  «مؤقت ٥» أو "timer 5" · «ملاحظة اشتري خبز» · «اسكتي» أو «اسكتي ساعة» · «نامي» · «نلعب» أو «نلعب الحقني / غمّضلي / الطابة / النجوم»
+  · «ارقصي» · «نطّي» · «تمطّي» · «الصلاة» · «كيفك» — وأي شي تاني بتقلّك إنها لسا عم تتعلّم.
+  الأرقام بأي شكل (٥ أو 5). بترد بسطرها فوق وبتنط. السجل بيكتب نوع الأمر بس (مثلاً chat: Timer)، أبداً مو يلي كتبتو.
+- وجهها صار يتغيّر متل الرمشة: بتسكّر عيونها، بيتبدّل الوجه وهي مسكّرة، وبتفتح — ما عاد يبيّن وجهين فوق بعض.
+  والنكشة صارت شغلة وحدة: نطّة مع وجه «^ ^» (بلا الوجه الزهري يلي كان يطلع قبل).
+- لما تفتح القائمة أو تبلّش لعبة ما عاد ترسم بمكان غلط ولا للحظة (نافذتها بتنقل لنافذة احتياط جاهزة بخطوة وحدة).
+- الإيقونات مرسومة بإيد (رجفة خفيفة)، والخط Rubik جوّا البرنامج.
+- المايكروفون مأجّل لمرحلة الصوت، وزر «إعداداتي» مخفي لحد ما يجي برنامج الإعدادات (0.12).
+
+جرّب بإيدك: كبسة يمين عليها؛ Ctrl+Alt+S من أي برنامج؛ اكتب «مؤقت ٥»؛ ادخل على «بسكت شوي» واختار «نص ساعة»؛
+اكبس كبستين عليها وتأكد إنها ما فتحت القائمة؛ افتح القائمة وهي بزاوية الشاشة.
+بدنا رأيك: ألوان رأس البطاقة لكل مزاج — شوف docs/design/menu/header-tints.png (الهادي متل ما اعتمدناه؛ الباقي اقتراح).
+
+من 0.10.1 — صارت لطيفة مع شريط المهام 🧩
 -------------------------------------------------
 - قبل كانت سَحَر ترسم على نافذة شفافة قد الشاشة كلها، فالويندوز وبرامج شريط المهام (متل Now Bar) كانوا يحسبوها
   برنامج ملء شاشة: Now Bar كان يختفي، والإشعارات ممكن تسكت. هلق نافذتها قدّها هي وبتمشي معها،
@@ -185,10 +207,34 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.10.1 (Windows)
+Sahar — test build 0.11.0 (Windows)
 ==================================
 
-What's new in 0.10.1 — friendly to the taskbar 🧩
+What's new in 0.11.0 — her new menu and a chat box 💬
+-----------------------------------------------
+- The radial ring is gone. A right-click on her (or Ctrl+Alt+S from anywhere) opens a quiet card beside her: her
+  line «شو بدك نعمل؟», under it the one most urgent thing (a running timer, the next prayer, the Quran, or how long
+  she stays quiet), a chat box, her three tiles (play · hush · nap) and four tools (timer · note · listen · clipboard).
+  While it is open her moon rests on the card's corner next to her.
+- A double-click no longer opens the menu: it is two pokes (a hop and a laugh), as asked.
+- Keyboard: Tab and the arrows move, 1–3 pick the tiles, Enter opens, Esc goes back then closes; focus returns to
+  the window you were in.
+- The chat box (local, no AI yet) understands timers, notes, hush, sleep, games, her moves (dance, hop, stretch),
+  prayer and greetings, in Arabic or English, with any digits. She answers in her line and hops. The log keeps the
+  kind of command only (e.g. "chat: Timer"), never what you typed.
+- Her face now changes like a blink: the eyes close, the face swaps while they are shut, the eyes open — never two
+  faces at once. A poke is one thing: a hop with her «^ ^» face (no pink "poked" face first).
+- Opening the menu or starting a game no longer draws her in the wrong place for a moment (her drawing moves to a
+  ready spare window in one step).
+- Hand-drawn icons (a slight wobble) and the Rubik font inside the app.
+- The mic waits for the voice phase; the «إعداداتي» button stays hidden until the settings app arrives (0.12).
+
+Please check by hand: right-click her; press Ctrl+Alt+S in another app; type «مؤقت ٥»; open «بسكت شوي» and pick
+«نص ساعة»; double-click her and see that the menu stays closed; open the menu with her in a screen corner.
+We'd like your view on the card's header colour per mood: docs/design/menu/header-tints.png (Calm as approved;
+the others are a proposal).
+
+From 0.10.1 — friendly to the taskbar 🧩
 -----------------------------------------------
 - Sahar used to draw on a transparent window as big as the whole screen, so Windows and taskbar tools (such as
   Now Bar) took her for a fullscreen app: Now Bar hid, and notifications could go quiet. Now her window is her size
