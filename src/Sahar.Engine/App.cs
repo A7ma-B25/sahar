@@ -590,7 +590,7 @@ internal sealed unsafe class App
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
-                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
+                $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });

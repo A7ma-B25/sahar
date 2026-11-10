@@ -1112,6 +1112,17 @@ function Type-InBubble([string]$text, [switch]$Enter) {
     if ($Enter) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 300 }
 }
 
+# Two copies of her at once (a "ghost"): along a vertical line through her upper body (right of the leaf), the step
+# from the halo up to her body is one edge (a few anti-aliased pixels); a second, translucent outline of her makes a
+# band of in-between values. Returns how many pixels sit between 25 % and 75 % of the halo-to-body step.
+function Ghost-Band([System.Drawing.Bitmap]$bmp, [int]$x, [int]$y0, [int]$y1) {
+    $l = @(); for ($y = $y0; $y -le $y1; $y++) { $p = $bmp.GetPixel($x, $y); $l += 0.299 * $p.R + 0.587 * $p.G + 0.114 * $p.B }
+    $halo = ($l[0..2] | Measure-Object -Average).Average
+    $body = ($l | Measure-Object -Maximum).Maximum
+    if ($body - $halo -lt 40) { return 0 }   # no clear body on this line
+    ($l | Where-Object { $_ -gt $halo + 0.25 * ($body - $halo) -and $_ -lt $halo + 0.75 * ($body - $halo) }).Count
+}
+
 function Stage-Menu {
     Step 'start engine' { Start-Engine }
     Step 'right-click opens the menu with the six buttons' {
@@ -1127,6 +1138,101 @@ function Stage-Menu {
         Screenshot 'menu-open.png' | Out-Null
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Wait-Menu 'false' 1000 'menu closed' | Out-Null
+    }
+    Step 'a double-click opens the menu where a right-click does, with her settled and one face (strip)' {
+        # The owner (0.10.0): "when I double-click her she laughs, but the look glitches". The first click is a poke
+        # (hop + joy face), the second opens the menu while she is mid-hop. 12 frames over 1.5 s show what happens.
+        Pose-Body 500 330 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 2
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        $ref = Wait-Menu 'true' 2000 'menu open after a right-click'
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'menu closed' | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 3
+        $rest = Info
+        $size = 360; $gx = $c[0] - $size / 2; $gy = $c[1] - $size / 2
+        $st0 = State
+        $lineX = [int]($st0.x + $st0.width * 0.8) - $gx; $lineY0 = [int]($st0.y - 40) - $gy; $lineY1 = [int]($st0.y + $st0.height * 0.35) - $gy
+        $bands = @()
+        $dir = Join-Path $Out 'dblclick'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $tiles = @(); $soul = $null; $second = $null
+        $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        [Mouse]::Click($c[0], $c[1], $false)
+        $first = $clock.ElapsedMilliseconds
+        for ($i = 0; $i -lt 12; $i++) {
+            $due = $first + 125 * $i
+            while ($clock.ElapsedMilliseconds -lt $due) { Start-Sleep -Milliseconds 5 }
+            if ($i -eq 2 -and -not $second) {
+                [Mouse]::Click($c[0], $c[1], $false)   # the second click of the double-click
+                $second = $clock.ElapsedMilliseconds
+                $soul = Kv 'debug-soul'
+                $soulAt = $clock.ElapsedMilliseconds
+            }
+            $bmp = Grab $gx $gy $size $size
+            $t = $clock.ElapsedMilliseconds - $first
+            $bands += "$($t):$(Ghost-Band $bmp $lineX $lineY0 $lineY1)"
+            $path = Join-Path $dir ('t{0:D4}ms.png' -f $t)
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+            $tiles += $path
+        }
+        Contact-Sheet $tiles 6 240 (Join-Path $Out 'double-click-strip.png')
+        $m = Wait-Menu 'true' 1500 'menu open after a double-click'
+        Screenshot 'double-click-menu.png' | Out-Null
+        $after = Info
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Write-Host "    ghost band (px between halo and body, per frame ms:px): $($bands -join ' ')"
+        Write-Host "    clicks at $first and $second ms; soul $($soul.hopping)/happy $($soul.happy) at $soulAt ms; face at rest $($rest.face) ($($rest.faceSwaps) swaps), after $($after.face) ($($after.faceSwaps) swaps)"
+        $errors = @()
+        foreach ($b in $ref.buttons) {
+            $d = $m.buttons | Where-Object id -eq $b.id
+            if (-not $d -or [math]::Abs($d.x - $b.x) -gt 3 -or [math]::Abs($d.y - $b.y) -gt 3) { $errors += "button $($b.id) at ($($d.x),$($d.y)), at rest ($($b.x),$($b.y))" }
+        }
+        if ($soul.hopping -ne 'false') { $errors += 'still hopping once the menu opened' }
+        if ($soul.happy -ne 'false') { $errors += 'the joy face stayed once the menu opened' }
+        if ($after.face -ne $rest.face) { $errors += "her face is $($after.face) with the menu open, $($rest.face) at rest" }
+        # A poke face, then the joy face, then (menu) her own face: three swaps at most; more is a face flickering.
+        if ([int]$after.faceSwaps - [int]$rest.faceSwaps -gt 3) { $errors += "$([int]$after.faceSwaps - [int]$rest.faceSwaps) face swaps in 1.5 s" }
+        $ghosts = @($bands | Where-Object { [int]($_ -split ':')[1] -gt 6 })
+        if ($ghosts.Count) { $errors += "two outlines of her (ghost) in frame(s) $($ghosts -join ', ')" }
+        if ($errors.Count) { throw ($errors -join '; ') }
+    }
+    Step 'no ghost: a mood cross-fade at the hop''s squash shows one outline of her' {
+        # The owner's phone video showed a squashed body over a taller, translucent one. Frozen at the anticipation
+        # (+0.045 s) and landing (+0.56 s) squash, her mood cross-fades (idle <-> poked) while frames are grabbed.
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Pose-Body 500 330 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Milliseconds 800
+        $st = State
+        $size = 240; $gx = [int]($st.x + $st.width / 2 - $size / 2); $gy = [int]($st.y + $st.height / 2 - $size / 2)
+        $lineX = [int]($st.x + $st.width * 0.8) - $gx; $lineY0 = [int]($st.y - 40) - $gy; $lineY1 = [int]($st.y + $st.height * 0.35) - $gy
+        $dir = Join-Path $Out 'ghost'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $found = @(); $tiles = @()
+        try {
+            foreach ($t in @('0.045', '0.56')) {
+                Soul-Freeze ('"floatT":"0","hopT":"' + $t + '"') | Out-Null
+                foreach ($key in @('poked', 'idle')) {
+                    Start-Sleep -Milliseconds 400
+                    Send ('{"type":"cmd","name":"expression","args":{"key":"' + $key + '"}}') | Out-Null
+                    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+                    $i = 0
+                    while ($clock.ElapsedMilliseconds -lt 300) {
+                        $bmp = Grab $gx $gy $size $size
+                        $band = Ghost-Band $bmp $lineX $lineY0 $lineY1
+                        if ($i % 3 -eq 0) { $path = Join-Path $dir ("{0}-{1}-{2:D3}ms.png" -f $t, $key, $clock.ElapsedMilliseconds); $bmp.Save($path); $tiles += $path }
+                        $bmp.Dispose()
+                        if ($band -gt 6) { $found += "hop $t to $key at $($clock.ElapsedMilliseconds) ms: $band px" }
+                        $i++
+                    }
+                }
+            }
+        }
+        finally { Soul-Freeze '' | Out-Null }
+        Contact-Sheet $tiles 6 200 (Join-Path $Out 'ghost-strip.png')
+        if ($found.Count) { throw "a ghost: $($found -join '; ')" }
     }
     Step 'Esc closes it' {
         $c = Body-Centre
@@ -2435,12 +2541,22 @@ function Assert-OverlayHolds([string]$when) {
     }
 }
 
-# A pixel that must have changed between two screenshots (something of hers is drawn there, not clipped away).
-function Assert-Drawn([string]$before, [string]$after, [int]$x, [int]$y, [string]$what) {
-    $a = Pixel $before $x $y; $b = Pixel $after $x $y
-    $diff = [math]::Abs($a.R - $b.R) + [math]::Abs($a.G - $b.G) + [math]::Abs($a.B - $b.B)
-    Write-Host "    $what at ($x,$y): $($a.R),$($a.G),$($a.B) -> $($b.R),$($b.G),$($b.B)"
-    if ($diff -lt 60) { throw "$what is not drawn at ($x,$y): clipped by the overlay?" }
+# Something of hers is drawn around (x,y) (not clipped away): of five points (the centre and +-d), at least one changed
+# between two screenshots. Five, because a white button over a white window, or the ball's black middle on a dark
+# desktop, can match what was there before at a single point.
+function Assert-Drawn([string]$before, [string]$after, [int]$x, [int]$y, [string]$what, [int]$d = 8) {
+    $a = [System.Drawing.Bitmap]::new($before); $b = [System.Drawing.Bitmap]::new($after)
+    try {
+        $seen = @()
+        foreach ($p in @(@(0, 0), @(-$d, 0), @($d, 0), @(0, -$d), @(0, $d))) {
+            $pa = $a.GetPixel($x + $p[0], $y + $p[1]); $pb = $b.GetPixel($x + $p[0], $y + $p[1])
+            $diff = [math]::Abs($pa.R - $pb.R) + [math]::Abs($pa.G - $pb.G) + [math]::Abs($pa.B - $pb.B)
+            $seen += "$($pa.R),$($pa.G),$($pa.B)->$($pb.R),$($pb.G),$($pb.B)"
+            if ($diff -ge 60) { Write-Host "    $what drawn near ($x,$y)"; return }
+        }
+        throw "$what is not drawn near ($x,$y) ($($seen -join ' ')): clipped by the overlay?"
+    }
+    finally { $a.Dispose(); $b.Dispose() }
 }
 
 function Stage-Shell {
@@ -2489,7 +2605,7 @@ function Stage-Shell {
         $after = Screenshot 'shell-menu.png'
         try {
             Assert-Shell 'menu open' -Tray
-            foreach ($b in $m.buttons) { Assert-Drawn $before $after ([int]$b.x) ([int]($b.y - $b.r / 2)) "menu button $($b.id)" }
+            foreach ($b in $m.buttons) { Assert-Drawn $before $after ([int]$b.x) ([int]$b.y) "menu button $($b.id)" ([int]($b.r / 2)) }
         }
         finally { Send '{"type":"cmd","name":"menu-close"}' | Out-Null }
     }

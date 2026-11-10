@@ -294,7 +294,7 @@ internal sealed class SoulLayer
     }
 
     public string Describe() => FormattableString.Invariant(
-        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} reduced={B(Reduced)} hops={Hops} hopSets={HopSetsBuilt} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
+        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} happy={B(Happy)} reduced={B(Reduced)} hops={Hops} hopSets={HopSetsBuilt} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
 
     private void StartBlink()
     {

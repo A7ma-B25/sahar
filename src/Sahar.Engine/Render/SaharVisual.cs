@@ -211,9 +211,13 @@ internal sealed class SaharVisual
     /// <summary>The eyes and mouth showing now (for test checks).</summary>
     public (Eyes Eyes, Mouth Mouth) FaceShown => (_eyes, _mouth);
 
+    /// <summary>Face changes so far (test diagnostics: how often her face swapped in a moment).</summary>
+    public int FaceSwaps { get; private set; }
+
     public void SetFace(Eyes e, Mouth m, TimeSpan fade)
     {
         if (e == _eyes && m == _mouth) return;
+        FaceSwaps++;
         bool eyes = e != _eyes, mouth = m != _mouth;
         (_eyes, _mouth) = (e, m);
         DrawFace(fade, eyes, mouth);
