@@ -13,6 +13,18 @@ public enum SoundLevel { Silent, Light, Full }
 
 public enum SeasonalIcon { Auto, On, Off }
 
+/// <summary>What the menu card's header shows under her line (spec §5): the most urgent fact, the next prayer, or nothing.</summary>
+public enum MenuHeader { Urgent, Prayer, None }
+
+/// <summary>What opens the menu card besides the shortcut (spec §0.6): a double-click, a right-click, or both.</summary>
+public enum MenuOpen { Double, Right, Both }
+
+/// <summary>Where the card opens: beside her, or in the middle of her screen.</summary>
+public enum MenuPlace { Beside, Center }
+
+/// <summary>Light or dark: as Windows apps are, or always one of them.</summary>
+public enum Appearance { System, Light, Dark }
+
 /// <summary>Everything the user can set. Stored in %AppData%\Sahar\settings.json.
 /// Setters, not init: the JSON source generator sets only the keys a file has, so an older file keeps the newer
 /// settings' defaults (with init it wrote 0 and empty for them: the 0.6.0 one-minute prayer reminder).</summary>
@@ -51,4 +63,12 @@ public sealed record SaharSettings
     public SeasonalIcon Seasonal { get; set; } = SeasonalIcon.Auto;
     /// <summary>The little night sky with stars inside her (0.10a); on unless you turn it off.</summary>
     public bool InnerStars { get; set; } = true;
+    /// <summary>The card's items that are on (ids of <c>MenuCatalog.ItemIds</c>); null = every available item (0.11).</summary>
+    public IReadOnlyList<string>? MenuItems { get; set; }
+    public MenuHeader MenuHeader { get; set; } = MenuHeader.Urgent;
+    public MenuOpen MenuOpen { get; set; } = MenuOpen.Right;
+    public MenuPlace MenuPlace { get; set; } = MenuPlace.Beside;
+    /// <summary>The global shortcut that opens the card with the caret in the chat (spec §5).</summary>
+    public string MenuShortcut { get; set; } = "Ctrl+Alt+S";
+    public Appearance Appearance { get; set; } = Appearance.System;
 }

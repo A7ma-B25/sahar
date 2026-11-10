@@ -154,6 +154,32 @@ public sealed class SettingsStoreTests : IDisposable
         File.WriteAllText(PathOf, """{ "innerStars": false }""");
         Assert.False(SettingsStore.Load(PathOf).InnerStars);
     }
+    [Fact]
+    public void OldFile_MenuFieldsDefault()
+    {
+        File.WriteAllText(PathOf, """{ "version": 1, "size": "small", "activity": "calm" }""");
+        var s = SettingsStore.Load(PathOf);
+        Assert.Null(s.MenuItems);
+        Assert.Equal((MenuHeader.Urgent, MenuOpen.Right, MenuPlace.Beside, "Ctrl+Alt+S", Appearance.System),
+            (s.MenuHeader, s.MenuOpen, s.MenuPlace, s.MenuShortcut, s.Appearance));
+    }
+
+    [Fact]
+    public void MenuFields_RoundTrip()
+    {
+        var s = new SaharSettings
+        {
+            MenuItems = ["play", "timer"], MenuHeader = MenuHeader.Prayer, MenuOpen = MenuOpen.Right, MenuPlace = MenuPlace.Center,
+            MenuShortcut = "Ctrl+Alt+K", Appearance = Appearance.Dark,
+        };
+        SettingsStore.Save(PathOf, s);
+        var back = SettingsStore.Load(PathOf);
+        Assert.Equal(["play", "timer"], back.MenuItems!);
+        Assert.Equal((MenuHeader.Prayer, MenuOpen.Right, MenuPlace.Center, "Ctrl+Alt+K", Appearance.Dark),
+            (back.MenuHeader, back.MenuOpen, back.MenuPlace, back.MenuShortcut, back.Appearance));
+        Assert.Contains("\"menuOpen\": \"right\"", File.ReadAllText(PathOf), StringComparison.OrdinalIgnoreCase);   // enums are written as every other one ("Right")
+    }
+
     // ---- Fresh review (2026-11-10) ----
 
     [Theory]
