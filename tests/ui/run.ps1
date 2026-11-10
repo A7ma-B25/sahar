@@ -1869,8 +1869,11 @@ Start-Sleep -Seconds 60
 "@
         try {
             $deadline = (Get-Date).AddSeconds(20)
-            while (-not (Test-Path $marker) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
-            $held = if (Test-Path $marker) { (Get-Content $marker -Raw).Trim() } else { 'no marker' }
+            $held = ''
+            while (-not $held -and (Get-Date) -lt $deadline) {
+                Start-Sleep -Milliseconds 200
+                if (Test-Path $marker) { $held = "$(Get-Content $marker -Raw -ErrorAction SilentlyContinue)".Trim() }
+            }
             Write-Host "    the helper holds Ctrl+Alt+K: $held"
             if ($held -ne 'True') { throw "the helper could not take Ctrl+Alt+K ($held)" }
             Restart-With '{ "helloDone": true, "menuShortcut": "Ctrl+Alt+K" }'
@@ -1879,7 +1882,7 @@ Start-Sleep -Seconds 60
             if ($log -notmatch 'hotkey: taken') { throw 'the log does not say the shortcut was taken' }
             if ((Menu).open -ne 'false') { throw 'debug-menu: unexpected state' }
         }
-        finally { $holder.Kill() }
+        finally { if ($holder -and -not $holder.HasExited) { $holder.Kill() } }
     }
     Step 'nothing visible: the header and the Esc hint, and Esc still closes' {
         Restart-With '{ "helloDone": true, "menuItems": [], "menuHeader": "none" }'
