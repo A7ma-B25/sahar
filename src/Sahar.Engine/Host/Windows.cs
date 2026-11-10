@@ -126,13 +126,13 @@ internal sealed class OverlayWindow : IWindowHandler
     /// <summary>A system setting changed (WM_SETTINGCHANGE): e.g. "Animation effects" on or off.</summary>
     public event Action? SettingChanged;
 
-    public OverlayWindow(bool capturable, RectI initial)
+    public OverlayWindow(bool capturable, RectI initial, bool visible = true, string title = "Sahar")
     {
         Rect = initial;
         Hwnd = Win.Create(this,
             Native.WS_EX_NOREDIRECTIONBITMAP | Native.WS_EX_LAYERED | Native.WS_EX_TRANSPARENT |
             Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE,
-            Native.WS_POPUP | Native.WS_VISIBLE, Win.ToRECT(initial), "Sahar");
+            Native.WS_POPUP | (visible ? Native.WS_VISIBLE : 0), Win.ToRECT(initial), title);
         Native.SetLayeredWindowAttributes(Hwnd, 0, 255, Native.LWA_ALPHA);
         Win.SetCaptureExcluded(Hwnd, !capturable);
     }

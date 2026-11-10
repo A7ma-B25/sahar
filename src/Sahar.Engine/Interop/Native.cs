@@ -204,6 +204,9 @@ internal static unsafe partial class Native
     public const uint WS_EX_NOACTIVATE = 0x08000000;
 
     // ShowWindow / SetWindowPos
+    [DllImport("user32.dll", EntryPoint = "SetWindowTextW", CharSet = CharSet.Unicode)]
+    public static extern int SetWindowText(nint hwnd, string text);
+
     public const int SW_HIDE = 0;
     public const int SW_SHOWNOACTIVATE = 4;
     public const uint SWP_NOSIZE = 0x0001;

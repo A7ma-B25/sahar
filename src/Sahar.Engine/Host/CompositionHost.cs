@@ -30,6 +30,11 @@ internal sealed unsafe class CompositionHost : IDisposable
     private bool _simulateRemoved;
 
     public Compositor Compositor { get; }
+    /// <summary>The first window's target (Root is attached to it at start).</summary>
+    public DesktopWindowTarget Target => _target;
+
+    /// <summary>A target for another window of ours (the overlay's spare, 0.11): empty until a root is attached.</summary>
+    public DesktopWindowTarget AddTarget(nint hwnd) => CreateTarget(Compositor, hwnd);
     public ContainerVisual Root { get; }
     public CompositionGraphicsDevice GraphicsDevice { get; }
     /// <summary>"hardware" or "warp" (software, e.g. CI runners without a GPU).</summary>

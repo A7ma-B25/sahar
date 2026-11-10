@@ -87,7 +87,11 @@ internal sealed unsafe class App
         // DPI follows the monitor holding most (≥ 60 %) of her body; a rescale keeps her body centre in place.
         var monitors = Monitors.All();
         int monitorIndex = -1;
-        var stage = new OverlayStage(overlay, host.Root, monitors.Select(m => m.Bounds).ToList());
+        // A spare overlay window: a need that moves the overlay's corner moves her drawing to it in one commit (0.11).
+        var spareOverlay = new OverlayWindow(_options.Capturable, new RectI(work.Right - 1, work.Bottom - 1, work.Right, work.Bottom),
+            visible: false, title: "Sahar spare");
+        var stage = new OverlayStage(overlay, host.Target, spareOverlay, host.AddTarget(spareOverlay.Hwnd), host.Root,
+            monitors.Select(m => m.Bounds).ToList());
         RectF Canvas() => new(sahar.Position.X, sahar.Position.Y, sahar.CanvasPx.Width, sahar.CanvasPx.Height);
         sahar.Need = (who, area) => stage.Need(who, area);
         void MoveTo(Vector2 position)
@@ -197,11 +201,11 @@ internal sealed unsafe class App
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
             {
-                Native.ShowWindow(overlay.Hwnd, Native.SW_SHOWNOACTIVATE);
+                stage.SetHidden(false);
                 motion.Play(MotionKind.Wake);
             }
         }
-        motion.HiddenAway += () => { if (_state.Hidden) Native.ShowWindow(overlay.Hwnd, Native.SW_HIDE); };
+        motion.HiddenAway += () => { if (_state.Hidden) stage.SetHidden(true); };
         // Fullscreen hides her only on her own monitor (0.10.1); indexes in her monitor list, never titles, in the log.
         director = new Director(ui, key => Express(key, false), SetHidden,
             handle => monitors.FindIndex(m => m.Handle == handle) is var i && i >= 0 ? i : FullscreenScope.UnknownMonitor,
@@ -595,11 +599,11 @@ internal sealed unsafe class App
         if (_options.TestMode)
         {
             pipe.Register("debug-info", _ => new PipeReply(true,
-                $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
+                $"generation={host.Generation} overlayVisible={(stage.Visible ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
-            pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")}"));
+            pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             // Her size for pixel checks (0.11 face stage): a bigger body makes an eye tens of pixels, so two faces show.
             pipe.Register("debug-size", r =>
@@ -813,6 +817,7 @@ internal sealed unsafe class App
         Foreground.Stop();
         Native.DestroyWindow(input.Hwnd);
         Native.DestroyWindow(overlay.Hwnd);
+        Native.DestroyWindow(spareOverlay.Hwnd);
         return code;
     }
 

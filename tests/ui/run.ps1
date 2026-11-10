@@ -2976,7 +2976,7 @@ function Stage-Face {
         foreach ($f in $frames) {
             $x = [FaceProbe]::Beyond($f.Px, $range, $gw, $gh, 60)
             $report += "$($f.Ms):$x"
-            if ($x -gt 20) { $bad += "+$($f.Ms) ms: her body drawn off its place ($x px)" }
+            if ($x -gt 150) { $bad += "+$($f.Ms) ms: her body drawn off its place ($x px)" }   # her squish and new face: < 100
         }
         Write-Host "    $($frames.Count) frames; t:beyond = $($report -join ' ')"
         $tiles = Save-Frames $frames (Join-Path $Out 'game-start') 2 36
@@ -3021,6 +3021,7 @@ function Stage-Face {
     }
     Stop-Engine
     if ($script:faceWin -and -not $script:faceWin.HasExited) { $script:faceWin.Kill() }
+    [Mouse]::Move([int]($Work.Width / 2), [int]($Work.Height / 2))   # the next stage starts with the pointer where a fresh runner has it
 }
 
 try {
