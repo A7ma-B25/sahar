@@ -1,7 +1,29 @@
-سَحَر · Sahar — نسخة تجريبية 0.9.0 (ويندوز)
-============================================
+سَحَر · Sahar — نسخة تجريبية 0.10.0 (ويندوز)
+=============================================
 
-شو الجديد بـ 0.9.0 — الألعاب 🎮
+شو الجديد بـ 0.10.0 — شكلها الجديد وروحها ✨
+-------------------------------------------
+- شكلها الأصلي كلو باقي، ومعو:
+  🌟 النجوم يلي حواليها صار إلها حافة دافية، فبتبيّن حتى فوق الشبابيك البيضا.
+  🌙 سما صغيرة جواتها بأسفلها: لون ليلي ناعم مع ست نجمات بيضا بتلمع ونقاط صغيرة. لونها بيتغيّر مع مزاجها.
+  😊 وجه فرحان: عيون متل الهلال وضحكة كبيرة وخدود أحمر شوي، لما تنط أو تكبس عليها.
+- روحها: كلها بتتحرك متل كائن حي وبالكاد بتصرف من الجهاز —
+  بتطوف لفوق ولتحت، بتتنفّس، بتميل شوي، ورقتها بتتأخر عنها وبترجف بعد النطّة،
+  ولما تكبس عليها بتنط نطّة صغيرة (بتنضغط، بتطلع، بتنزل وبترجّ)، وكل كم ثانية بتنط لحالها أو بتطّلع عالجنب.
+  عيونها بتلحق الماوس إذا قريب (لـ 400 نقطة) وجسمها بيميل شوي لعندو. القمر بيلف حواليها كل 16 ثانية.
+- إذا "تأثيرات الحركة" (Animation effects) طافية بالويندوز: بتوقف كل الحركة وبتضل هادية، والقمر بيرتاح جنبها.
+- 🏃 الحقني صارت بتنمسك: بتتعب مع الوقت، بعد كل هربة بترتاح شوي، ونطّاتها بتقصر. عادة بتمسكها خلال 10–20 ثانية.
+- لما تكون بعيد عن الجهاز (ما في ماوس ولا كيبورد 5 دقايق) ما بتعمل حركات لحالها، حتى لو في أغنية شغالة.
+- السجل (engine.log) صار بيكتب: إطفاء الجهاز أو تسجيل الخروج، النوم والصحيان، إذا المرة الماضية سكّرت بلا خروج طبيعي،
+  وليش اختفت أو رجعت فوق ملء الشاشة. و"life: waiting" ما عاد يتكرر كل شوي.
+- الإعدادات ما بتنحفظ فوق ملف خربان: بيضل نسخة .bad والملف ما بينمسح.
+
+شو جرّب: اكبس عليها؛ قرّب الماوس منها وبعّدو؛ العب «الحقني»؛ طفّي "تأثيرات الحركة" من إعدادات الويندوز
+(إمكانية الوصول ← التأثيرات المرئية) وشوف كيف بتهدى؛ اتركها شوي وشوفها كيف بتنط لحالها.
+بدنا رأيك بشغلتين: (١) علو النطّة — شوف صورة hop-strip.png (8 لحظات من نطّة وحدة)، و(٢) ألوان السما جواتها بكل مزاج —
+شوف 06-moods-sheet.png. الهادي (Calm) متل ما اعتمدناه؛ الـ 15 التانيين اقتراح.
+
+من 0.9.0 — الألعاب 🎮
 -------------------------------
 "العبي" بالقائمة صار فيها:
 - 🏃 الحقني: 45 ثانية، بتهرب من الماوس، وكل ما تكبس عليها بتمسكها نقطة.
@@ -149,10 +171,30 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.9.0 (Windows)
+Sahar — test build 0.10.0 (Windows)
 ==================================
 
-What's new in 0.9.0 — games 🎮
+What's new in 0.10.0 — her new look and her soul ✨
+-------------------------------------------------
+- All of her original look stays, plus: a warm edge on her stars (they read on white windows), a little night sky
+  inside her lower body with six twinkling white stars and dots (it takes her mood's colour), and a happy face
+  (crescent eyes, a big smile, warmer cheeks) when she hops or you tap her.
+- Her soul: she floats, breathes, sways a little, her leaf lags behind and wobbles after a hop; a tap makes her hop
+  (squash, rise, land with a jiggle); every few seconds she hops or glances aside by herself; her eyes follow the
+  mouse within 400 px and she leans toward it. The moon laps her every 16 s. All of it runs on the compositor.
+- With Windows "Animation effects" off she rests completely; the moon rests beside her.
+- 🏃 The chase is catchable: she tires, rests after each dart, and her darts get shorter — usually caught in 10–20 s.
+- Away (no mouse or keyboard for 5 minutes) she does nothing by herself, even with a song playing.
+- engine.log now records shutdown/sign-out, sleep/resume, a previous run that ended without exit, and why she hid
+  or came back over a fullscreen app; "life: waiting" no longer repeats.
+- Settings are never saved over an unreadable file (a .bad copy is kept).
+
+Try: tap her; bring the mouse near and away; play the chase; turn off Windows "Animation effects"
+(Accessibility → Visual effects) and watch her rest; leave her alone a while and see her hop by herself.
+Two things we need your word on: (1) the hop height — see hop-strip.png (eight moments of one hop), and
+(2) the night colours per mood — see 06-moods-sheet.png. Calm is the approved one; the other 15 are a proposal.
+
+From 0.9.0 — games 🎮
 -----------------------------
 "العبي" in her menu now offers: 🏃 chase (45 s, she runs from the pointer, a click catches her), 🙈 hide and seek
 (she hides at an edge with a bit showing, a hint after 20 s, 3 rounds, your average time), ⚽ ball (grab and flick it,
