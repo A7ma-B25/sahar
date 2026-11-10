@@ -90,7 +90,9 @@ internal sealed class GamePlayer : IDisposable
         var p = Native.CursorPos();
         _pointer = new Vector2(p.X, p.Y);
         Log.Write($"game: {kind}");
-        _catcher.Show();
+        var m = Monitor.Bounds;
+        _catcher.Show(new Vector2((m.Left + m.Right) / 2f, (m.Top + m.Bottom) / 2f));
+        _v.Need("game", Work);   // her game is drawn anywhere on its screen's work area
         switch (kind)
         {
             case GameKind.Chase: _limit = seconds ?? Chase.Seconds; StartChase(); break;
@@ -126,6 +128,7 @@ internal sealed class GamePlayer : IDisposable
         Kind = null;
         State = "over";
         _catcher.Hide();
+        _v.Need("game", null);
         try { ClearVisuals(); }
         catch (Exception e) { Log.Write($"game cleanup error: {e.GetType().Name}"); }
         _ballHeld = false;

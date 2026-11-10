@@ -55,6 +55,8 @@ internal sealed class ShowcasePlayer : IDisposable
         _home = _motion.TopLeft;
         Index = Math.Clamp(from, 0, Showcase.Steps.Count - 1) - 1;
         Log.Write($"show: start at {from}");
+        var b = _motion.Body;
+        _v.Need("showcase", Senses.Monitors.At(new System.Numerics.Vector2(b.X + b.Width / 2, b.Y + b.Height / 2)).WorkF);   // her moves span her screen
         RunningChanged?.Invoke(true);
         Advance();
     }
@@ -66,6 +68,7 @@ internal sealed class ShowcasePlayer : IDisposable
         Running = false;
         _next.Stop();
         RemoveCaption();
+        _v.Need("showcase", null);
         _backToBrain();
         if (_motion.Current is MotionKind.Goodbye or MotionKind.FullscreenHide or MotionKind.SleepInCorner or MotionKind.NapOnIcon)
             _motion.Play(MotionKind.Wake);

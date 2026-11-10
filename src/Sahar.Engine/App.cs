@@ -38,7 +38,9 @@ internal sealed unsafe class App
     public int Run()
     {
         var ui = CompositionHost.EnsureDispatcherQueue();
-        var overlay = new OverlayWindow(_options.Capturable);
+        var (_, work, dpi) = Native.MonitorAt(new POINT());
+        // A 1-px placeholder until her first position: the stage sizes the overlay to her (never a whole monitor).
+        var overlay = new OverlayWindow(_options.Capturable, new RectI(work.Right - 1, work.Bottom - 1, work.Right, work.Bottom));
         using var host = new CompositionHost(overlay.Hwnd);
         // Settings: a bad or locked file never stops her (defaults); a failed load also blocks saves (SettingsStore).
         var settingsLog = new Sahar.Core.Diagnostics.OneShot();
@@ -47,11 +49,8 @@ internal sealed unsafe class App
         catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
         Address.You = settings.UserGender;   // her words agree with who she talks to
         Address.Name = settings.UserName;
-        var (_, work, dpi) = Native.MonitorAt(new POINT());
-        var sahar = new SaharVisual(host, Rig.Load(), BodyDip, dpi / 96f)
-        {
-            Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top),
-        };
+        // Overlay coordinates are screen pixels (Origin 0,0): the stage shifts the composition root by the window's place.
+        var sahar = new SaharVisual(host, Rig.Load(), BodyDip, dpi / 96f) { Origin = Vector2.Zero };
         sahar.Position = StartPosition(sahar, work);
         sahar.SetInnerStars(settings.InnerStars);
         // Her soul (0.10a): float, sway, leaf lag, hop, look and blink on the compositor; her original loops beside it.
@@ -88,6 +87,9 @@ internal sealed unsafe class App
         // DPI follows the monitor holding most (≥ 60 %) of her body; a rescale keeps her body centre in place.
         var monitors = Monitors.All();
         int monitorIndex = -1;
+        var stage = new OverlayStage(overlay, host.Root, monitors.Select(m => m.Bounds).ToList());
+        RectF Canvas() => new(sahar.Position.X, sahar.Position.Y, sahar.CanvasPx.Width, sahar.CanvasPx.Height);
+        sahar.Need = stage.Need;
         void MoveTo(Vector2 position)
         {
             sahar.Position = position;
@@ -103,8 +105,10 @@ internal sealed unsafe class App
                 var units = SaharVisual.BodyUnits;
                 sahar.Position = centre - new Vector2(units.X + units.Width / 2, units.Y + units.Height / 2) * sahar.Scale;
             }
-            input.MoveTo(sahar.HitRect);
+            // One batch per move: her input window and the overlay (position only while the size stays).
+            stage.Follow(Canvas(), sahar.DpiScale, input.MoveTo(sahar.HitRect));
         }
+        MoveTo(sahar.Position);   // her monitor, her DPI, and the overlay on her from the first frame
 
         using var ticker = new Ticker();
         Director? director = null;
@@ -158,7 +162,7 @@ internal sealed unsafe class App
         overlay.SettingChanged += () => Safe(() => { if (!_options.TestMode) SetReduced(ReducedMotion.AnimationsOff()); });
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
-        using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
+        using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin) { Need = stage.Need };
         Director? dismissDirector = null;
         Action<bool>? stopShow = null;
         Func<bool> dismissSpeech = () => false;
@@ -527,7 +531,7 @@ internal sealed unsafe class App
             menu.Close();
             monitors = Monitors.All();
             monitorIndex = -1;
-            sahar.Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top);
+            stage.Replan(monitors.Select(m => m.Bounds).ToList());
             MoveTo(sahar.Position);
             motion.DisplayChanged();
             host.CheckDevice();
@@ -585,6 +589,7 @@ internal sealed unsafe class App
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
+            pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")}"));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             pipe.Register("debug-display-changed", _ => { OnDisplayChanged(); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });

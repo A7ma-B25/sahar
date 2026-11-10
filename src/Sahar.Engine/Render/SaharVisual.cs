@@ -170,7 +170,10 @@ internal sealed class SaharVisual
         DrawFace(TimeSpan.Zero);
     }
 
-    /// <summary>Top-left of the overlay window in screen pixels (the virtual screen origin).</summary>
+    /// <summary>An area (screen pixels) a feature draws in while it runs — the overlay grows to it; null when it ends.</summary>
+    public Action<string, RectF?> Need { get; set; } = (_, _) => { };
+
+    /// <summary>Screen point of overlay coordinate 0,0 (0,0 since 0.10.1: overlay coordinates are screen pixels).</summary>
     public Vector2 Origin
     {
         get => _origin;

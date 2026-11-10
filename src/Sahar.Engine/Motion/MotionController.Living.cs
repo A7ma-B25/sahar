@@ -348,6 +348,7 @@ internal sealed partial class MotionController
             _butterfly.Shapes.Add(sh);
         }
         _v.Host.Root.Children.InsertAtTop(_butterfly);
+        _v.Need("butterfly", work);   // it flutters across her screen
         var flap = IdleAnimations.Loop3(c, 0.25, (0f, Vector3.One), (0.5f, new Vector3(0.35f, 1, 1)), (1f, Vector3.One));
         _butterfly.StartAnimation("Scale", flap);
 
@@ -384,6 +385,7 @@ internal sealed partial class MotionController
     {
         if (_butterfly is null) return;
         _v.Host.Root.Children.Remove(_butterfly);
+        _v.Need("butterfly", null);
         _butterfly.Dispose();
         _butterfly = null;
     }

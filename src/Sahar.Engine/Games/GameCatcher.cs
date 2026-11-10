@@ -4,7 +4,8 @@ using Sahar.Engine.Host;
 namespace Sahar.Engine.Games;
 
 /// <summary>
-/// While a game runs: an invisible window over the whole virtual screen (no redirection bitmap, nothing drawn) that
+/// While a game runs: an invisible window over the game's monitor, 1 px short of each edge (never a whole monitor: the
+/// shell would take it for a fullscreen app), with no redirection bitmap and nothing drawn, that
 /// takes the mouse for the game — press, move, release (captured, so a flick can leave the window) — and ends the
 /// game on Esc, a right-click, or another window becoming active.
 /// </summary>
@@ -21,15 +22,16 @@ internal sealed class GameCatcher : IWindowHandler
 
     public GameCatcher(bool capturable)
     {
-        _bounds = Native.VirtualScreen();
+        _bounds = Win.MonitorInset(Vector2.Zero);
         Hwnd = Win.Create(this, Native.WS_EX_NOREDIRECTIONBITMAP | Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW,
             Native.WS_POPUP, _bounds, "Sahar game");
         Win.SetCaptureExcluded(Hwnd, !capturable);
     }
 
-    public void Show()
+    /// <summary>Shows it over the monitor at <paramref name="at"/> (the game's monitor).</summary>
+    public void Show(Vector2 at)
     {
-        _bounds = Native.VirtualScreen();
+        _bounds = Win.MonitorInset(at);
         Native.SetWindowPos(Hwnd, Native.HWND_TOPMOST, _bounds.Left, _bounds.Top, _bounds.Right - _bounds.Left,
             _bounds.Bottom - _bounds.Top, 0);
         Visible = true;

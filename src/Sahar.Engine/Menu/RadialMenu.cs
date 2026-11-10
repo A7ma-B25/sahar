@@ -26,6 +26,8 @@ internal sealed class RadialMenu : IDisposable
     public Func<bool> DndOn { get; set; } = () => false;
     public Func<bool> QuranPlaying { get; set; } = () => false;
     public Func<ActivityLevel> Level { get; set; } = () => ActivityLevel.Medium;
+    /// <summary>The area her buttons are drawn in (screen pixels; null when closed): the overlay grows to it.</summary>
+    public Action<string, RectF?> Need { get; set; } = (_, _) => { };
 
     public bool IsOpen { get; private set; }
     /// <summary>"main", or the id whose second ring is showing.</summary>
@@ -59,7 +61,8 @@ internal sealed class RadialMenu : IDisposable
         if (IsOpen) return;
         IsOpen = true;
         Show("main", MenuItems.Main);
-        _catcher.Show();
+        var body = _body();
+        _catcher.Show(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2));
         Log.Write("menu: open");
         OpenChanged?.Invoke(true);
     }
@@ -71,6 +74,7 @@ internal sealed class RadialMenu : IDisposable
         _catcher.Hide();
         _visual.Clear();
         Slots = [];
+        Need("menu", null);
         _hovered = null;
         Log.Write("menu: closed");
         OpenChanged?.Invoke(false);
@@ -98,8 +102,23 @@ internal sealed class RadialMenu : IDisposable
         var body = _body();
         var monitor = Monitors.At(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2));
         Slots = RadialLayout.Place(items, body, monitor.WorkF, monitor.DpiScale);
+        Need("menu", Area(Slots, monitor.DpiScale));
         _visual.Show(items, Slots, monitor.DpiScale, _origin());
         _hovered = null;
+    }
+
+    /// <summary>Her buttons with their labels, the hover ring and the pop (115 %), with room to spare.</summary>
+    private static RectF? Area(IReadOnlyList<ButtonSlot> slots, float dpi)
+    {
+        if (slots.Count == 0) return null;
+        float pad = 24 * dpi, l = float.MaxValue, t = float.MaxValue, r = float.MinValue, b = float.MinValue;
+        foreach (var s in slots)
+        {
+            var w = MathF.Max(MenuVisual.LabelWidthDip * dpi / 2, s.Radius);
+            l = MathF.Min(l, s.Centre.X - w); r = MathF.Max(r, s.Centre.X + w);
+            t = MathF.Min(t, s.Centre.Y - s.Radius); b = MathF.Max(b, MathF.Max(s.Label.Bottom, s.Centre.Y + s.Radius));
+        }
+        return new RectF(l - pad, t - pad, r - l + 2 * pad, b - t + 2 * pad);
     }
 
     private ButtonSlot? Hit(Vector2 p) => RadialLayout.HitTest(Slots, p) is { } id ? Slots.First(s => s.Id == id) : null;

@@ -207,6 +207,7 @@ internal static unsafe partial class Native
     public const int SW_HIDE = 0;
     public const int SW_SHOWNOACTIVATE = 4;
     public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
     public static readonly nint HWND_TOPMOST = -1;
 
@@ -266,6 +267,15 @@ internal static unsafe partial class Native
 
     [LibraryImport("user32.dll")]
     public static partial int SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint BeginDeferWindowPos(int count);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint DeferWindowPos(nint batch, nint hwnd, nint after, int x, int y, int w, int h, uint flags);
+
+    [LibraryImport("user32.dll")]
+    public static partial int EndDeferWindowPos(nint batch);
 
     [LibraryImport("user32.dll")]
     public static partial int SetLayeredWindowAttributes(nint hwnd, uint key, byte alpha, uint flags);
