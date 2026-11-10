@@ -193,7 +193,10 @@ internal sealed unsafe class LifeDirector : IDisposable
 
         // Away: she naps in the corner and wakes when you are back.
         bool away = Away();
-        if (away && !_sleepingForAway && Resting && !_director.Hidden)
+        // Listening to the Quran without touching the PC is not being away for her face: no nap, no sleepy face —
+        // but still none of her own actions.
+        bool listening = QuranOn();
+        if (away && !listening && !_sleepingForAway && Resting && !_director.Hidden)
         {
             _sleepingForAway = true;
             _motion.Play(_rng.Next(2) == 0 ? MotionKind.SleepInCorner : MotionKind.NapOnIcon);   // corner, or her favourite icon
@@ -206,7 +209,7 @@ internal sealed unsafe class LifeDirector : IDisposable
             Schedule(now);
             return;
         }
-        if (_sleepingForAway) { Waiting("you are away"); return; }
+        if (_sleepingForAway || away) { Waiting("you are away"); return; }
         if (now < _due) { Waiting($"next turn at {_due.ToLocalTime():HH:mm:ss}"); return; }
 
         // A late-night nap she chose herself ends at her next turn.
