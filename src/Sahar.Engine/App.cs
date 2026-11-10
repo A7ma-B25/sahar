@@ -40,12 +40,19 @@ internal sealed unsafe class App
         var ui = CompositionHost.EnsureDispatcherQueue();
         var overlay = new OverlayWindow(_options.Capturable);
         using var host = new CompositionHost(overlay.Hwnd);
+        // Settings: a bad or locked file never stops her (defaults).
+        var settings = new SaharSettings();
+        try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
+        catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
+        Address.You = settings.UserGender;   // her words agree with who she talks to
+        Address.Name = settings.UserName;
         var (_, work, dpi) = Native.MonitorAt(new POINT());
         var sahar = new SaharVisual(host, Rig.Load(), BodyDip, dpi / 96f)
         {
             Origin = new Vector2(overlay.Bounds.Left, overlay.Bounds.Top),
         };
         sahar.Position = StartPosition(sahar, work);
+        sahar.SetInnerStars(settings.InnerStars);
         IdleAnimations.Start(sahar);
         var player = new ExpressionPlayer(sahar);
         sahar.Rescaled += () =>
@@ -173,12 +180,6 @@ internal sealed unsafe class App
         var listBubble = new ListBubble(_options.Capturable);
         sahar.Rescaled += () => Safe(timerTool.Redraw);
         host.DeviceLost += () => Safe(() => { timerTool.Redraw(); menu.DeviceLost(); });
-        // Settings: a bad or locked file never stops her (defaults).
-        var settings = new SaharSettings();
-        try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
-        catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
-        Address.You = settings.UserGender;   // her words agree with who she talks to
-        Address.Name = settings.UserName;
         using var tray = new Tray { Activity = settings.Activity };
         void SetActivity(ActivityLevel level)
         {
@@ -546,7 +547,7 @@ internal sealed unsafe class App
         {
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
-                FormattableString.Invariant($"faceOffsetX={sahar.Face.Container.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
+                FormattableString.Invariant($"faceOffsetX={sahar.FaceGroup.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
@@ -709,7 +710,7 @@ internal sealed unsafe class App
                 return new PipeReply(true, lifeDirector.Describe());
             });
             pipe.Register("debug-foreground", _ => new PipeReply(false, FullscreenWatcher.Describe()));
-            pipe.Register("debug-presence", _ => new PipeReply(false, idle.Describe()));
+            pipe.Register("debug-presence", _ => new PipeReply(true, idle.Describe()));
             pipe.Register("debug-tray", _ => tray.IconRect() is { } r
                 ? new PipeReply(true, State: _state.Snapshot() with { X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top })
                 : new PipeReply(false, "tray icon unknown to Explorer"));
