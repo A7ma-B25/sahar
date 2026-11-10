@@ -54,7 +54,11 @@ internal sealed unsafe class App
         sahar.Position = StartPosition(sahar, work);
         sahar.SetInnerStars(settings.InnerStars);
         // Her soul (0.10a): float, sway, leaf lag, hop, look and blink on the compositor; her original loops beside it.
-        var soul = new SoulLayer(sahar);
+        var soul = new SoulLayer(sahar, ui);
+        // Windows "Animation effects" off: no idle motion, instant state changes (spec §2).
+        soul.SetReducedMotion(ReducedMotion.AnimationsOff());
+        ExpressionPlayer.Reduced = soul.Reduced;
+        if (soul.Reduced) Log.Write("motion: reduced on");
         IdleAnimations.Start(sahar, soul.Reduced);
         soul.Start();
         var player = new ExpressionPlayer(sahar, soul);
@@ -139,6 +143,16 @@ internal sealed unsafe class App
         soul.Motion = () => motion.Current;
         soul.Still = () => motion.Still;
         soul.Grounded = () => player.Current.Extras.HasFlag(Sahar.Core.Expressions.Extras.Grounded);
+        soul.CurrentFace = () => (player.Current.Eyes, player.Current.Mouth);
+        void SetReduced(bool on)
+        {
+            if (on == soul.Reduced) return;
+            soul.SetReducedMotion(on);
+            ExpressionPlayer.Reduced = on;
+            IdleAnimations.Start(sahar, on);
+            Log.Write($"motion: reduced {(on ? "on" : "off")}");
+        }
+        overlay.SettingChanged += () => Safe(() => SetReduced(ReducedMotion.AnimationsOff()));
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
@@ -158,6 +172,8 @@ internal sealed unsafe class App
             if (dismissDirector?.CurrentKey == "reminder") dismissDirector.End(EventKind.Reminder);
             Express("poked", true);
             life?.OnPoked();
+            // Expression first, hop second: her joy face lands on top of "poked" (a hop shows it itself).
+            if (!soul.Hop(1f)) soul.HappyFace();
         }, () =>
         {
             if (_state.Hidden || motion.Current is MotionKind.Drag or MotionKind.Throw) return;
@@ -440,6 +456,12 @@ internal sealed unsafe class App
         motion.DragStarted += () => Safe(() => show.Stop(flyHome: false));
         stopShow = flyHome => show.Stop(flyHome);
         showRunning = () => show.Running;
+        // Now and then, at rest, a small hop or a glance aside (spec §4); never while you are away (0.10a pre-flight ruling).
+        using var soulDirector = new SoulDirector(ui, soul, () => motion.Current is MotionKind.Hover or MotionKind.EyesFollow
+            && !menu.IsOpen && !show.Running && !games.Running && !_state.Hidden && !Sulking() && !idle.Away)
+        {
+            Enabled = !_options.TestMode,
+        };
         var playRng = new Random();
         menu.Pressed += id => Safe(() =>
         {
@@ -728,6 +750,17 @@ internal sealed unsafe class App
                 return new PipeReply(true, $"hopped={(hopped ? "true" : "false")} " + soul.Describe());
             });
             pipe.Register("debug-soul", _ => new PipeReply(true, soul.Describe()));
+            pipe.Register("soul-idle", r =>
+            {
+                if (r.Args?.TryGetValue("gap", out _) == true) soulDirector.GapOverride = TimeSpan.FromSeconds(Arg(r, "gap"));
+                if (r.Args?.TryGetValue("on", out var on) == true) soulDirector.Enabled = on == "true";
+                return new PipeReply(true, soulDirector.Describe());
+            });
+            pipe.Register("debug-reduced-motion", r =>
+            {
+                SetReduced(r.Args?.TryGetValue("on", out var on) == true && on == "true");
+                return new PipeReply(true, soul.Describe());
+            });
             pipe.Register("debug-soul-freeze", r =>
             {
                 static double? Num(PipeRequest r, string k) => r.Args?.TryGetValue(k, out var v) == true

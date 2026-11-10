@@ -255,6 +255,9 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial void PostQuitMessage(int code);
 
+    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")]
+    public static partial int SystemParametersInfo(uint action, uint param, void* value, uint winIni);
+
     [LibraryImport("user32.dll")]
     public static partial int DestroyWindow(nint hwnd);
 

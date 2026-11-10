@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
+using Sahar.Core.Expressions;
 using Sahar.Core.Motion;
+using Windows.System;
 using Windows.UI.Composition;
 
 namespace Sahar.Engine.Render;
@@ -20,11 +22,19 @@ internal sealed class SoulLayer
     private float _hopPower = 1f;
     private AnimationController? _floatClock, _hopClock;
     private double? _frozenFloat, _frozenHop;
+    private readonly DispatcherQueueTimer? _happyTimer;
 
-    public SoulLayer(SaharVisual v)
+    public SoulLayer(SaharVisual v, DispatcherQueue? ui = null)
     {
         _v = v;
         _c = v.Root.Compositor;
+        if (ui != null)
+        {
+            _happyTimer = ui.CreateTimer();
+            _happyTimer.IsRepeating = false;
+            _happyTimer.Interval = TimeSpan.FromSeconds(SoulMath.HappySeconds);
+            _happyTimer.Tick += (_, _) => EndHappy();
+        }
         Props = _c.CreatePropertySet();
         Props.InsertScalar("t", 0f);
         Props.InsertScalar("kick", 0f);
@@ -48,6 +58,31 @@ internal sealed class SoulLayer
     /// <summary>Raised when a hop starts (the player stops a running squish: the hop is the squish).</summary>
     public event Action? HopStarted;
 
+    /// <summary>The face her expression wants now (read when the joy face ends, so the newest one wins).</summary>
+    public Func<(Eyes Eyes, Mouth Mouth)> CurrentFace { get; set; } = () => (Eyes.Open, Mouth.Smile);
+    public bool Happy { get; private set; }
+
+    /// <summary>Her joy face (spec L4) for 1.1 s: up-arc eyes, a big smile, warmer blush; then her own face again.</summary>
+    public void HappyFace()
+    {
+        Happy = true;
+        _v.SetFace(Eyes.Joy, Mouth.Joy, ExpressionPlayer.Fade);
+        _v.BlushLayer.Container.Opacity = 1f;
+        _happyTimer?.Stop();
+        _happyTimer?.Start();
+    }
+
+    /// <summary>Ends the joy face now (its time is up, or a new expression arrived: the newest face wins).</summary>
+    public void EndHappy()
+    {
+        _happyTimer?.Stop();
+        if (!Happy) return;
+        Happy = false;
+        _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
+        var (e, m) = CurrentFace();
+        _v.SetFace(e, m, ExpressionPlayer.Fade);
+    }
+
     /// <summary>(Re)builds every animation from the current pixel scale: after construction, a size or DPI change,
     /// and device loss. A hop in flight is cut to rest.</summary>
     public void Start()
@@ -65,6 +100,7 @@ internal sealed class SoulLayer
         _floatClock = _c.CreateAnimationController();
         Props.StartAnimation("t", clock, _floatClock);
         if (_frozenFloat is { } ft) { _floatClock.Pause(); _floatClock.Progress = (float)(ft / SoulMath.LoopSeconds); }
+        else if (Reduced) { _floatClock.Pause(); _floatClock.Progress = 0; }   // reduced motion: the clock (and leaf) rests
 
         // The leaf: lag behind the float, the hop's kick, and a little counter-lean (it reads the lean container).
         var leaf = Expr($"{F(SoulMath.LeafDeg)} * Sin(p.t * {F(w)} - {F(SoulMath.LeafLag)}) + p.kick - {F(SoulMath.LeafLeanDeg / SoulMath.LeanDeg)} * ln.RotationAngleInDegrees");
@@ -135,6 +171,7 @@ internal sealed class SoulLayer
         Hops++;
         PlayHop(power, null);
         HopStarted?.Invoke();
+        HappyFace();
         return true;
     }
 
@@ -213,7 +250,7 @@ internal sealed class SoulLayer
     }
 
     public string Describe() => FormattableString.Invariant(
-        $"floating={B(Floating)} hopping={B(Hopping)} reduced={B(Reduced)} hops={Hops} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
+        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} reduced={B(Reduced)} hops={Hops} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
 
     private void StartBlink()
     {

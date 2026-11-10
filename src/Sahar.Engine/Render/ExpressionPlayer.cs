@@ -11,7 +11,9 @@ namespace Sahar.Engine.Render;
 /// </summary>
 internal sealed class ExpressionPlayer
 {
-    public static readonly TimeSpan Fade = TimeSpan.FromMilliseconds(250);
+    /// <summary>Windows "Animation effects" off: state changes are instant (spec §2).</summary>
+    public static bool Reduced { get; set; }
+    public static TimeSpan Fade => Reduced ? TimeSpan.Zero : TimeSpan.FromMilliseconds(250);
     public const float GroundedDip = 12f;
     public const float ShiverDip = 2f;
 
@@ -44,6 +46,7 @@ internal sealed class ExpressionPlayer
     {
         bool orbChanged = p.OrbGlyph != Current.OrbGlyph || p.OrbTop != Current.OrbTop;
         Current = p;
+        _soul.EndHappy();   // a new expression replaces the joy face at once (newest wins)
         _v.SetMood(p.Mood, Fade);
         _v.SetFace(p.Eyes, p.Mouth, Fade);
         if (orbChanged) ShowOrb(fade: true);

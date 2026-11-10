@@ -96,6 +96,8 @@ internal sealed class OverlayWindow : IWindowHandler
     public nint Hwnd { get; }
     public RECT Bounds { get; private set; }
     public event Action? DisplayChanged;
+    /// <summary>A system setting changed (WM_SETTINGCHANGE): e.g. "Animation effects" on or off.</summary>
+    public event Action? SettingChanged;
 
     public OverlayWindow(bool capturable)
     {
@@ -120,6 +122,7 @@ internal sealed class OverlayWindow : IWindowHandler
             case Native.WM_SETTINGCHANGE:
                 FitVirtualScreen();
                 DisplayChanged?.Invoke();
+                if (msg == Native.WM_SETTINGCHANGE) SettingChanged?.Invoke();
                 return null;
             default:
                 return null;

@@ -738,6 +738,86 @@ function Stage-Motion {
         $st = State
         if ($st.expression -ne 'poked') { throw "expression after click is '$($st.expression)'" }
     }
+    Step 'a tap hops with her joy face' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Start-Sleep -Milliseconds 900   # past the hop cooldown
+        $st = State
+        $xy = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $hops = [int](Kv 'debug-soul').hops
+        & agent-desktop --headed mouse-click --xy $xy | Out-Null
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        do { $face = (Info).face } while ($face -ne 'Joy/Joy' -and $sw.ElapsedMilliseconds -lt 800)
+        if ((State).expression -ne 'poked') { throw "expression after the tap: $((State).expression)" }
+        if ($face -ne 'Joy/Joy') { throw "face right after the tap: $face" }
+        if ([int](Kv 'debug-soul').hops -ne $hops + 1) { throw 'the tap did not hop' }
+        Start-Sleep -Milliseconds 1600
+        $face = (Info).face
+        if ($face -notin @('Happy/Grin', 'Open/Smile')) { throw "face after the joy: $face" }
+        [Mouse]::Move(5, 5)
+    }
+    Step 'the joy face gives way to the newest expression' {
+        Start-Sleep -Milliseconds 2000
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"soul-hop","args":{"power":"1"}}'
+        if ($r.error -notmatch 'hopped=true') { throw "no hop: $($r.error)" }
+        Start-Sleep -Milliseconds 300
+        Post 'timer.done' | Out-Null
+        Start-Sleep -Milliseconds 1500
+        $face = (Info).face
+        if ($face -ne 'Open/O') { throw "face after the joy and a timer: $face" }
+        $st = State
+        & agent-desktop --headed mouse-click --xy ('{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)) | Out-Null
+        Start-Sleep -Milliseconds 600
+        [Mouse]::Move(5, 5)
+    }
+    Step 'she acts by herself now and then' {
+        Start-Sleep -Milliseconds 1800
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        $r = Kv 'soul-idle'
+        $before = [int]$r.acts
+        Send '{"type":"cmd","name":"soul-idle","args":{"on":"true","gap":"1"}}' | Out-Null
+        $deadline = (Get-Date).AddSeconds(6)
+        do { Start-Sleep -Milliseconds 500; $acts = [int](Kv 'soul-idle').acts } while ($acts -le $before -and (Get-Date) -lt $deadline)
+        Send '{"type":"cmd","name":"soul-idle","args":{"on":"false"}}' | Out-Null
+        if ($acts -le $before) { throw 'no own act in 6 s with a 1 s gap' }
+    }
+    Step 'reduced motion stops her idle motion' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        $r = Send '{"type":"cmd","name":"debug-reduced-motion","args":{"on":"true"}}'
+        if ($r.error -notmatch 'reduced=true' -or $r.error -notmatch 'floating=false') { throw "not reduced: $($r.error)" }
+        try {
+            Start-Sleep -Milliseconds 600
+            $st = State
+            $a = [System.Drawing.Bitmap]::new((Screenshot 'reduced-a.png'))
+            Start-Sleep -Milliseconds 1000
+            $b = [System.Drawing.Bitmap]::new((Screenshot 'reduced-b.png'))
+            try {
+                $u = $st.width / 160
+                $points = @(
+                    @([int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)),                 # body centre
+                    @([int]($st.x + (152 + 30 - 70) * $u), [int]($st.y + (8 + 30 - 88) * $u + 3)),  # leaf tip
+                    @([int]($st.x + (262 - 70) * $u), [int]($st.y + (150 - 88) * $u)))              # where the moon rests
+                foreach ($p in $points) {
+                    $pa = $a.GetPixel($p[0], $p[1]); $pb = $b.GetPixel($p[0], $p[1])
+                    if ([math]::Abs($pa.R - $pb.R) -gt 3 -or [math]::Abs($pa.G - $pb.G) -gt 3 -or [math]::Abs($pa.B - $pb.B) -gt 3) {
+                        throw "pixel ($($p[0]),$($p[1])) moved under reduced motion: $($pa.R),$($pa.G),$($pa.B) -> $($pb.R),$($pb.G),$($pb.B)"
+                    }
+                }
+            }
+            finally { $a.Dispose(); $b.Dispose() }
+            Start-Sleep -Milliseconds 900
+            & agent-desktop --headed mouse-click --xy ('{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)) | Out-Null
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            do { $face = (Info).face } while ($face -ne 'Joy/Joy' -and $sw.ElapsedMilliseconds -lt 800)
+            if ($face -ne 'Joy/Joy') { throw "no joy face on a tap under reduced motion: $face" }
+            if ((Kv 'debug-soul').hopping -ne 'false') { throw 'she hopped under reduced motion' }
+        }
+        finally {
+            $r = Send '{"type":"cmd","name":"debug-reduced-motion","args":{"on":"false"}}'
+            [Mouse]::Move(5, 5)
+        }
+        if ($r.error -notmatch 'floating=true') { throw "not floating again: $($r.error)" }
+    }
     Step 'dragging her' {
         Start-Sleep -Milliseconds 1800
         $st = State
