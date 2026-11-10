@@ -652,7 +652,7 @@ function Stage-Motion {
         $dir = Join-Path $Out 'hop-strip'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
         $times = @(0, 0.045, 0.15, 0.29, 0.45, 0.6, 0.8, 1.1)
         $rises = @(); $tiles = @()
-        $size = [int]($st.width * 2.1)
+        $size = [int]($st.width * 2.4)   # her whole hop fits: leaf at the peak to the shadow
         try {
             Soul-Freeze '"floatT":"0","hopT":"0"' | Out-Null; Start-Sleep -Milliseconds 300
             $rest = $null
@@ -665,7 +665,7 @@ function Stage-Motion {
                 if ($null -eq $rest) { $rest = $edge }
                 $rises += [math]::Round(($rest - $edge) / $dpi, 1)
                 $tile = Join-Path $dir ('{0:000}.png' -f [int]($t * 1000))
-                Crop $path ([int]($st.x + $st.width / 2)) ([int]($st.y + $st.height / 2 - $st.height * 0.25)) $size $tile
+                Crop $path ([int]($st.x + $st.width / 2)) ([int]($st.y + $st.height * 0.1)) $size $tile
                 $tiles += $tile
             }
             # The strip for the owner: eight moments of one hop, left to right.
