@@ -2092,6 +2092,8 @@ function Stage-Prayer {
         $roaming = Join-Path $env:APPDATA 'Sahar'
         New-Item -ItemType Directory -Force -Path $roaming | Out-Null
         Remove-Item (Join-Path $roaming 'data-version') -ErrorAction SilentlyContinue
+        # Old test builds' data: no settings saved by this version (an earlier stage in the same job may have saved some).
+        Remove-Item (Join-Path $roaming 'settings.json') -ErrorAction SilentlyContinue
         '["old note"]' | Set-Content (Join-Path $roaming 'notes.json')
         'x' | Set-Content (Join-Path $roaming 'clip-old.bmp')
         Start-Engine
