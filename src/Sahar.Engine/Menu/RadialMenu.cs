@@ -27,7 +27,7 @@ internal sealed class RadialMenu : IDisposable
     public Func<bool> QuranPlaying { get; set; } = () => false;
     public Func<ActivityLevel> Level { get; set; } = () => ActivityLevel.Medium;
     /// <summary>The area her buttons are drawn in (screen pixels; null when closed): the overlay grows to it.</summary>
-    public Action<string, RectF?> Need { get; set; } = (_, _) => { };
+    public Action<string, RectF?, Action?> Need { get; set; } = (_, _, then) => then?.Invoke();
 
     public bool IsOpen { get; private set; }
     /// <summary>"main", or the id whose second ring is showing.</summary>
@@ -74,7 +74,7 @@ internal sealed class RadialMenu : IDisposable
         _catcher.Hide();
         _visual.Clear();
         Slots = [];
-        Need("menu", null);
+        Need("menu", null, null);
         _hovered = null;
         Log.Write("menu: closed");
         OpenChanged?.Invoke(false);
@@ -101,10 +101,16 @@ internal sealed class RadialMenu : IDisposable
         _items = items;
         var body = _body();
         var monitor = Monitors.At(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2));
-        Slots = RadialLayout.Place(items, body, monitor.WorkF, monitor.DpiScale);
-        Need("menu", Area(Slots, monitor.DpiScale));
-        _visual.Show(items, Slots, monitor.DpiScale, _origin());
+        var slots = RadialLayout.Place(items, body, monitor.WorkF, monitor.DpiScale);
+        Slots = slots;
         _hovered = null;
+        _visual.Clear();
+        // Drawn and popped only once the overlay holds their area (0.11: never at a stale window).
+        Need("menu", Area(slots, monitor.DpiScale), () =>
+        {
+            if (!IsOpen || Slots != slots) return;
+            _visual.Show(items, slots, monitor.DpiScale, _origin());
+        });
     }
 
     /// <summary>Her buttons with their labels, the hover ring and the pop (115 %), with room to spare.</summary>

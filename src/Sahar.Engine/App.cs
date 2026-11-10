@@ -89,7 +89,7 @@ internal sealed unsafe class App
         int monitorIndex = -1;
         var stage = new OverlayStage(overlay, host.Root, monitors.Select(m => m.Bounds).ToList());
         RectF Canvas() => new(sahar.Position.X, sahar.Position.Y, sahar.CanvasPx.Width, sahar.CanvasPx.Height);
-        sahar.Need = stage.Need;
+        sahar.Need = (who, area) => stage.Need(who, area);
         void MoveTo(Vector2 position)
         {
             sahar.Position = position;

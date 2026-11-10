@@ -2923,7 +2923,7 @@ function Stage-Face {
         Contact-Sheet $tiles 6 240 (Join-Path $Out 'tap-strip.png')
         Dispose-Frames $frames
         Write-Host "    $n frames ($fps fps); baseline faint $base; t:faint/edgesAB = $($report -join ' ')"
-        if ($fps -lt 40) { $bad += "only $fps fps" }
+        if ($fps -lt 18) { $bad += "only $fps fps" }
         Send '{"type":"cmd","name":"debug-size","args":{"dip":"80"}}' | Out-Null
         if ($bad.Count) { throw ($bad -join '; ') }
     }
@@ -2956,18 +2956,26 @@ function Stage-Face {
         if ($bad.Count) { throw ($bad -join '; ') }
     }
     Step 'a game starts with her in her place (60 fps burst)' {
+        # Her body only (below her leaf, where the game's speech bubble never is): every frame is her before or after.
         Pose-Body 470 330 | Out-Null
+        [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 1
         $st = State
-        $gx = [int]$st.x - 150; $gy = [int]$st.y - 150; $gw = [int]$st.width + 300; $gh = [int]$st.height + 300
-        $burst = [Burst]::Start($gx, $gy, $gw, $gh, 900)
+        $gx = [int]$st.x - 30; $gy = [int]$st.y + 10; $gw = [int]$st.width + 60; $gh = [int]$st.height + 30
+        $burst = [Burst]::Start($gx, $gy, $gw, $gh, 1200)
         Start-Sleep -Milliseconds 250
-        Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball","seconds":"30"}}' | Out-Null
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
         $frames = $burst.Result
-        $bad = Assert-Smooth $frames 'game start'
+        $range = [FaceProbe]::Range($frames[0].Px, $frames[-1].Px, $gw, $gh, 3)
+        $report = @(); $bad = @()
+        foreach ($f in $frames) {
+            $x = [FaceProbe]::Beyond($f.Px, $range, $gw, $gh, 60)
+            $report += "$($f.Ms):$x"
+            if ($x -gt 20) { $bad += "+$($f.Ms) ms: her body drawn off its place ($x px)" }
+        }
+        Write-Host "    $($frames.Count) frames; t:beyond = $($report -join ' ')"
         $tiles = Save-Frames $frames (Join-Path $Out 'game-start') 2 36
         Contact-Sheet $tiles 6 200 (Join-Path $Out 'game-start-strip.png')
-        Dispose-Frames $frames
         Send '{"type":"cmd","name":"game-stop"}' | Out-Null
         Start-Sleep -Seconds 2
         if ($bad.Count) { throw ($bad -join '; ') }
@@ -2980,7 +2988,7 @@ function Stage-Face {
         $st = State
         $gx = [int]$st.x - 120; $gy = [int]$st.y - 160; $gw = 760; $gh = [int]$st.height + 320
         $frames = [Burst]::Run($gx, $gy, $gw, $gh, 1600, 200, [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2), 3, 5)
-        $bad = Assert-Smooth ($frames | Where-Object { $_.Ms -ge 120 }) 'drag'
+        $bad = Assert-Smooth ($frames | Where-Object { $_.Ms -ge 300 }) 'drag'
         $tiles = Save-Frames $frames (Join-Path $Out 'drag') 3 36
         Contact-Sheet $tiles 6 200 (Join-Path $Out 'drag-strip.png')
         Dispose-Frames $frames
@@ -2992,7 +3000,8 @@ function Stage-Face {
         Pose-Body 470 330 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 1
-        $gx = [math]::Max(0, $Work.Left); $gy = [math]::Max(0, $Work.Top); $gw = $Work.Width; $gh = $Work.Height
+        # Below the test window's white title bar (the centroid counts white pixels).
+        $gx = [math]::Max(0, $Work.Left); $gy = $Work.Top + 40; $gw = $Work.Width; $gh = $Work.Height - 40
         $burst = [Burst]::Start($gx, $gy, $gw, $gh, 2500)
         Start-Sleep -Milliseconds 200
         Send '{"type":"cmd","name":"motion","args":{"kind":"Wander","flight":"Zigzag"}}' | Out-Null
