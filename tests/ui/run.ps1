@@ -1876,12 +1876,15 @@ function Stage-Menu {
     Step 'a taken shortcut is refused, and she carries on' {
         $marker = Join-Path $env:TEMP 'sahar-hotkey-holder.txt'
         Remove-Item $marker -ErrorAction SilentlyContinue
-        $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-Command', @"
+        # A script file: a -Command line with quotes in it is mangled on its way through Start-Process.
+        $script = Join-Path $env:TEMP 'sahar-hotkey-holder.ps1'
+        Set-Content -Path $script -Encoding UTF8 -Value @"
 Add-Type -TypeDefinition 'public static class HK { [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool RegisterHotKey(System.IntPtr h, int id, uint m, uint vk); }'
 `$ok = [HK]::RegisterHotKey([System.IntPtr]::Zero, 7, 3, 0x4B)
 Set-Content -Path '$marker' -Value `$ok
 Start-Sleep -Seconds 60
 "@
+        $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-File', $script
         try {
             $deadline = (Get-Date).AddSeconds(20)
             $held = ''
