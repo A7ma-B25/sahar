@@ -2722,7 +2722,7 @@ function Stage-Shell {
 # The owner's glitch reports on 0.10.1 (0.11): two faces at once, things in the menu flashing in the wrong place, her
 # drawing jumping while she moves. Burst grabs whole frames at screen rate in C# (PowerShell loops reach ~17 fps) and can
 # act at a moment: a left or right click, or a drag that moves the cursor a fixed step per frame.
-Add-Type -ReferencedAssemblies System.Drawing, System.Drawing.Primitives -TypeDefinition @"
+Add-Type -ReferencedAssemblies ([System.Drawing.Bitmap].Assembly.Location), ([System.Drawing.Rectangle].Assembly.Location) -TypeDefinition @"
 using System;
 using System.Collections.Generic;
 using System.Drawing;
