@@ -2719,14 +2719,53 @@ function Stage-Shell {
     if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
 }
 
-# Her face (0.11, the owner's "her new eye movements have a problem"): two faces must never show at once. FaceProbe
-# reads a grabbed frame (32bpp BGRA): Faint counts faint eye ink (navy mixed with her white body) that has no solid ink
-# within r px — a face fading in or out over the other — on rows where her white body is on both sides of the eye
-# columns (so the halo, the leaf and the backdrop never count); Edges counts sharp rises into her white body down one
-# column (one outline: 1; a second, translucent body: 2).
-Add-Type -TypeDefinition @"
+# The owner's glitch reports on 0.10.1 (0.11): two faces at once, things in the menu flashing in the wrong place, her
+# drawing jumping while she moves. Burst grabs whole frames at screen rate in C# (PowerShell loops reach ~17 fps) and can
+# act at a moment: a left or right click, or a drag that moves the cursor a fixed step per frame.
+Add-Type -ReferencedAssemblies System.Drawing, System.Drawing.Primitives -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Runtime.InteropServices;
+public sealed class Frame { public long Ms; public int CursorX; public byte[] Px; public int W, H; public Bitmap Bmp; }
+public static class Burst {
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
+    static byte[] Bytes(Bitmap b) {
+        var d = b.LockBits(new Rectangle(0, 0, b.Width, b.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var buf = new byte[d.Stride * b.Height]; Marshal.Copy(d.Scan0, buf, 0, buf.Length); b.UnlockBits(d); return buf;
+    }
+    /// act: 0 none, 1 left click, 2 right click, 3 drag (press at ax,ay at actMs, then stepPx right per frame, release at the end).
+    public static List<Frame> Run(int x, int y, int w, int h, int totalMs, int actMs, int ax, int ay, int act, int stepPx) {
+        var list = new List<Frame>(); var clock = System.Diagnostics.Stopwatch.StartNew(); bool acted = false; int cx = ax;
+        while (clock.ElapsedMilliseconds < totalMs) {
+            if (!acted && clock.ElapsedMilliseconds >= actMs) {
+                acted = true;
+                if (act != 0) { SetCursorPos(ax, ay); System.Threading.Thread.Sleep(30); }
+                if (act == 1 || act == 3) mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+                if (act == 2) mouse_event(0x0008, 0, 0, 0, UIntPtr.Zero);
+                System.Threading.Thread.Sleep(20);
+                if (act == 1) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+                if (act == 2) mouse_event(0x0010, 0, 0, 0, UIntPtr.Zero);
+            }
+            if (acted && act == 3) { cx += stepPx; SetCursorPos(cx, ay); }
+            var bmp = new Bitmap(w, h);
+            using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(x, y, 0, 0, new Size(w, h));
+            list.Add(new Frame { Ms = clock.ElapsedMilliseconds - actMs, CursorX = cx, Bmp = bmp, W = w, H = h });
+        }
+        if (act == 3) mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+        foreach (var f in list) f.Px = Bytes(f.Bmp);
+        return list;
+    }
+    /// The same on a worker thread, so the script can send a pipe command while frames are grabbed.
+    public static System.Threading.Tasks.Task<List<Frame>> Start(int x, int y, int w, int h, int totalMs) {
+        return System.Threading.Tasks.Task.Run(() => Run(x, y, w, h, totalMs, 0, 0, 0, 0, 0));
+    }
+}
 public static class FaceProbe {
     static int L(byte[] p, int i) { return (int)(0.114 * p[i] + 0.587 * p[i + 1] + 0.299 * p[i + 2]); }
+    /// Faint eye ink (navy mixed with her white body) with no solid ink within r px — a face fading in or out over the
+    /// other — on rows where her white body is on both sides of the eye columns (the halo, leaf and backdrop never count).
     public static int Faint(byte[] p, int w, int h, int x0, int x1, int bodyL, int bodyR, int solid, int faintHi, int r) {
         int n = 0;
         for (int y = r; y < h - r; y++) {
@@ -2751,6 +2790,7 @@ public static class FaceProbe {
         }
         return n;
     }
+    /// Sharp rises into her white body down one column: one outline gives 1, a second (translucent) body 2.
     public static int Edges(byte[] p, int w, int h, int x, int yMax, int jump) {
         int n = 0;
         for (int y = 0; y + 3 < yMax && y + 15 < h; y++) {
@@ -2761,60 +2801,191 @@ public static class FaceProbe {
         }
         return n;
     }
+    /// Pixels of a frame darker or lighter (by margin) than both the settled picture before and the one after, each
+    /// taken over a (2 tol + 1)^2 neighbourhood: something drawn where neither picture has it (a button or label at a
+    /// stale place, a second copy, her body displaced), while scales and fades between the two never count.
+    public static int[][] Range(byte[] before, byte[] after, int w, int h, int tol) {
+        var lo = new int[w * h]; var hi = new int[w * h];
+        for (int i = 0; i < w * h; i++) { int a = L(before, i * 4), b = L(after, i * 4); lo[i] = Math.Min(a, b); hi[i] = Math.Max(a, b); }
+        return new[] { Min(lo, w, h, tol), Max(hi, w, h, tol) };
+    }
+    public static int Beyond(byte[] f, int[][] range, int w, int h, int margin) {
+        int[] lo = range[0], hi = range[1];
+        int n = 0;
+        for (int i = 0; i < w * h; i++) { int l = L(f, i * 4); if (l > hi[i] + margin || l < lo[i] - margin) n++; }
+        return n;
+    }
+    static int[] Min(int[] v, int w, int h, int r) { return Pass(Pass(v, w, h, r, true, true), w, h, r, false, true); }
+    static int[] Max(int[] v, int w, int h, int r) { return Pass(Pass(v, w, h, r, true, false), w, h, r, false, false); }
+    static int[] Pass(int[] v, int w, int h, int r, bool horiz, bool min) {
+        var o = new int[w * h];
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int best = min ? 999 : -1;
+            for (int k = -r; k <= r; k++) {
+                int xx = horiz ? x + k : x, yy = horiz ? y : y + k;
+                if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                int q = v[yy * w + xx]; best = min ? Math.Min(best, q) : Math.Max(best, q);
+            }
+            o[y * w + x] = best;
+        }
+        return o;
+    }
+    /// Her body's place: the centre of her white body pixels (over the slate-blue test window), "x,y,count".
+    public static string Centroid(byte[] p, int w, int h) {
+        long sx = 0, sy = 0, n = 0;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (L(p, (y * w + x) * 4) >= 225) { sx += x; sy += y; n++; }
+        return n == 0 ? "0,0,0" : string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.0},{1:0.0},{2}", sx / (double)n, sy / (double)n, n);
+    }
 }
 "@
+
+function Save-Frames($frames, [string]$dir, [int]$every, [int]$max) {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $tiles = @(); $k = 0
+    foreach ($f in $frames) {
+        if ($k % $every -eq 0 -and $tiles.Count -lt $max) {
+            $path = Join-Path $dir ('{0:D3}-t{1}ms.png' -f $k, $f.Ms)
+            $f.Bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $tiles += $path
+        }
+        $k++
+    }
+    $tiles
+}
+function Dispose-Frames($frames) { foreach ($f in $frames) { $f.Bmp.Dispose() } }
+
+# Smooth motion: each body position must lie where its neighbours put it (time-interpolated), within 3 px plus a quarter
+# of the move across the three frames: a frame drawn at a stale window/content place is off by a whole step and back.
+function Assert-Smooth($frames, [string]$what) {
+    $pts = @(foreach ($f in $frames) { $c = ([FaceProbe]::Centroid($f.Px, $f.W, $f.H)) -split ','; [pscustomobject]@{ t = $f.Ms; x = [double]$c[0]; y = [double]$c[1]; n = [int]$c[2] } })
+    $bad = @(); $path = @()
+    for ($i = 1; $i -lt $pts.Count - 1; $i++) {
+        $a = $pts[$i - 1]; $b = $pts[$i]; $c = $pts[$i + 1]
+        if ($a.n -lt 200 -or $b.n -lt 200 -or $c.n -lt 200 -or $c.t -eq $a.t) { continue }
+        $k = ($b.t - $a.t) / ($c.t - $a.t)
+        $px = $a.x + ($c.x - $a.x) * $k; $py = $a.y + ($c.y - $a.y) * $k
+        $dev = [math]::Sqrt([math]::Pow($b.x - $px, 2) + [math]::Pow($b.y - $py, 2))
+        $span = [math]::Sqrt([math]::Pow($c.x - $a.x, 2) + [math]::Pow($c.y - $a.y, 2))
+        $path += ('{0}:{1:0},{2:0}' -f $b.t, $b.x, $b.y)
+        if ($dev -gt 3 + 0.25 * $span) { $bad += ('{0}: frame at +{1} ms is {2:0.0} px off its path (move {3:0.0} px)' -f $what, $b.t, $dev, $span) }
+    }
+    Write-Host "    ${what}: $($pts.Count) frames; t:x,y = $($path -join ' ')"
+    $bad
+}
 
 function Stage-Face {
     Step 'start engine on a plain window' {
         Start-Engine
         $script:faceWin = Start-TestWindow 'maximized'
-        $r = Send '{"type":"cmd","name":"debug-size","args":{"dip":"240"}}'
-        if (-not $r.ok) { throw "debug-size not ok: $($r.error)" }
     }
     Step 'a tap: one face at a time, one outline (60 fps burst)' {
         # 240 DIP: 1.5 px per rig unit, so an eye is ~27 x 33 px. Canvas = body rect grown by the rig's 70/88 units.
+        $r = Send '{"type":"cmd","name":"debug-size","args":{"dip":"240"}}'
+        if (-not $r.ok) { throw "debug-size not ok: $($r.error)" }
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
         Pose-Body 392 262 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 2
         $st = State
         $s = $st.width / 160.0
-        $cl = [int]($st.x - 70 * $s); $ct = [int]($st.y - 88 * $s); $hop = 130
-        $gx = $cl; $gy = [math]::Max(0, $ct - $hop); $gw = [int](300 * $s); $gh = [int](300 * $s) + ($ct - $gy)
+        $cl = [int]($st.x - 70 * $s); $ct = [int]($st.y - 88 * $s)
+        $gx = $cl; $gy = [math]::Max(0, $ct - 130); $gw = [int](300 * $s); $gh = [int](300 * $s) + ($ct - $gy)
         $u = { param($units) [int]($units * $s) }
         $x0 = & $u 116; $x1 = & $u 184; $bl = & $u 74; $br = & $u 226
         $colA = & $u 95; $colB = & $u 205; $yMax = ($ct - $gy) + (& $u 170)
-        $frames = @(); $clock = [System.Diagnostics.Stopwatch]::StartNew()
-        while ($clock.ElapsedMilliseconds -lt 300) { $frames += , @($clock.ElapsedMilliseconds, (Grab $gx $gy $gw $gh)) }
-        $tap = $clock.ElapsedMilliseconds
-        [Mouse]::Click([int]($st.x + $st.width / 2), [int]($st.y + $st.height * 0.62), $false)
-        while ($clock.ElapsedMilliseconds -lt $tap + 1700) { $frames += , @($clock.ElapsedMilliseconds, (Grab $gx $gy $gw $gh)) }
+        $frames = [Burst]::Run($gx, $gy, $gw, $gh, 2000, 300, [int]($st.x + $st.width / 2), [int]($st.y + $st.height * 0.62), 1, 0)
         [Mouse]::Move(5, 5)
-        $n = $frames.Count; $fps = [int]($n / ($clock.ElapsedMilliseconds / 1000.0))
-        $dir = Join-Path $Out 'face-tap'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        $report = @(); $bad = @(); $base = 0; $tiles = @(); $k = 0
+        $n = $frames.Count; $fps = [int]($n / 2.0)
+        $report = @(); $bad = @(); $base = 0
         foreach ($f in $frames) {
-            $t = $f[0] - $tap
-            $b = Bytes $f[1]
-            $faint = [FaceProbe]::Faint($b, $gw, $gh, $x0, $x1, $bl, $br, 110, 195, 2)
-            $ea = [FaceProbe]::Edges($b, $gw, $gh, $colA, $yMax, 60); $eb = [FaceProbe]::Edges($b, $gw, $gh, $colB, $yMax, 60)
-            $report += "${t}:$faint/$ea$eb"
-            if ($t -lt 0) { $base = [math]::Max($base, $faint) }
-            $f += , $faint; $f += , ($ea -ge 2 -and $eb -ge 2)
-            $path = Join-Path $dir ('{0:D2}-t{1}ms.png' -f $k, $t); $k++
-            $f[1].Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-            if ($t -ge -60 -and $tiles.Count -lt 30 -and ($k % 2 -eq 0)) { $tiles += $path }
-            $f[1].Dispose()
-            $frames[$k - 1] = $f
+            $faint = [FaceProbe]::Faint($f.Px, $gw, $gh, $x0, $x1, $bl, $br, 110, 195, 2)
+            $ea = [FaceProbe]::Edges($f.Px, $gw, $gh, $colA, $yMax, 60); $eb = [FaceProbe]::Edges($f.Px, $gw, $gh, $colB, $yMax, 60)
+            $report += "$($f.Ms):$faint/$ea$eb"
+            if ($f.Ms -lt 0) { $base = [math]::Max($base, $faint); continue }
+            if ($faint -gt $base + 150) { $bad += "two faces at +$($f.Ms) ms (faint eye ink $faint px, at rest $base)" }
+            if ($ea -ge 2 -and $eb -ge 2) { $bad += "two outlines at +$($f.Ms) ms" }
         }
+        $tiles = Save-Frames ($frames | Where-Object { $_.Ms -ge -40 }) (Join-Path $Out 'face-tap') ([math]::Max(1, [int]($n / 36))) 36
         Contact-Sheet $tiles 6 240 (Join-Path $Out 'tap-strip.png')
+        Dispose-Frames $frames
         Write-Host "    $n frames ($fps fps); baseline faint $base; t:faint/edgesAB = $($report -join ' ')"
+        if ($fps -lt 40) { $bad += "only $fps fps" }
+        Send '{"type":"cmd","name":"debug-size","args":{"dip":"80"}}' | Out-Null
+        if ($bad.Count) { throw ($bad -join '; ') }
+    }
+    Step 'the menu opens with everything in its place (60 fps burst)' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 470 330 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 2
+        $st = State
+        $cx = [int]($st.x + $st.width / 2); $cy = [int]($st.y + $st.height / 2)
+        $gx = [math]::Max(0, $cx - 330); $gy = [math]::Max(0, $cy - 300); $gw = [math]::Min(660, $Work.Right - $gx); $gh = [math]::Min(600, $Work.Bottom - $gy)
+        $frames = [Burst]::Run($gx, $gy, $gw, $gh, 1500, 250, $cx, $cy, 2, 0)
+        $m = Wait-Menu 'true' 1000 'menu open after the right-click'
+        $before = ($frames | Where-Object { $_.Ms -lt 0 } | Select-Object -Last 1).Px
+        $after = $frames[-1].Px
+        $range = [FaceProbe]::Range($before, $after, $gw, $gh, 10)
+        $report = @(); $bad = @()
         foreach ($f in $frames) {
-            if ($f[0] - $tap -lt 0) { continue }
-            if ($f[2] -gt $base + 150) { $bad += "two faces at +$($f[0] - $tap) ms (faint eye ink $($f[2]) px, at rest $base)" }
-            if ($f[3]) { $bad += "two outlines at +$($f[0] - $tap) ms" }
+            if ($f.Ms -lt 0) { continue }
+            $x = [FaceProbe]::Beyond($f.Px, $range, $gw, $gh, 60)
+            $report += "$($f.Ms):$x"
+            if ($x -gt 40) { $bad += "+$($f.Ms) ms: $x px drawn where neither the closed nor the open menu has them" }
         }
-        if ($fps -lt 25) { $bad += "only $fps fps" }
+        $tiles = Save-Frames ($frames | Where-Object { $_.Ms -ge -20 }) (Join-Path $Out 'menu-open') 1 36
+        Contact-Sheet $tiles 6 240 (Join-Path $Out 'menu-open-strip.png')
+        Write-Host "    $($frames.Count) frames; t:beyond = $($report -join ' ')"
+        Dispose-Frames $frames
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Start-Sleep -Milliseconds 600
+        if ($bad.Count) { throw ($bad -join '; ') }
+    }
+    Step 'a game starts with her in her place (60 fps burst)' {
+        Pose-Body 470 330 | Out-Null
+        Start-Sleep -Seconds 1
+        $st = State
+        $gx = [int]$st.x - 150; $gy = [int]$st.y - 150; $gw = [int]$st.width + 300; $gh = [int]$st.height + 300
+        $burst = [Burst]::Start($gx, $gy, $gw, $gh, 900)
+        Start-Sleep -Milliseconds 250
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball","seconds":"30"}}' | Out-Null
+        $frames = $burst.Result
+        $bad = Assert-Smooth $frames 'game start'
+        $tiles = Save-Frames $frames (Join-Path $Out 'game-start') 2 36
+        Contact-Sheet $tiles 6 200 (Join-Path $Out 'game-start-strip.png')
+        Dispose-Frames $frames
+        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+        Start-Sleep -Seconds 2
+        if ($bad.Count) { throw ($bad -join '; ') }
+    }
+    Step 'a drag moves her smoothly (60 fps burst)' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 200 330 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 1
+        $st = State
+        $gx = [int]$st.x - 120; $gy = [int]$st.y - 160; $gw = 760; $gh = [int]$st.height + 320
+        $frames = [Burst]::Run($gx, $gy, $gw, $gh, 1600, 200, [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2), 3, 5)
+        $bad = Assert-Smooth ($frames | Where-Object { $_.Ms -ge 120 }) 'drag'
+        $tiles = Save-Frames $frames (Join-Path $Out 'drag') 3 36
+        Contact-Sheet $tiles 6 200 (Join-Path $Out 'drag-strip.png')
+        Dispose-Frames $frames
+        Start-Sleep -Seconds 2
+        if ($bad.Count) { throw ($bad -join '; ') }
+    }
+    Step 'a flight moves her smoothly (60 fps burst)' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body 470 330 | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Seconds 1
+        $gx = [math]::Max(0, $Work.Left); $gy = [math]::Max(0, $Work.Top); $gw = $Work.Width; $gh = $Work.Height
+        $burst = [Burst]::Start($gx, $gy, $gw, $gh, 2500)
+        Start-Sleep -Milliseconds 200
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Wander","flight":"Zigzag"}}' | Out-Null
+        $frames = $burst.Result
+        $bad = Assert-Smooth $frames 'flight'
+        $tiles = Save-Frames $frames (Join-Path $Out 'flight') 4 36
+        Contact-Sheet $tiles 6 200 (Join-Path $Out 'flight-strip.png')
+        Dispose-Frames $frames
         if ($bad.Count) { throw ($bad -join '; ') }
     }
     Stop-Engine
