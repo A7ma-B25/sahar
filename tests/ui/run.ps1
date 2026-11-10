@@ -2508,6 +2508,27 @@ public static class ShellProbe {
         }, IntPtr.Zero);
         return string.Join(";", list);
     }
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
+    static IntPtr Find(int pid, string title) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, l) => {
+            uint p; GetWindowThreadProcessId(h, out p);
+            var t = new StringBuilder(64); GetWindowText(h, t, 64);
+            if (p == pid && t.ToString() == title) { found = h; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+    /// Moves one of our windows by (dx,dy) from outside, as Windows does after a display change.
+    public static bool Nudge(int pid, string title, int dx, int dy) {
+        var h = Find(pid, title); RECT r;
+        if (h == IntPtr.Zero || !GetWindowRect(h, out r)) return false;
+        return SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010);   // NOSIZE NOZORDER NOACTIVATE
+    }
+    public static string RectOf(int pid, string title) {
+        var h = Find(pid, title); RECT r;
+        return h != IntPtr.Zero && GetWindowRect(h, out r) ? r.L + "," + r.T + "," + r.R + "," + r.B : "";
+    }
 }
 "@
 
@@ -2640,6 +2661,29 @@ function Stage-Shell {
         }
         finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
     }
+    Step 'a game click on the outermost pixels (left, top, right) is still the game''s' {
+        # The catcher stops short only on the taskbar's side: a click on any other screen edge must not reach the app
+        # or desktop underneath (that would activate it and end the game) — e.g. hide-and-seek spots at the edges.
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
+        Start-Sleep -Milliseconds 800
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $lost = @()
+        try {
+            foreach ($p in @(@(($screen.Right - 1), 300, 'right'), @($screen.Left, 300, 'left'), @(500, $screen.Top, 'top'))) {
+                [Mouse]::Click($p[0], $p[1], $false)
+                Start-Sleep -Milliseconds 700
+                $g = Game
+                Write-Host "    click at the $($p[2]) edge ($($p[0]),$($p[1])): game running $($g.running)"
+                if ($g.running -ne 'true') {
+                    $lost += "$($p[2]) edge ($($p[0]),$($p[1]))"
+                    Send '{"type":"cmd","name":"game-start","args":{"kind":"Chase","seconds":"30"}}' | Out-Null
+                    Start-Sleep -Milliseconds 800
+                }
+            }
+        }
+        finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
+        if ($lost.Count) { throw "a click went past the game at the $($lost -join ', ')" }
+    }
     Step 'her showcase and the butterfly: no window covers a monitor' {
         Start-Sleep -Milliseconds 800
         Send '{"type":"cmd","name":"showcase"}' | Out-Null
@@ -2660,9 +2704,15 @@ function Stage-Shell {
         Start-Sleep -Seconds 2
         Assert-OverlayHolds 'after hide/show'
         Assert-NoCover 'after hide/show'
+        # Windows may move the overlay itself around a display change: the stage must plan from where it really is.
+        if (-not [ShellProbe]::Nudge($script:engine.Id, 'Sahar', 37, 23)) { throw 'could not move the overlay' }
         Send '{"type":"cmd","name":"debug-display-changed"}' | Out-Null
         Start-Sleep -Seconds 1
         Assert-OverlayHolds 'after a display change'
+        $o = Overlay; $real = [ShellProbe]::RectOf($script:engine.Id, 'Sahar')
+        $said = "$($o.x),$($o.y),$([int]$o.x + [int]$o.w),$([int]$o.y + [int]$o.h)"
+        Write-Host "    overlay after an outside move and a display change: real $real, planned $said"
+        if ($real -ne $said) { throw "the overlay is at $real but the stage thinks $said (she would be drawn offset)" }
         if ((Overlay).needs -ne 'none') { throw "needs left behind: $((Overlay).needs)" }
     }
     Stop-Engine
