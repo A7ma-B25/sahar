@@ -103,6 +103,37 @@ internal sealed class SoulLayer
         _v.SetFace(e, m, ExpressionPlayer.Fade);
     }
 
+    /// <summary>A hop in flight eases to rest in this long when her menu opens (0.10.1: the owner's double-click).</summary>
+    public static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>Her menu opened: the joy face goes, and a hop in flight eases to rest (<see cref="SettleTime"/>, not a
+    /// snap), so the buttons pop around her settled body.</summary>
+    public void Settle()
+    {
+        EndHappy();
+        if (!Hopping || _frozenHop is not null) return;
+        _hopStart = long.MinValue / 2;
+        if (Reduced) { StopHop(); return; }
+        var ease = _c.CreateCubicBezierEasingFunction(new Vector2(0.2f, 0f), new Vector2(0.2f, 1f));
+        ScalarKeyFrameAnimation To(float v)
+        {
+            var a = _c.CreateScalarKeyFrameAnimation();
+            a.InsertKeyFrame(1f, v, ease);
+            a.Duration = SettleTime;
+            return a;
+        }
+        // Stop first: each property keeps the value it had reached, and the ease starts from there.
+        foreach (var p in new[] { "Offset.Y", "Scale", "RotationAngleInDegrees" }) _v.Hop.StopAnimation(p);
+        Props.StopAnimation("kick");
+        var scale = _c.CreateVector3KeyFrameAnimation();
+        scale.InsertKeyFrame(1f, Vector3.One, ease);
+        scale.Duration = SettleTime;
+        _v.Hop.StartAnimation("Offset.Y", To(0f));
+        _v.Hop.StartAnimation("Scale", scale);
+        _v.Hop.StartAnimation("RotationAngleInDegrees", To(0f));
+        Props.StartAnimation("kick", To(0f));
+    }
+
     /// <summary>(Re)builds every animation from the current pixel scale: after construction, a size or DPI change,
     /// and device loss. A hop in flight is cut to rest.</summary>
     public void Start()

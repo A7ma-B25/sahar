@@ -1112,15 +1112,26 @@ function Type-InBubble([string]$text, [switch]$Enter) {
     if ($Enter) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 300 }
 }
 
-# Two copies of her at once (a "ghost"): along a vertical line through her upper body (right of the leaf), the step
-# from the halo up to her body is one edge (a few anti-aliased pixels); a second, translucent outline of her makes a
-# band of in-between values. Returns how many pixels sit between 25 % and 75 % of the halo-to-body step.
-function Ghost-Band([System.Drawing.Bitmap]$bmp, [int]$x, [int]$y0, [int]$y1) {
-    $l = @(); for ($y = $y0; $y -le $y1; $y++) { $p = $bmp.GetPixel($x, $y); $l += 0.299 * $p.R + 0.587 * $p.G + 0.114 * $p.B }
-    $halo = ($l[0..2] | Measure-Object -Average).Average
-    $body = ($l | Measure-Object -Maximum).Maximum
-    if ($body - $halo -lt 40) { return 0 }   # no clear body on this line
-    ($l | Where-Object { $_ -gt $halo + 0.25 * ($body - $halo) -and $_ -lt $halo + 0.75 * ($body - $halo) }).Count
+# Two copies of her at once (a "ghost"). A cross-fade mixes the old picture and the new one, so no pixel of a frame
+# during it is brighter (or darker) than both — unless a third picture is drawn, e.g. a second outline of her at
+# another pose. Ghost.Extra counts such pixels (luminance beyond both by more than a margin).
+Add-Type -TypeDefinition @"
+public static class Ghost {
+    static double L(byte[] p, int i) { return 0.114 * p[i] + 0.587 * p[i + 1] + 0.299 * p[i + 2]; }
+    public static int Extra(byte[] frame, byte[] before, byte[] after, double margin) {
+        int n = 0;
+        for (int i = 0; i + 3 < frame.Length; i += 4) {
+            double f = L(frame, i), b = L(before, i), a = L(after, i);
+            if (f > System.Math.Max(b, a) + margin || f < System.Math.Min(b, a) - margin) n++;
+        }
+        return n;
+    }
+}
+"@
+function Bytes([System.Drawing.Bitmap]$bmp) {
+    $d = $bmp.LockBits([System.Drawing.Rectangle]::new(0, 0, $bmp.Width, $bmp.Height), [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    try { $buf = [byte[]]::new($d.Stride * $bmp.Height); [System.Runtime.InteropServices.Marshal]::Copy($d.Scan0, $buf, 0, $buf.Length); , $buf }
+    finally { $bmp.UnlockBits($d) }
 }
 
 function Stage-Menu {
@@ -1154,9 +1165,7 @@ function Stage-Menu {
         Start-Sleep -Seconds 3
         $rest = Info
         $size = 360; $gx = $c[0] - $size / 2; $gy = $c[1] - $size / 2
-        $st0 = State
-        $lineX = [int]($st0.x + $st0.width * 0.8) - $gx; $lineY0 = [int]($st0.y - 40) - $gy; $lineY1 = [int]($st0.y + $st0.height * 0.35) - $gy
-        $bands = @()
+
         $dir = Join-Path $Out 'dblclick'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
         $tiles = @(); $soul = $null; $second = $null
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
@@ -1173,7 +1182,6 @@ function Stage-Menu {
             }
             $bmp = Grab $gx $gy $size $size
             $t = $clock.ElapsedMilliseconds - $first
-            $bands += "$($t):$(Ghost-Band $bmp $lineX $lineY0 $lineY1)"
             $path = Join-Path $dir ('t{0:D4}ms.png' -f $t)
             $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
             $tiles += $path
@@ -1183,7 +1191,6 @@ function Stage-Menu {
         Screenshot 'double-click-menu.png' | Out-Null
         $after = Info
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
-        Write-Host "    ghost band (px between halo and body, per frame ms:px): $($bands -join ' ')"
         Write-Host "    clicks at $first and $second ms; soul $($soul.hopping)/happy $($soul.happy) at $soulAt ms; face at rest $($rest.face) ($($rest.faceSwaps) swaps), after $($after.face) ($($after.faceSwaps) swaps)"
         $errors = @()
         foreach ($b in $ref.buttons) {
@@ -1195,42 +1202,46 @@ function Stage-Menu {
         if ($after.face -ne $rest.face) { $errors += "her face is $($after.face) with the menu open, $($rest.face) at rest" }
         # A poke face, then the joy face, then (menu) her own face: three swaps at most; more is a face flickering.
         if ([int]$after.faceSwaps - [int]$rest.faceSwaps -gt 3) { $errors += "$([int]$after.faceSwaps - [int]$rest.faceSwaps) face swaps in 1.5 s" }
-        $ghosts = @($bands | Where-Object { [int]($_ -split ':')[1] -gt 6 })
-        if ($ghosts.Count) { $errors += "two outlines of her (ghost) in frame(s) $($ghosts -join ', ')" }
         if ($errors.Count) { throw ($errors -join '; ') }
     }
     Step 'no ghost: a mood cross-fade at the hop''s squash shows one outline of her' {
         # The owner's phone video showed a squashed body over a taller, translucent one. Frozen at the anticipation
-        # (+0.045 s) and landing (+0.56 s) squash, her mood cross-fades (idle <-> poked) while frames are grabbed.
+        # (+0.045 s) and landing (+0.56 s) squash, her mood cross-fades (idle Calm <-> back Happy, neither squishes)
+        # while frames are grabbed; every frame must be a mix of the settled pictures before and after (a blink or a
+        # twinkle may add a few dozen pixels; a second outline of her body adds about a thousand).
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Pose-Body 500 330 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Milliseconds 800
         $st = State
         $size = 240; $gx = [int]($st.x + $st.width / 2 - $size / 2); $gy = [int]($st.y + $st.height / 2 - $size / 2)
-        $lineX = [int]($st.x + $st.width * 0.8) - $gx; $lineY0 = [int]($st.y - 40) - $gy; $lineY1 = [int]($st.y + $st.height * 0.35) - $gy
         $dir = Join-Path $Out 'ghost'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        $found = @(); $tiles = @()
+        $found = @(); $tiles = @(); $report = @()
         try {
             foreach ($t in @('0.045', '0.56')) {
                 Soul-Freeze ('"floatT":"0","hopT":"' + $t + '"') | Out-Null
-                foreach ($key in @('poked', 'idle')) {
-                    Start-Sleep -Milliseconds 400
+                Send '{"type":"cmd","name":"expression","args":{"key":"idle"}}' | Out-Null
+                Start-Sleep -Milliseconds 600
+                foreach ($key in @('back', 'idle')) {
+                    $g = Grab $gx $gy $size $size; $before = Bytes $g; $g.Dispose()
                     Send ('{"type":"cmd","name":"expression","args":{"key":"' + $key + '"}}') | Out-Null
-                    $clock = [System.Diagnostics.Stopwatch]::StartNew()
-                    $i = 0
-                    while ($clock.ElapsedMilliseconds -lt 300) {
-                        $bmp = Grab $gx $gy $size $size
-                        $band = Ghost-Band $bmp $lineX $lineY0 $lineY1
-                        if ($i % 3 -eq 0) { $path = Join-Path $dir ("{0}-{1}-{2:D3}ms.png" -f $t, $key, $clock.ElapsedMilliseconds); $bmp.Save($path); $tiles += $path }
-                        $bmp.Dispose()
-                        if ($band -gt 6) { $found += "hop $t to $key at $($clock.ElapsedMilliseconds) ms: $band px" }
-                        $i++
+                    $frames = @(); $clock = [System.Diagnostics.Stopwatch]::StartNew()
+                    while ($clock.ElapsedMilliseconds -lt 320) { $frames += , @($clock.ElapsedMilliseconds, (Grab $gx $gy $size $size)) }
+                    Start-Sleep -Milliseconds 500
+                    $g = Grab $gx $gy $size $size; $after = Bytes $g; $g.Dispose()
+                    $k = 0
+                    foreach ($f in $frames) {
+                        $extra = [Ghost]::Extra((Bytes $f[1]), $before, $after, 60)
+                        $report += "$t>$key@$($f[0]):$extra"
+                        if ($extra -gt 300) { $found += "hop $t to $key at $($f[0]) ms: $extra px beyond both pictures" }
+                        if ($k++ % 3 -eq 0) { $path = Join-Path $dir ("{0}-{1}-{2:D3}ms.png" -f $t, $key, $f[0]); $f[1].Save($path); $tiles += $path }
+                        $f[1].Dispose()
                     }
                 }
             }
         }
         finally { Soul-Freeze '' | Out-Null }
+        Write-Host "    pixels beyond both pictures (pose>mood@ms:px): $($report -join ' ')"
         Contact-Sheet $tiles 6 200 (Join-Path $Out 'ghost-strip.png')
         if ($found.Count) { throw "a ghost: $($found -join '; ')" }
     }

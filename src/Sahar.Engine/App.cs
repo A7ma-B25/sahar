@@ -403,7 +403,7 @@ internal sealed unsafe class App
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
-        soul.Busy = () => _state.Hidden || Sulking() || games.Running;
+        soul.Busy = () => _state.Hidden || Sulking() || games.Running || menu.IsOpen;   // nothing hops her while the menu is open
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
 
         // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
@@ -453,7 +453,14 @@ internal sealed unsafe class App
         menu.OpenChanged += open =>
         {
             _state.MenuOpen = open;
-            if (open) show.Stop(flyHome: false);
+            if (open)
+            {
+                // A double-click is a poke, then the menu: the hop and the joy face are cut (eased) and a passing face
+                // (poked) goes, so the buttons pop around her settled, with one face (0.10.1, the owner's report).
+                soul.Settle();
+                if (revert.IsRunning) Express("", false);
+                show.Stop(flyHome: false);
+            }
             lifeDirector.Paused = open || show.Running;
             if (open) motion.Play(MotionKind.Hover);
         };
