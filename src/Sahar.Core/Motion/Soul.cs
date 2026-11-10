@@ -112,11 +112,38 @@ public static class SoulIdle
 {
     public const float MinGap = 6f, MaxGap = 12f, HopPower = 0.6f, LookSeconds = 1.2f;
 
+    /// <summary>An idle act only while she rests and nothing else is going on: not busy (menu, show, game, hidden,
+    /// sulking, you away), not quiet (do not disturb, camera or mic, adhan, Quran, quiet hours), not while you type, and
+    /// no hops or glances at all under reduced motion.</summary>
+    public static bool MayAct(MotionKind current, SoulIdleKind kind, bool busy, bool quiet, bool typing, bool reduced) =>
+        current is MotionKind.Hover or MotionKind.EyesFollow && !busy && !quiet && !typing && !reduced;
+
     public static (TimeSpan Wait, SoulIdleKind Kind) Next(Random rng)
     {
         var wait = TimeSpan.FromSeconds(MinGap + rng.NextDouble() * (MaxGap - MinGap));
         double r = rng.NextDouble();
         return (wait, r < 0.5 ? SoulIdleKind.Hop : r < 0.75 ? SoulIdleKind.LookLeft : SoulIdleKind.LookRight);
+    }
+}
+
+/// <summary>Things built once per key and reused (the hop's animation set per power and pixel scale); Clear disposes
+/// them (a rescale or a device change rebuilds them).</summary>
+public sealed class KeyedCache<TKey, TValue>(Func<TKey, TValue> make) where TKey : notnull where TValue : IDisposable
+{
+    private readonly Dictionary<TKey, TValue> _items = [];
+
+    public int Count => _items.Count;
+
+    public TValue Get(TKey key)
+    {
+        if (!_items.TryGetValue(key, out var v)) _items[key] = v = make(key);
+        return v;
+    }
+
+    public void Clear()
+    {
+        foreach (var v in _items.Values) v.Dispose();
+        _items.Clear();
     }
 }
 

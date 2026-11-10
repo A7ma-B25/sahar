@@ -21,25 +21,60 @@ public static class SettingsStore
     public static string DefaultPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Sahar", "settings.json");
 
-    public static SaharSettings Load(string path)
+    // Files whose last load failed (every read attempt): the program runs on defaults, so a save would replace a
+    // good file with them. Saves are refused until a load of that file succeeds.
+    private static readonly HashSet<string> Failed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Records that loading <paramref name="path"/> failed; saves to it are refused until a load succeeds.</summary>
+    public static void LoadFailed(string path)
     {
-        if (!File.Exists(path)) return new SaharSettings();
-        string text = Retry(() => File.ReadAllText(path));
+        lock (Failed) Failed.Add(Path.GetFullPath(path));
+    }
+
+    private static bool LastLoadFailed(string path)
+    {
+        lock (Failed) return Failed.Contains(Path.GetFullPath(path));
+    }
+
+    public static SaharSettings Load(string path) => Load(path, File.ReadAllText);
+
+    /// <summary>Loads with <paramref name="read"/> (tests inject failing reads). A read that keeps failing throws and is
+    /// remembered (<see cref="LoadFailed"/>); an empty or blank file counts as missing.</summary>
+    public static SaharSettings Load(string path, Func<string, string> read)
+    {
+        string full = Path.GetFullPath(path);
+        if (!File.Exists(path)) { Succeeded(full); return new SaharSettings(); }
+        string text;
+        try { text = Retry(() => read(path)); }
+        catch (FileNotFoundException) { Succeeded(full); return new SaharSettings(); }   // deleted meanwhile: missing
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            LoadFailed(path);
+            throw;
+        }
+        Succeeded(full);
+        if (string.IsNullOrWhiteSpace(text)) return new SaharSettings();
         if (Parse(text) is { } s) return s;
         KeepBad(path, text);
         return new SaharSettings();
+    }
+
+    private static void Succeeded(string full)
+    {
+        lock (Failed) Failed.Remove(full);
     }
 
     /// <summary>Writes "path.tmp" then swaps it in, so a crash never leaves a half-written file. Throws
     /// <see cref="SettingsSaveRefusedException"/> when the file on disk is unreadable.</summary>
     public static void Save(string path, SaharSettings settings)
     {
+        if (LastLoadFailed(path)) throw new SettingsSaveRefusedException();
         using var gate = Lock();
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         if (File.Exists(path))
         {
             string current = Retry(() => File.ReadAllText(path));
-            if (Parse(current) is null)
+            if (!string.IsNullOrWhiteSpace(current) && Parse(current) is null)
             {
                 KeepBad(path, current);
                 throw new SettingsSaveRefusedException();
@@ -71,7 +106,8 @@ public static class SettingsStore
     }
 
     /// <summary>Runs <paramref name="io"/>, retrying sharing violations (another program has the file open for a
-    /// moment) up to <see cref="Tries"/> times with a growing pause. Missing files and other errors are not retried.</summary>
+    /// moment) and access denied (Windows, while File.Replace swaps the file in) up to <see cref="Tries"/> times with a
+    /// growing pause. Missing files and other errors are not retried.</summary>
     public static T Retry<T>(Func<T> io)
     {
         for (int attempt = 1; ; attempt++)
@@ -80,8 +116,8 @@ public static class SettingsStore
             {
                 return io();
             }
-            catch (IOException e) when (e is not FileNotFoundException and not DirectoryNotFoundException
-                                        and not SettingsSaveRefusedException && attempt < Tries)
+            catch (Exception e) when ((e is IOException and not FileNotFoundException and not DirectoryNotFoundException
+                                        and not SettingsSaveRefusedException || e is UnauthorizedAccessException) && attempt < Tries)
             {
                 Thread.Sleep(40 * attempt);
             }

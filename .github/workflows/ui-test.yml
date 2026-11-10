@@ -29,6 +29,8 @@ jobs:
           node-version: 22
       - name: Install agent-desktop
         run: npm i -g agent-desktop@1.2.0
+      - name: Settings store on Windows (two writers, sharing violations, File.Replace)
+        run: dotnet test tests/Sahar.Core.Tests -c Release --filter FullyQualifiedName~SettingsStore
       - name: Publish engine (Native AOT)
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: UI tests

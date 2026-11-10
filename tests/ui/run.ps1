@@ -1011,6 +1011,20 @@ function Stage-Perf {
         Write-Host ("    cpu over 20 s: {0:N2} % of the machine ({1:N0} ms on {2} cores)" -f $pct, $used, [Environment]::ProcessorCount)
         if ($pct -ge 0.5) { Write-Host '::warning::engine CPU at rest is over 0.5 % on the runner (software rendering)' }
     }
+    Step 'her idle acts keep memory inside 60 MB and reuse their animations' {
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        [Mouse]::Move(5, 5)
+        Send '{"type":"cmd","name":"soul-idle","args":{"on":"true","gap":"1"}}' | Out-Null
+        Start-Sleep -Seconds 40
+        $acts = [int](Kv 'soul-idle').acts
+        Send '{"type":"cmd","name":"soul-idle","args":{"on":"false"}}' | Out-Null
+        $s = Kv 'debug-soul'
+        $ws = (State).workingSetBytes
+        Write-Host "    idle acts $acts, hops $($s.hops), hop animation sets built $($s.hopSets), working set $([math]::Round($ws / 1MB, 1)) MB"
+        if ($acts -lt 10) { throw "only $acts idle acts in 40 s" }
+        if ([int]$s.hopSets -gt 2) { throw "hop animations rebuilt per hop: $($s.hopSets) sets for $($s.hops) hops" }
+        if ($ws -gt 60MB) { throw "working set $ws bytes" }
+    }
     Step 'the log never grows past 1 MB' {
         $r = Send '{"type":"cmd","name":"debug-log-fill","args":{"kb":"1200"}}'
         if (-not $r.ok) { throw "debug-log-fill not ok: $($r.error)" }

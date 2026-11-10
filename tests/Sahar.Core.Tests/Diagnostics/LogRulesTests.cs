@@ -27,4 +27,16 @@ public class LogRulesTests
     [InlineData("you are away", "you are away")]
     [InlineData("you are typing", "you are typing")]
     public void WaitKind(string reason, string kind) => Assert.Equal(kind, LogRules.WaitKind(reason));
+    [Fact]
+    public void EndedCleanly_ASessionEndIsClean() =>
+        Assert.True(LogRules.EndedCleanly("2026-11-10 23:59:01.000 session: end"));
+
+    [Fact]
+    public void OneShot_SaysEachThingOnce()
+    {
+        var once = new OneShot();
+        Assert.True(once.First("settings-not-saved"));
+        Assert.False(once.First("settings-not-saved"));
+        Assert.True(once.First("other"));
+    }
 }

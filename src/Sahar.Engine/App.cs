@@ -40,7 +40,8 @@ internal sealed unsafe class App
         var ui = CompositionHost.EnsureDispatcherQueue();
         var overlay = new OverlayWindow(_options.Capturable);
         using var host = new CompositionHost(overlay.Hwnd);
-        // Settings: a bad or locked file never stops her (defaults).
+        // Settings: a bad or locked file never stops her (defaults); a failed load also blocks saves (SettingsStore).
+        var settingsLog = new Sahar.Core.Diagnostics.OneShot();
         var settings = new SaharSettings();
         try { settings = SettingsStore.Load(SettingsStore.DefaultPath); }
         catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
@@ -214,7 +215,7 @@ internal sealed unsafe class App
             tray.Activity = level;
             if (life != null) life.Level = level;
             try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (file unreadable, kept .bad)" : $"settings: not saved ({e.GetType().Name})"); }   // never the path: it holds the user name
+            catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }   // once per kind; never the path: it holds the user name
         }
         tray.ActivityChosen += level => Safe(() => SetActivity(level));
         tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
@@ -306,7 +307,7 @@ internal sealed unsafe class App
         void SaveSettings()
         {
             try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (file unreadable, kept .bad)" : $"settings: not saved ({e.GetType().Name})"); }   // never the path: it holds the user name
+            catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }   // once per kind; never the path: it holds the user name
         }
         void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
         void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
@@ -459,8 +460,9 @@ internal sealed unsafe class App
         stopShow = flyHome => show.Stop(flyHome);
         showRunning = () => show.Running;
         // Now and then, at rest, a small hop or a glance aside (spec §4); never while you are away (0.10a pre-flight ruling).
-        using var soulDirector = new SoulDirector(ui, soul, () => motion.Current is MotionKind.Hover or MotionKind.EyesFollow
-            && !menu.IsOpen && !show.Running && !games.Running && !_state.Hidden && !Sulking() && !idle.Away)
+        using var soulDirector = new SoulDirector(ui, soul, kind => SoulIdle.MayAct(motion.Current, kind,
+            busy: menu.IsOpen || show.Running || games.Running || _state.Hidden || Sulking() || idle.Away,
+            quiet: director.Quiet, typing: lifeDirector.Typing, reduced: soul.Reduced))
         {
             Enabled = !_options.TestMode,
         };

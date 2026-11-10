@@ -154,4 +154,44 @@ public sealed class SettingsStoreTests : IDisposable
         File.WriteAllText(PathOf, """{ "innerStars": false }""");
         Assert.False(SettingsStore.Load(PathOf).InnerStars);
     }
+    // ---- Fresh review (2026-11-10) ----
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \r\n ")]
+    public void EmptyFile_CountsAsMissing(string text)
+    {
+        File.WriteAllText(PathOf, text);
+        Assert.Equal(new SaharSettings(), SettingsStore.Load(PathOf));
+        Assert.False(File.Exists(PathOf + ".bad"));
+        Assert.True(SettingsStore.TrySave(PathOf, new SaharSettings { Size = SaharSize.Large }));
+        Assert.Equal(SaharSize.Large, SettingsStore.Load(PathOf).Size);
+    }
+
+    [Fact]
+    public void AFailedLoad_RefusesSaves_UntilALoadSucceeds()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { Size = SaharSize.Large, UserName = "Sami" });
+        SettingsStore.LoadFailed(PathOf);   // what Load records when every read attempt failed
+        Assert.False(SettingsStore.TrySave(PathOf, new SaharSettings()));
+        Assert.Equal("Sami", SettingsStore.Load(PathOf).UserName);   // the good file is untouched, and this load succeeds
+        Assert.True(SettingsStore.TrySave(PathOf, new SaharSettings { UserName = "Sami", Size = SaharSize.Small }));
+    }
+
+    [Fact]
+    public void Load_ThatKeepsFailing_IsRemembered()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { UserName = "Sami" });
+        Assert.ThrowsAny<IOException>(() => SettingsStore.Load(PathOf, _ => throw new IOException("in use")));
+        Assert.False(SettingsStore.TrySave(PathOf, new SaharSettings()));
+        Assert.Equal("Sami", SettingsStore.Load(PathOf).UserName);
+    }
+
+    [Fact]
+    public void Retry_AlsoRetriesAccessDenied_WhileAFileIsBeingReplaced()
+    {
+        int calls = 0;
+        Assert.Equal(5, SettingsStore.Retry(() => { if (++calls < 3) throw new UnauthorizedAccessException(); return 5; }));
+        Assert.Equal(3, calls);
+    }
 }

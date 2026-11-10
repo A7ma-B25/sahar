@@ -13,23 +13,24 @@ namespace Sahar.Engine.Life;
 internal sealed class SoulDirector : IDisposable
 {
     private readonly SoulLayer _soul;
-    private readonly Func<bool> _resting;
+    private readonly Func<SoulIdleKind, bool> _mayAct;
     private readonly DispatcherQueueTimer _timer, _glance;
     private readonly Random _rng = new();
     private (Vector2 Units, float Lean)? _beforeGlance;
     private DateTimeOffset _next;
 
-    public SoulDirector(DispatcherQueue ui, SoulLayer soul, Func<bool> resting)
+    /// <param name="mayAct">Whether this act may happen now (<see cref="SoulIdle.MayAct"/> with the app's state).</param>
+    public SoulDirector(DispatcherQueue ui, SoulLayer soul, Func<SoulIdleKind, bool> mayAct)
     {
         _soul = soul;
-        _resting = resting;
+        _mayAct = mayAct;
         _timer = ui.CreateTimer();
         _timer.IsRepeating = false;
-        _timer.Tick += (_, _) => Act(null);
+        _timer.Tick += (_, _) => Safe(() => Act(null));
         _glance = ui.CreateTimer();
         _glance.IsRepeating = false;
         _glance.Interval = TimeSpan.FromSeconds(SoulIdle.LookSeconds);
-        _glance.Tick += (_, _) => { if (_beforeGlance is { } b) _soul.Look(b.Units, b.Lean); _beforeGlance = null; };
+        _glance.Tick += (_, _) => Safe(() => { if (_beforeGlance is { } b) _soul.Look(b.Units, b.Lean); _beforeGlance = null; });
     }
 
     public bool Enabled
@@ -53,7 +54,7 @@ internal sealed class SoulDirector : IDisposable
             if (!Enabled && forced is null) return;
             var (_, kind) = SoulIdle.Next(_rng);
             kind = forced ?? kind;
-            if (!_resting()) return;
+            if (!_mayAct(kind)) return;
             switch (kind)
             {
                 case SoulIdleKind.Hop:
@@ -85,6 +86,12 @@ internal sealed class SoulDirector : IDisposable
 
     public string Describe() => string.Create(CultureInfo.InvariantCulture,
         $"enabled={(Enabled ? "true" : "false")} acts={Acts} next={(Enabled ? Math.Max(0, (_next - DateTimeOffset.Now).TotalSeconds) : 0):0.0}");
+
+    private static void Safe(Action a)
+    {
+        try { a(); }
+        catch (Exception e) { Sahar.Engine.Diagnostics.Log.Write($"soul error: {e.GetType().Name}"); }
+    }
 
     public void Dispose()
     {

@@ -180,4 +180,36 @@ public class SoulTests
         Assert.False(SoulRules.CanHop(MotionKind.Hover, false, false, false, false, 0.5));
         Assert.True(SoulRules.CanHop(MotionKind.Hover, false, false, false, false, 0.75));
     }
+    // ---- Idle acts only when nothing else is going on (fresh review, 2026-11-10) ----
+
+    [Fact]
+    public void SoulIdle_MayAct_OnlyWhenRestingAndUndisturbed()
+    {
+        Assert.True(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.Hop, busy: false, quiet: false, typing: false, reduced: false));
+        Assert.True(SoulIdle.MayAct(MotionKind.EyesFollow, SoulIdleKind.LookLeft, false, false, false, false));
+        Assert.False(SoulIdle.MayAct(MotionKind.Wander, SoulIdleKind.Hop, false, false, false, false));
+        Assert.False(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.Hop, busy: true, false, false, false));
+        Assert.False(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.LookRight, false, quiet: true, false, false));
+        Assert.False(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.Hop, false, false, typing: true, false));
+        Assert.False(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.LookLeft, false, false, false, reduced: true));
+        Assert.False(SoulIdle.MayAct(MotionKind.Hover, SoulIdleKind.Hop, false, false, false, reduced: true));
+    }
+
+    [Fact]
+    public void KeyedCache_BuildsOncePerKey_AndDisposesOnClear()
+    {
+        int built = 0;
+        var made = new List<Probe>();
+        var cache = new KeyedCache<(float, float), Probe>(k => { built++; var p = new Probe(); made.Add(p); return p; });
+        var a = cache.Get((1f, 0.5f));
+        Assert.Same(a, cache.Get((1f, 0.5f)));
+        cache.Get((0.6f, 0.5f));
+        Assert.Equal((2, 2), (built, cache.Count));
+        cache.Clear();
+        Assert.All(made, p => Assert.True(p.Disposed));
+        Assert.Equal(0, cache.Count);
+        Assert.NotSame(a, cache.Get((1f, 0.5f)));
+    }
+
+    private sealed class Probe : IDisposable { public bool Disposed; public void Dispose() => Disposed = true; }
 }

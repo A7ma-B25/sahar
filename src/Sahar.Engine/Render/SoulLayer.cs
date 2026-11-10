@@ -21,18 +21,39 @@ internal sealed class SoulLayer
     private long _hopStart = long.MinValue / 2;
     private float _hopPower = 1f;
     private double? _frozenFloat, _frozenHop;
+    // One animation set per (power, pixel scale), built once and reused; cleared (and disposed) on Start (a rescale or
+    // a device change), so hopping all day allocates nothing new.
+    private readonly KeyedCache<(float Power, float Scale), HopSet> _hops;
+
+    private sealed class HopSet(ScalarKeyFrameAnimation rise, Vector3KeyFrameAnimation scale, ScalarKeyFrameAnimation tilt,
+        ScalarKeyFrameAnimation kick) : IDisposable
+    {
+        public ScalarKeyFrameAnimation Rise => rise;
+        public Vector3KeyFrameAnimation Scale => scale;
+        public ScalarKeyFrameAnimation Tilt => tilt;
+        public ScalarKeyFrameAnimation Kick => kick;
+        public void Dispose() { rise.Dispose(); scale.Dispose(); tilt.Dispose(); kick.Dispose(); }
+    }
+
+    /// <summary>Animation sets built so far (test diagnostics: stays small however often she hops).</summary>
+    public int HopSetsBuilt { get; private set; }
     private readonly DispatcherQueueTimer? _happyTimer;
 
     public SoulLayer(SaharVisual v, DispatcherQueue? ui = null)
     {
         _v = v;
         _c = v.Root.Compositor;
+        _hops = new KeyedCache<(float Power, float Scale), HopSet>(k => BuildHop(k.Power, k.Scale));
         if (ui != null)
         {
             _happyTimer = ui.CreateTimer();
             _happyTimer.IsRepeating = false;
             _happyTimer.Interval = TimeSpan.FromSeconds(SoulMath.HappySeconds);
-            _happyTimer.Tick += (_, _) => EndHappy();
+            _happyTimer.Tick += (_, _) =>
+            {
+                try { EndHappy(); }
+                catch (Exception e) { Sahar.Engine.Diagnostics.Log.Write($"soul error: {e.GetType().Name}"); }
+            };
         }
         Props = _c.CreatePropertySet();
         Props.InsertScalar("t", 0f);
@@ -89,6 +110,7 @@ internal sealed class SoulLayer
         float s = _v.Scale;
         double w = 2 * Math.PI / SoulMath.FloatPeriod, b = 2 * Math.PI / SoulMath.BreathPeriod;
         StopHop();
+        _hops.Clear();   // pixel values changed (or the device did): build hop animations afresh, dispose the old
 
         // The clock.
         StartClock();
@@ -199,6 +221,16 @@ internal sealed class SoulLayer
             Props.InsertScalar("kick", SoulMath.LeafKick(at, power));
             return;
         }
+        var set = _hops.Get((power, s));
+        _v.Hop.StartAnimation("Offset.Y", set.Rise);
+        _v.Hop.StartAnimation("Scale", set.Scale);
+        _v.Hop.StartAnimation("RotationAngleInDegrees", set.Tilt);
+        Props.StartAnimation("kick", set.Kick);
+    }
+
+    private HopSet BuildHop(float power, float s)
+    {
+        HopSetsBuilt++;
         var keys = SoulMath.HopKeys(power);
         var linear = _c.CreateLinearEasingFunction();
         var rise = _c.CreateScalarKeyFrameAnimation();
@@ -214,10 +246,7 @@ internal sealed class SoulLayer
         }
         var d = TimeSpan.FromSeconds(SoulMath.HopSeconds);
         foreach (var a in new KeyFrameAnimation[] { rise, scale, tilt, kick }) a.Duration = d;
-        _v.Hop.StartAnimation("Offset.Y", rise);
-        _v.Hop.StartAnimation("Scale", scale);
-        _v.Hop.StartAnimation("RotationAngleInDegrees", tilt);
-        Props.StartAnimation("kick", kick);
+        return new HopSet(rise, scale, tilt, kick);
     }
 
     private void StopHop()
@@ -265,7 +294,7 @@ internal sealed class SoulLayer
     }
 
     public string Describe() => FormattableString.Invariant(
-        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} reduced={B(Reduced)} hops={Hops} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
+        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} reduced={B(Reduced)} hops={Hops} hopSets={HopSetsBuilt} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
 
     private void StartBlink()
     {
