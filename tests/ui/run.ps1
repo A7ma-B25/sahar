@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -2340,6 +2340,44 @@ function Stage-Games {
     Stop-Engine
 }
 
+# SPIKE (throwaway): does Sahar make Windows think a fullscreen app is running? Apps such as Now Bar
+# hide when SHQueryUserNotificationState says BUSY / D3D / presentation. Prints facts; never fails.
+Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class Quns {
+    [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int state);
+    public static int State() { int s; SHQueryUserNotificationState(out s); return s; }
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    public static string Fg() { var sb = new StringBuilder(256); GetClassName(GetForegroundWindow(), sb, 256); return sb.ToString(); }
+}
+"@
+function Shell-Report([string]$when) {
+    $names = @{1='NOT_PRESENT';2='BUSY';3='D3D_FULLSCREEN';4='PRESENTATION';5='ACCEPTS_NOTIFICATIONS';6='QUIET_TIME';7='APP'}
+    $q = [Quns]::State()
+    $line = "SPIKE {0,-30} quns={1}({2}) fg={3}" -f $when, $q, $names[$q], [Quns]::Fg()
+    Write-Host $line
+    Add-Content -Path (Join-Path $Out 'spike-shell.txt') -Value $line
+}
+function Stage-Shell {
+    Step 'spike: fullscreen state with and without Sahar' {
+        $w = Start-TestWindow 'typing'
+        Start-Sleep -Seconds 1; Shell-Report 'before Sahar'
+        Start-Engine; Start-Sleep -Seconds 3
+        & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null; Start-Sleep -Seconds 2
+        Shell-Report 'Sahar running'
+        Write-Host ("    overlay: " + ((Info).overlayVisible))
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null; Start-Sleep -Seconds 2
+        Shell-Report 'Sahar hidden (hide 1 min)'
+        Write-Host ("    overlay: " + ((Info).overlayVisible))
+        Send '{"type":"cmd","name":"show"}' | Out-Null; Start-Sleep -Seconds 2
+        Shell-Report 'Sahar shown again'
+        Stop-Engine; Start-Sleep -Seconds 2
+        Shell-Report 'after Sahar quit'
+        if ($w -and -not $w.HasExited) { $w.Kill() }
+    }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -2355,6 +2393,7 @@ try {
             'senses' { Stage-Senses }
             'prayer' { Stage-Prayer }
             'games' { Stage-Games }
+            'shell' { Stage-Shell }
         }
     }
 }
