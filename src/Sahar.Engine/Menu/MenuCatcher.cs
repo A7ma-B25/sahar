@@ -4,7 +4,7 @@ using Sahar.Engine.Host;
 namespace Sahar.Engine.Menu;
 
 /// <summary>
-/// While the menu is open: an invisible window over her monitor, 1 px short of each edge (a window covering a whole
+/// While the menu is open: an invisible window over her monitor, 1 px short on its taskbar's side only (a window covering a whole
 /// monitor is a fullscreen app to the shell and taskbar tools); no redirection bitmap and nothing drawn, so it costs
 /// no memory, but it still takes the mouse. A click on another monitor activates that app, which closes the menu.
 /// It takes the
@@ -22,7 +22,7 @@ internal sealed class MenuCatcher : IWindowHandler
 
     public MenuCatcher(bool capturable)
     {
-        _bounds = Win.MonitorInset(Vector2.Zero);
+        _bounds = Win.CatcherArea(Vector2.Zero);
         Hwnd = Win.Create(this, Native.WS_EX_NOREDIRECTIONBITMAP | Native.WS_EX_TOPMOST | Native.WS_EX_TOOLWINDOW,
             Native.WS_POPUP, _bounds, "Sahar menu");
         Win.SetCaptureExcluded(Hwnd, !capturable);
@@ -33,7 +33,7 @@ internal sealed class MenuCatcher : IWindowHandler
     /// <summary>Shows it over the monitor at <paramref name="at"/> (her body's centre).</summary>
     public void Show(Vector2 at)
     {
-        _bounds = Win.MonitorInset(at);
+        _bounds = Win.CatcherArea(at);
         Native.SetWindowPos(Hwnd, Native.HWND_TOPMOST, _bounds.Left, _bounds.Top, _bounds.Right - _bounds.Left,
             _bounds.Bottom - _bounds.Top, 0);
         Visible = true;

@@ -94,12 +94,15 @@ internal static unsafe class Win
         foreach (var w in moves) Native.SetWindowPos(w.Hwnd, w.After, w.Rect.Left, w.Rect.Top, w.Rect.Width, w.Rect.Height, w.Flags);
     }
 
-    /// <summary>A catcher's area: the monitor at a point, 1 px inside each edge — never the whole monitor, which the shell
-    /// would take for a fullscreen app (Now Bar hides, notifications go quiet).</summary>
-    public static RECT MonitorInset(System.Numerics.Vector2 at)
+    /// <summary>A catcher's area: the monitor at a point, 1 px short on its taskbar's side only — never the whole monitor,
+    /// which the shell would take for a fullscreen app (Now Bar hides, notifications go quiet), yet a click on the other
+    /// three outermost rows (a hide-and-seek spot, a corner) is still caught. Hide spots never use the taskbar's edge.</summary>
+    public static RECT CatcherArea(System.Numerics.Vector2 at)
     {
-        var (monitor, _, _) = Native.MonitorAt(new POINT { X = (int)at.X, Y = (int)at.Y });
-        return new RECT { Left = monitor.Left + 1, Top = monitor.Top + 1, Right = monitor.Right - 1, Bottom = monitor.Bottom - 1 };
+        var m = Senses.Monitors.At(at);
+        var (_, bar, _) = Senses.Taskbar.Get(m.Handle);
+        int edge = bar switch { Sahar.Core.Motion.Edge.Left => 0, Sahar.Core.Motion.Edge.Top => 1, Sahar.Core.Motion.Edge.Right => 2, _ => 3 };
+        return ToRECT(OverlayPlan.ShortOnOneSide(m.Bounds, edge));
     }
 
     public static void SetCaptureExcluded(nint hwnd, bool excluded)
@@ -132,6 +135,13 @@ internal sealed class OverlayWindow : IWindowHandler
             Native.WS_POPUP | Native.WS_VISIBLE, Win.ToRECT(initial), "Sahar");
         Native.SetLayeredWindowAttributes(Hwnd, 0, 255, Native.LWA_ALPHA);
         Win.SetCaptureExcluded(Hwnd, !capturable);
+    }
+
+    /// <summary>Reads where the window really is (Windows may have moved it, e.g. after a display change).</summary>
+    public unsafe void Refresh()
+    {
+        RECT r;
+        if (Native.GetWindowRect(Hwnd, &r) != 0) Rect = new RectI(r.Left, r.Top, r.Right, r.Bottom);
     }
 
     /// <summary>The move to <paramref name="r"/> (none if it is there already): position only when the size is the same.</summary>

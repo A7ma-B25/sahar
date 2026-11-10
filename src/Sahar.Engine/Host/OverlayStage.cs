@@ -19,6 +19,7 @@ internal sealed class OverlayStage
     private RectF _canvas;
     private float _dpi = 1;
     private bool _placed;
+    private Vector3 _rootOffset = new(float.NaN);
 
     public OverlayStage(OverlayWindow overlay, ContainerVisual root, IReadOnlyList<RectI> monitors)
     {
@@ -53,6 +54,7 @@ internal sealed class OverlayStage
     public void Replan(IReadOnlyList<RectI> monitors)
     {
         _monitors = monitors;
+        _overlay.Refresh();   // Windows may have moved it itself: plan from where it really is
         if (_placed) Apply(null);
     }
 
@@ -68,10 +70,13 @@ internal sealed class OverlayStage
         var before = _overlay.Rect;
         var move = _overlay.MoveTo(target);
         Win.Apply(move, with);
-        if (move is null) return;
-        if (target.Width == before.Width && target.Height == before.Height) Moves++;
-        else Resizes++;
+        if (move is not null)
+        {
+            if (target.Width == before.Width && target.Height == before.Height) Moves++;
+            else Resizes++;
+        }
         // Overlay coordinates stay screen pixels: the root sits at minus the window's top-left.
-        _root.Offset = new Vector3(-target.Left, -target.Top, 0);
+        var offset = new Vector3(-target.Left, -target.Top, 0);
+        if (offset != _rootOffset) _root.Offset = _rootOffset = offset;
     }
 }
