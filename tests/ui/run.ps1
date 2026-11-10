@@ -1311,6 +1311,7 @@ function Stage-Menu {
         # (+0.045 s) and landing (+0.56 s) squash, her mood cross-fades (idle Calm <-> back Happy, neither squishes)
         # while frames are grabbed; every frame must be a mix of the settled pictures before and after (a blink or a
         # twinkle may add a few dozen pixels; a second outline of her body adds about a thousand).
+        # Since 0.11 a face change is a blink: both eyes shut a moment (~300 px lighter than both pictures, by design): limit 600.
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Pose-Body 500 330 | Out-Null
         [Mouse]::Move(5, 5)
@@ -1335,7 +1336,7 @@ function Stage-Menu {
                     foreach ($f in $frames) {
                         $extra = [Ghost]::Extra((Bytes $f[1]), $before, $after, 60)
                         $report += "$t>$key@$($f[0]):$extra"
-                        if ($extra -gt 300) { $found += "hop $t to $key at $($f[0]) ms: $extra px beyond both pictures" }
+                        if ($extra -gt 600) { $found += "hop $t to $key at $($f[0]) ms: $extra px beyond both pictures" }
                         if ($k++ % 3 -eq 0) { $path = Join-Path $dir ("{0}-{1}-{2:D3}ms.png" -f $t, $key, $f[0]); $f[1].Save($path); $tiles += $path }
                         $f[1].Dispose()
                     }
