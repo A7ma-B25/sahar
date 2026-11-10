@@ -25,7 +25,7 @@ internal static unsafe class FullscreenWatcher
         var m = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
         bool caption = (Native.GetWindowLongPtr(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION;
         return $"fg 0x{fg:X} class '{Native.ClassName(fg)}' rect {r.Left},{r.Top},{r.Right},{r.Bottom} " +
-               $"monitor {m.Bounds} caption {caption} maximized {Native.IsZoomed(fg) != 0} own {Win.Own.Contains(fg)} quns {state} => {Check()}";
+               $"monitor {m.Bounds} caption {caption} maximized {Native.IsZoomed(fg) != 0} own {Win.Own.Contains(fg)} quns {state} => {CheckMonitor() != 0}";
     }
 
     /// <summary>Why she hides, for the log: Windows' own fullscreen state and what the window looks like (its class,
@@ -45,19 +45,22 @@ internal static unsafe class FullscreenWatcher
                $"maximized {Native.IsZoomed(fg) != 0} sizing-frame {(style & WS_THICKFRAME) != 0} covers-monitor {covers}";
     }
 
-    public static bool Check()
+    /// <summary>The monitor (handle) the fullscreen app is on, or 0 when nothing is fullscreen. Windows' own D3D-fullscreen
+    /// and presentation states count on the foreground window's monitor (the primary one when that is ours).</summary>
+    public static nint CheckMonitor()
     {
+        nint fg = Native.GetForegroundWindow();
         int state = 0;
         if (Native.SHQueryUserNotificationState(&state) == 0 && state is QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE)
-            return true;
+            return fg == 0 || Win.Own.Contains(fg) ? Monitors.Primary.Handle : Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST);
 
-        nint fg = Native.GetForegroundWindow();
-        if (fg == 0 || fg == Native.GetShellWindow() || Win.Own.Contains(fg)) return false;
+        if (fg == 0 || fg == Native.GetShellWindow() || Win.Own.Contains(fg)) return 0;
         RECT r;
-        if (Native.GetWindowRect(fg, &r) == 0) return false;
-        var monitor = Monitors.Describe(Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST));
+        if (Native.GetWindowRect(fg, &r) == 0) return 0;
+        nint m = Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST);
+        var monitor = Monitors.Describe(m);
         long style = Native.GetWindowLongPtr(fg, GWL_STYLE);
         return Fullscreen.IsFullscreen(Monitors.ToRect(r), monitor.Bounds, Native.ClassName(fg), (style & WS_CAPTION) == WS_CAPTION,
-            Native.IsZoomed(fg) != 0, (style & WS_THICKFRAME) != 0);
+            Native.IsZoomed(fg) != 0, (style & WS_THICKFRAME) != 0) ? m : 0;
     }
 }

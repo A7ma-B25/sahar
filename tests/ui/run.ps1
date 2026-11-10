@@ -943,8 +943,8 @@ function Stage-Events {
         finally { Stop-Process -Id $script:win.Id -Force -ErrorAction SilentlyContinue }
         $back = Wait-State { param($st) -not $st.hidden } 2000 'shown again'
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
-        if ($log -notmatch "fullscreen: hide \(class '") { throw 'the log does not say why she hid' }
-        if ($log -notmatch 'fullscreen: show \(') { throw 'the log does not say why she came back' }
+        if ($log -notmatch "fullscreen: hide \(monitor 0, hers 0; class '") { throw 'the log does not say why she hid (monitor, hers, class)' }
+        if ($log -notmatch 'fullscreen: show \(monitor none, hers 0; ') { throw 'the log does not say why she came back' }
         if ((Info).overlayVisible -ne 'true') { throw 'overlay not shown again' }
         Start-Sleep -Milliseconds 300
         $back = State

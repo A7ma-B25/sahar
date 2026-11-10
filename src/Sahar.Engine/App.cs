@@ -202,7 +202,10 @@ internal sealed unsafe class App
             }
         }
         motion.HiddenAway += () => { if (_state.Hidden) Native.ShowWindow(overlay.Hwnd, Native.SW_HIDE); };
-        director = new Director(ui, key => Express(key, false), SetHidden);
+        // Fullscreen hides her only on her own monitor (0.10.1); indexes in her monitor list, never titles, in the log.
+        director = new Director(ui, key => Express(key, false), SetHidden,
+            handle => monitors.FindIndex(m => m.Handle == handle) is var i && i >= 0 ? i : FullscreenScope.UnknownMonitor,
+            () => monitorIndex);
         dismissDirector = director;
         var timerTool = new TimerTool(ui, sahar, director);
         var dndTool = new DndTool(ui, director);

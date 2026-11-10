@@ -8,7 +8,8 @@ namespace Sahar.Engine.Host;
 
 /// <summary>
 /// Ties senses to the brain and the brain to what she shows. Ticks every 250 ms and on every event;
-/// plays the brain's expression when it changes and hides her when something is fullscreen.
+/// plays the brain's expression when it changes and hides her when something is fullscreen on her monitor (0.10.1:
+/// fullscreen on another monitor keeps her shown, only quiet).
 /// </summary>
 internal sealed class Director
 {
@@ -18,11 +19,18 @@ internal sealed class Director
     private readonly Action<bool> _setHidden;
     private readonly DispatcherQueueTimer _timer;
     private string _lastKey = "idle";
-    private bool _hidden, _fullscreen, _dnd, _cameraMic, _adhan, _quran;
+    private readonly Func<nint, int> _monitorIndex;
+    private readonly Func<int> _herMonitor;
+    private FullscreenWhere _fullscreen = FullscreenWhere.None;
+    private bool _hidden, _dnd, _cameraMic, _adhan, _quran;
     private DateTimeOffset _hiddenUntil;
 
-    public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden)
+    /// <param name="monitorIndex">A monitor handle's index in her monitor list (<see cref="FullscreenScope.UnknownMonitor"/> if not in it).</param>
+    /// <param name="herMonitor">The index of the monitor she is on.</param>
+    public Director(DispatcherQueue ui, Action<string> express, Action<bool> setHidden, Func<nint, int> monitorIndex, Func<int> herMonitor)
     {
+        _monitorIndex = monitorIndex;
+        _herMonitor = herMonitor;
         _express = express;
         _setHidden = setHidden;
         _timer = ui.CreateTimer();
@@ -96,10 +104,11 @@ internal sealed class Director
     /// <summary>A face that needs you appeared (timer done, a reminder, Claude asking).</summary>
     public event Action? NeedsYou;
 
-    public bool Quiet => _fullscreen || _dnd || _cameraMic || _adhan || _quran;
+    /// <summary>Quiet (no comments, no sounds): fullscreen anywhere — her own monitor or another — counts.</summary>
+    public bool Quiet => _fullscreen != FullscreenWhere.None || _dnd || _cameraMic || _adhan || _quran;
 
     private void ApplyQuiet() =>
-        _brain.SetQuiet((_fullscreen ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None) |
+        _brain.SetQuiet((_fullscreen == FullscreenWhere.Hers ? QuietReason.Fullscreen : QuietReason.None) | (_dnd ? QuietReason.DoNotDisturb : QuietReason.None) |
             (_cameraMic ? QuietReason.CameraOrMic : QuietReason.None) | (_adhan ? QuietReason.Adhan : QuietReason.None) |
         (_quran ? QuietReason.Quran : QuietReason.None));
 
@@ -112,11 +121,23 @@ internal sealed class Director
 
     private void CheckFullscreen()
     {
-        bool fs = _debounce.Update(FullscreenWatcher.Check(), DateTimeOffset.UtcNow);
-        if (fs == _fullscreen) return;
-        _fullscreen = fs;
-        // Why she hid: the window class only (never a title), so "she vanished over X" can be traced.
-        Log.Write($"fullscreen: {(fs ? "hide" : "show")} ({FullscreenWatcher.Reason()})");
+        nint monitor = FullscreenWatcher.CheckMonitor();
+        bool any = _debounce.Update(monitor != 0, DateTimeOffset.UtcNow);
+        int index = any ? _monitorIndex(monitor) : FullscreenScope.NoMonitor, her = _herMonitor();
+        // Re-checked every tick: moved onto the fullscreen app's monitor, she hides; when it ends she comes back.
+        var where = FullscreenScope.Where(index, her);
+        if (where == _fullscreen) return;
+        var was = _fullscreen;
+        _fullscreen = where;
+        // Why: monitor indexes and the window class only (never a title), so "she vanished over X" can be traced.
+        string verb = where switch
+        {
+            FullscreenWhere.Hers => "hide",
+            FullscreenWhere.Elsewhere => "elsewhere",
+            _ => was == FullscreenWhere.Hers ? "show" : "over",
+        };
+        string at = index switch { FullscreenScope.NoMonitor => "none", FullscreenScope.UnknownMonitor => "unknown", _ => index.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        Log.Write($"fullscreen: {verb} (monitor {at}, hers {her}; {FullscreenWatcher.Reason()})");
         ApplyQuiet();
     }
 
