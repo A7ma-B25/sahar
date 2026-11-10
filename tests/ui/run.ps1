@@ -405,7 +405,7 @@ function Stage-Gallery {
 
 # ---- 0.10a soul: motion seen in pixels (owner ruling 2026-11-10) ----
 # Her body's bottom edge in a central column band: the lowest row (from just above her shadow upward) whose pixel is
-# at least 60 away (R+G+B) from the same pixel with her moved away. The body bottom is her pivot, so it rises exactly
+# at least 250 away (R+G+B) from the same pixel with her moved away (her faint halo stays under 100; her body is ~600). The body bottom is her pivot, so it rises exactly
 # as much as she does, whatever her stretch.
 function Bottom-Edge([System.Drawing.Bitmap]$bmp, [System.Drawing.Bitmap]$base, $st, [int]$dx = 0, [int]$dy = 0) {
     $x0 = [int]($st.x + $st.width * 0.36) - $dx; $x1 = [int]($st.x + $st.width * 0.64) - $dx
@@ -413,7 +413,7 @@ function Bottom-Edge([System.Drawing.Bitmap]$bmp, [System.Drawing.Bitmap]$base, 
     for ($y = $yb; $y -ge $yt; $y--) {
         for ($x = $x0; $x -le $x1; $x += 2) {
             $p = $bmp.GetPixel($x, $y); $b = $base.GetPixel($x + $dx, $y + $dy)
-            if ([math]::Abs($p.R - $b.R) + [math]::Abs($p.G - $b.G) + [math]::Abs($p.B - $b.B) -ge 60) { return $y + $dy }
+            if ([math]::Abs($p.R - $b.R) + [math]::Abs($p.G - $b.G) + [math]::Abs($p.B - $b.B) -ge 250) { return $y + $dy }
         }
     }
     $null
