@@ -73,10 +73,10 @@ function Assert-Body([string]$shot, [string]$baseline, $state) {
     if ($diff -lt 30) { throw "body pixel equals the wallpaper (diff $diff): Sahar is not drawn" }
 }
 
-# Expression keys 1–25 in catalog order (src/Sahar.Core/assets/expressions.json).
+# Expression keys 1–29 in catalog order (src/Sahar.Core/assets/expressions.json).
 $ExpressionKeys = @('music', 'claude-working', 'claude-permission', 'claude-done', 'timer-done', 'celebrate', 'rain',
     'battery-low', 'charging', 'download', 'sleep', 'back', 'notification', 'dnd', 'offline', 'online', 'screenshot',
-    'copied', 'reminder', 'error', 'hot', 'poked', 'dragged', 'break', 'late-night')
+    'copied', 'reminder', 'error', 'hot', 'poked', 'dragged', 'break', 'late-night', 'quran', 'dizzy', 'sick', 'angry')
 
 function Crop([string]$path, [int]$cx, [int]$cy, [int]$size, [string]$to) {
     $src = [System.Drawing.Bitmap]::new($path)
@@ -302,6 +302,41 @@ function Stage-Idle {
     Step 'Sahar is drawn' {
         Start-Sleep -Milliseconds 1500
         Assert-Body (Screenshot 'idle.png') $script:baseline $script:state
+    }
+    Step 'the night sky shows inside her (and goes when turned off)' {
+        function Sum3([string]$shot, [int]$x, [int]$y) {
+            $t = 0; $blue = 0; $red = 0
+            foreach ($dx in -1..1) { foreach ($dy in -1..1) { $p = Pixel $shot ($x + $dx) ($y + $dy); $t += $p.R + $p.G + $p.B; $blue += $p.B; $red += $p.R } }
+            @{ Sum = [int]($t / 9); Blue = $blue / 9; Red = $red / 9 }
+        }
+        $st = $script:state
+        $lx = [int]($st.x + $st.width * 0.5); $ly = [int]($st.y + $st.width * 0.8625)   # rig point (120,196): the wash centre
+        $ux = [int]($st.x + $st.width / 2); $uy = [int]($st.y + $st.height * 0.25)
+        $shot = Screenshot 'idle-night.png'
+        $low = Sum3 $shot $lx $ly; $up = Sum3 $shot $ux $uy
+        Write-Host "    lower body $($low.Sum) (R $([int]$low.Red) B $([int]$low.Blue)); upper body $($up.Sum)"
+        if ($low.Sum -gt $up.Sum - 70) { throw "no night inside her: lower $($low.Sum) vs upper $($up.Sum)" }
+        if ($low.Blue -lt $low.Red) { throw 'the night is not lavender (Calm)' }
+        $settings = Join-Path $env:APPDATA 'Sahar\settings.json'
+        $saved = if (Test-Path $settings) { Get-Content $settings -Raw } else { $null }
+        try {
+            Stop-Engine
+            New-Item -ItemType Directory -Force -Path (Split-Path $settings) | Out-Null
+            Set-Content $settings '{"innerStars": false}'
+            Start-Engine
+            Send '{"type":"cmd","name":"pose","args":{"x":"500","y":"400"}}' | Out-Null
+            Start-Sleep -Milliseconds 1500
+            $off = Sum3 (Screenshot 'idle-night-off.png') $lx $ly
+            Write-Host "    lower body without the sky $($off.Sum)"
+            if ($off.Sum -lt $low.Sum + 30) { throw "turning the stars off did not remove the night: $($off.Sum) vs $($low.Sum)" }
+        }
+        finally {
+            Stop-Engine
+            if ($null -ne $saved) { Set-Content $settings $saved -NoNewline } else { Remove-Item $settings -ErrorAction SilentlyContinue }
+            Start-Engine
+            Send '{"type":"cmd","name":"pose","args":{"x":"500","y":"400"}}' | Out-Null
+            Start-Sleep -Milliseconds 800
+        }
     }
     Step 'Sahar survives a lost graphics device' {
         $r = Send '{"type":"cmd","name":"debug-device-lost"}'

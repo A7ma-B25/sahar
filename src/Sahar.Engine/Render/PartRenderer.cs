@@ -18,7 +18,8 @@ internal static class PartRenderer
     private static readonly Rgba ShadowInk = Rgba.Parse("#1E2350");
 
     public const float MoonUnits = 48f;  // moon surface: glow r20 plus soft edge
-    public const float StarUnits = 18f;  // star surface: star r8
+    public const float StarUnits = 18f;  // star surface: star r8 (+ its edge)
+    public const float DotUnits = 4f, DotRadius = 1.5f;   // inner dot surface: a white circle r1.5, scaled per dot
 
     /// <summary>Draws rig shapes (body, face, leaf…) in canvas units.</summary>
     public static void Shapes(D2DContext dc, float scale, Rig rig, MoodColors mood, IEnumerable<RigShape> shapes)
@@ -124,11 +125,41 @@ internal static class PartRenderer
         dc.DrawGeometry(face, dc.SolidBrush(new D2DColor(MoonFace)), 1f, dc.StrokeStyle("round"));
     }
 
-    /// <summary>One four-point star (r8), centred in a <see cref="StarUnits"/> square.</summary>
-    public static void StarShape(D2DContext dc, float scale)
+    /// <summary>One four-point star (r8), centred in a <see cref="StarUnits"/> square, with its warm edge (spec L1:
+    /// 1.3 in the star's own units, round join) when the rig gives one. Inner stars are the same without an edge.</summary>
+    public static void StarShape(D2DContext dc, float scale, RigStarShape star)
     {
         dc.SetTransform(Matrix3x2.CreateTranslation(StarUnits / 2, StarUnits / 2) * Matrix3x2.CreateScale(scale));
-        dc.FillGeometry(dc.Path(PathData.Parse("M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2Z")), dc.SolidBrush(new D2DColor(Star)));
+        var g = dc.Path(PathData.Parse(star.D));
+        dc.FillGeometry(g, dc.SolidBrush(new D2DColor(Rgba.Parse(star.Fill))));
+        if (star.Edge is { } edge) dc.DrawGeometry(g, dc.SolidBrush(new D2DColor(Rgba.Parse(edge))), star.EdgeWidth, dc.StrokeStyle("round"));
+    }
+
+    /// <summary>A plain star without an edge (particles: dizzy stars, late-night sparkles).</summary>
+    public static void StarShape(D2DContext dc, float scale) =>
+        StarShape(dc, scale, new RigStarShape("M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2Z", "#FFE7A8", null, 0));
+
+    /// <summary>A small white dot (r <see cref="DotRadius"/>) centred in a <see cref="DotUnits"/> square.</summary>
+    public static void Dot(D2DContext dc, float scale)
+    {
+        dc.SetTransform(Matrix3x2.CreateTranslation(DotUnits / 2, DotUnits / 2) * Matrix3x2.CreateScale(scale));
+        dc.FillEllipse(Vector2.Zero, new Vector2(DotRadius), dc.SolidBrush(new D2DColor(Rgba.Parse("#FFFFFF"))));
+    }
+
+    /// <summary>The night inside her (spec L2): the wash's radial gradient (stops from the rig's reviewed table) filling
+    /// her body path. The gradient is transparent before the wash ellipse's edge wherever her body is, so filling the
+    /// body with it equals the ellipse clipped to the body.</summary>
+    public static void NightWash(D2DContext dc, float scale, Rig rig, Mood mood)
+    {
+        dc.SetTransform(Matrix3x2.CreateTranslation(rig.OffsetX, rig.OffsetY) * Matrix3x2.CreateScale(scale));
+        var w = rig.Sky.Wash;
+        var stops = NightSky.For(mood);
+        var cols = new[] { stops.Inner, stops.Mid, stops.Outer };
+        var grad = new D2DGradientStop[w.Offsets.Length];
+        for (int i = 0; i < grad.Length; i++) grad[i] = Stop(w.Offsets[i], cols[i], w.Opacities[i]);
+        var centre = new Vector2(w.Cx - w.Rx + 2 * w.Rx * w.GradCx, w.Cy - w.Ry + 2 * w.Ry * w.GradCy);
+        var radii = new Vector2(2 * w.Rx * w.GradR, 2 * w.Ry * w.GradR);
+        dc.FillGeometry(dc.Path(PathData.Parse(rig.Parts["body"][0].D!)), dc.RadialBrush(grad, centre, radii));
     }
 
     /// <summary>The leaf bud's glow: circle r9 at the bud, blurred; opacity is animated on the visual.</summary>

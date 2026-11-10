@@ -150,7 +150,7 @@ internal sealed partial class MotionController
         root.Clip = null;
         _v.Character.StopAnimation("RotationAngleInDegrees");
         _v.Character.RotationAngleInDegrees = 0;
-        _v.Face.Container.Offset = Vector3.Zero;
+        _v.FaceGroup.Offset = Vector3.Zero;
         RemoveRings();
         ResetLiving();
         if (BodyScaleBusy)
@@ -342,9 +342,9 @@ internal sealed partial class MotionController
                 t += dt;
                 // Look left, then right, then back (2 s).
                 float x = t < 0.7f ? -look : t < 1.5f ? look : 0;
-                _v.Face.Container.Offset = new Vector3(x, 0, 0);
+                _v.FaceGroup.Offset = new Vector3(x, 0, 0);
                 if (t < 2f) return true;
-                _v.Face.Container.Offset = Vector3.Zero;
+                _v.FaceGroup.Offset = Vector3.Zero;
                 _step = Travel(hidden, 0.9f, EaseIn, _ => Clip(), done: () => Play(MotionKind.LandAndSit));
                 return true;
             };
@@ -372,7 +372,7 @@ internal sealed partial class MotionController
         var d = cursor - eyes;
         float len = d.Length();
         var offset = len < 1 ? Vector2.Zero : d / len * MathF.Min(1, len / 200f) * EyesUnits * _v.Scale;
-        _v.Face.Container.Offset = new Vector3(offset, 0);
+        _v.FaceGroup.Offset = new Vector3(offset, 0);
     }
 
     // ---------- 5 Drag ----------
@@ -837,7 +837,7 @@ internal sealed partial class MotionController
         Clip();
         _v.Root.CenterPoint = PivotBodyCentre;
         _face(Eyes.Look, Mouth.Smile, 7f);
-        _v.Face.Container.Offset = new Vector3(sign * 3 * _v.Scale, 0, 0);
+        _v.FaceGroup.Offset = new Vector3(sign * 3 * _v.Scale, 0, 0);
         _step = Travel(hidden, 1.2f, Smooth, _ => Clip(), done: () =>
             _step = Travel(peek, 0.5f, EaseOut, _ => Clip(), done: () =>
                 Wait(1f, () => _step = Travel(hidden, 0.5f, EaseIn, _ => Clip(), done: () =>

@@ -12,20 +12,41 @@ internal static class IdleAnimations
 {
     public const float BobUnits = 10f;
     public const float OrbitRx = 112f, OrbitRy = 26f, OrbitTiltDegrees = -10f;
-    private static readonly float[] TwinkleSeconds = [2.6f, 3.4f, 2.2f, 3f, 2.8f];
-
-    public static void Start(SaharVisual v)
+    /// <param name="reduced">Windows "Animation effects" off: no loops at all; everything rests (stars lit, moon beside her).</param>
+    public static void Start(SaharVisual v, bool reduced = false)
     {
         var c = v.Root.Compositor;
         float s = v.Scale;
+        var sky = v.Rig.Sky;
+
+        if (reduced)
+        {
+            foreach (var x in new Visual[] { v.Character, v.ShadowVisual, v.BodyB.Container, v.EyesLayer.Container, v.Leaf, v.HaloLayer.Container,
+                         v.BudGlow.Container, v.Stars })
+                foreach (var p in new[] { "Opacity", "Scale", "Offset.Y", "RotationAngleInDegrees" }) x.StopAnimation(p);
+            v.BodyB.Container.Opacity = 0;
+            v.EyesLayer.Container.Scale = Vector3.One;
+            for (int i = 0; i < v.StarVisuals.Length; i++) { v.StarVisuals[i].StopAnimation("Opacity"); v.StarVisuals[i].Opacity = 1; }
+            for (int i = 0; i < v.InnerStarVisuals.Length; i++)
+            {
+                var k = sky.InnerStars[i].Scale;
+                v.InnerStarVisuals[i].StopAnimation("Opacity"); v.InnerStarVisuals[i].StopAnimation("Scale");
+                v.InnerStarVisuals[i].Opacity = 1; v.InnerStarVisuals[i].Scale = new Vector3(k, k, 1);
+            }
+            for (int i = 0; i < v.InnerDotVisuals.Length; i++) { v.InnerDotVisuals[i].StopAnimation("Opacity"); v.InnerDotVisuals[i].Opacity = 0.85f; }
+            v.MoonProps.StopAnimation("t");
+            v.MoonProps.InsertScalar("t", 0f);   // the moon rests at her right
+            StartOrbit(v, c, s, still: true);
+            return;
+        }
 
         StartBob(v);
 
         // Hem flutter: the second body frame fades in and out over 2.2 s on top of the first.
         v.BodyB.Container.StartAnimation("Opacity", Loop(c, 2.2, (0f, 0f), (0.5f, 1f), (1f, 0f)));
 
-        // Blink once every 6 s (92–100 % of the cycle).
-        v.Face.Container.StartAnimation("Scale", Loop3(c, 6.0,
+        // Blink once every 6 s (92–100 % of the cycle): the eyes only (the mouth stays).
+        v.EyesLayer.Container.StartAnimation("Scale", Loop3(c, 6.0,
             (0f, Vector3.One), (0.92f, Vector3.One), (0.96f, new Vector3(1, 0.1f, 1)), (1f, Vector3.One)));
 
         // Leaf sways ±5° around the stem base over 5 s.
@@ -43,9 +64,31 @@ internal static class IdleAnimations
         spin.IterationBehavior = AnimationIterationBehavior.Forever;
         v.Stars.StartAnimation("RotationAngleInDegrees", spin);
         for (int i = 0; i < v.StarVisuals.Length; i++)
-            v.StarVisuals[i].StartAnimation("Opacity", Loop(c, TwinkleSeconds[i], (0f, 0.3f), (0.5f, 1f), (1f, 0.3f)));
+            v.StarVisuals[i].StartAnimation("Opacity", Loop(c, sky.OuterStars[i].Period, (0f, 0.3f), (0.5f, 1f), (1f, 0.3f)));
+
+        // The night inside her (spec L3): six stars twinkle and swell, five dots glimmer, each on its own rhythm.
+        for (int i = 0; i < v.InnerStarVisuals.Length; i++)
+        {
+            var spot = sky.InnerStars[i];
+            float k = spot.Scale;
+            v.InnerStarVisuals[i].StartAnimation("Opacity", Delayed(Loop(c, spot.Period, (0f, 0.15f), (0.5f, 1f), (1f, 0.15f)), spot.Begin));
+            v.InnerStarVisuals[i].StartAnimation("Scale", Delayed(Loop3(c, spot.Period,
+                (0f, new Vector3(0.6f * k, 0.6f * k, 1)), (0.5f, new Vector3(1.1f * k, 1.1f * k, 1)), (1f, new Vector3(0.6f * k, 0.6f * k, 1))), spot.Begin));
+        }
+        for (int i = 0; i < v.InnerDotVisuals.Length; i++)
+        {
+            var dot = sky.InnerDots[i];
+            v.InnerDotVisuals[i].StartAnimation("Opacity", Delayed(Loop(c, dot.Period, (0f, 0.2f), (0.5f, 0.85f), (1f, 0.2f)), dot.Begin));
+        }
 
         StartOrbit(v, c, s);
+    }
+
+    private static T Delayed<T>(T a, float seconds) where T : KeyFrameAnimation
+    {
+        a.DelayTime = TimeSpan.FromSeconds(seconds);
+        a.DelayBehavior = AnimationDelayBehavior.SetInitialValueBeforeDelay;
+        return a;
     }
 
     /// <summary>Bob: the character floats up 10 units and back over 3.6 s; the shadow shrinks and fades in step.</summary>
@@ -61,7 +104,7 @@ internal static class IdleAnimations
     /// The moon travels a tilted ellipse every 9 s, starting at the right and passing in front of her on the
     /// lower half (the front copy is visible for the first half of the cycle, the back copy for the second).
     /// </summary>
-    private static void StartOrbit(SaharVisual v, Compositor c, float s)
+    private static void StartOrbit(SaharVisual v, Compositor c, float s, bool still = false)
     {
         var props = v.MoonProps;
         var t = c.CreateScalarKeyFrameAnimation();
@@ -91,7 +134,7 @@ internal static class IdleAnimations
         v.MoonBack.Container.StartAnimation("Offset", offset);
         v.MoonFront.Container.StartAnimation("Opacity", front);
         v.MoonBack.Container.StartAnimation("Opacity", back);
-        props.StartAnimation("t", t);
+        if (!still) props.StartAnimation("t", t);
     }
 
     internal static ScalarKeyFrameAnimation Loop(Compositor c, double seconds, params (float At, float Value)[] frames)
