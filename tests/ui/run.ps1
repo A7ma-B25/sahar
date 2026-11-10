@@ -2140,7 +2140,7 @@ function Stage-Prayer {
         $lines = (Text64 $l.lines64) -split "`n"
         if ($lines.Count -ne 8) { throw "list lines: $($lines.Count)" }
         if ($lines[0] -notmatch '^الجاية: ') { throw "first line: $($lines[0])" }
-        foreach ($name in 'الفجر', 'الشروق', 'الظهر', 'العصر', 'المغرب', 'العشاء') {
+        foreach ($name in 'الفجر', 'الشروق', 'الضهر', 'العصر', 'المغرب', 'العشا') {
             if (-not ($lines | Where-Object { $_ -match "^$name — \d\d:\d\d$" })) { throw "no time line for $name" }
         }
         if ($lines[7] -notmatch 'طريقة الحساب: أم القرى') { throw "method line: $($lines[7])" }

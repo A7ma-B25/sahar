@@ -31,6 +31,10 @@ public class AddressTests
     [InlineData("غمّض عيونك… 🙈", "غمّضي عيونك… 🙈")]
     [InlineData("اشلف الطابة وأنا بجيبلك ياها! ⚽", "اشلفي الطابة وأنا بجيبلك ياها! ⚽")]
     [InlineData("لقيتني بـ 14 ثانية بالمعدل 🏆", "لقيتيني بـ 14 ثانية بالمعدل 🏆")]
+    [InlineData("تصبح على خير", "تصبحي على خير")]
+    [InlineData("منيحة! وإنت كيفك؟", "منيحة! وإنتي كيفك؟")]
+    [InlineData("ما بعرف مدينتك لسا. خبّرني ياها.", "ما بعرف مدينتك لسا. خبّريني ياها.")]
+    [InlineData("اكتبلي ياها هون.", "اكتبيلي ياها هون.")]
     public void ToAWoman_TheFeminineForm(string male, string female)
     {
         Assert.Equal(female, Address.For(Gender.Female, male));

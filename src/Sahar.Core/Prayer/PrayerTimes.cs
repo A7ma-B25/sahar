@@ -171,12 +171,13 @@ public sealed class PrayerSchedule(double lat, double lon, PrayerMethod method, 
     public bool InAdhanQuiet(DateTimeOffset now) => Around(now).Any(x => now >= x.At && now < x.At + AdhanQuiet);
 }
 
+/// <summary>Prayer names as she says them (spelled «الضهر» and «العشا», as in the mockups — owner ruling 2026-11-10).</summary>
 public static class PrayerNames
 {
     public static string Arabic(Prayer p) => p switch
     {
-        Prayer.Fajr => "الفجر", Prayer.Sunrise => "الشروق", Prayer.Dhuhr => "الظهر",
-        Prayer.Asr => "العصر", Prayer.Maghrib => "المغرب", _ => "العشاء",
+        Prayer.Fajr => "الفجر", Prayer.Sunrise => "الشروق", Prayer.Dhuhr => "الضهر",
+        Prayer.Asr => "العصر", Prayer.Maghrib => "المغرب", _ => "العشا",
     };
 
     public static string Method(PrayerMethod m) => m switch
