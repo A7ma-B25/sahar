@@ -36,6 +36,7 @@ internal sealed class MenuCard : IDisposable
     private float _dpi = 1;
     private int _openGen;
     private Vector2 _moon;
+    private RectF _card;
 
     public Func<MenuState> State { get; set; } = () => new(false, false, false);
     public Func<MenuFacts> Facts { get; set; } = () => new(null, false, null, false, null, false);
@@ -80,6 +81,19 @@ internal sealed class MenuCard : IDisposable
         _replyTimer.Tick += (_, _) => Safe(() => { _reply = null; Refresh(); });
     }
 
+    /// <summary>Applies the menu settings (Task 7; 0.10c calls it after a settings reload): the items switched on (and
+    /// available), what the header shows, where the card opens, light or dark.</summary>
+    public void Reload(SaharSettings s, Func<string, bool> available)
+    {
+        Visible = MenuCatalog.Visible(s.MenuItems, available);
+        HeaderMode = s.MenuHeader;
+        Placement = s.MenuPlace;
+        var appearance = s.Appearance;
+        Dark = appearance switch { Appearance.Dark => () => true, Appearance.Light => () => false, _ => Theme.AppsDark };
+        SettingsAvailable = () => SettingsLauncher.Available;
+        Refresh();
+    }
+
     /// <summary>Windows that may take the focus while the card stays open (the chat field).</summary>
     public HashSet<nint> AllowedFocus => _catcher.AllowedFocus;
 
@@ -108,6 +122,7 @@ internal sealed class MenuCard : IDisposable
         _visual.Draw(_content!, _dpi, fade: false);
         var place = MenuCardLayout.Place(body, monitor.WorkF, new Vector2(MenuCardLayout.Width, _layout!.Height) * _dpi, Placement, _dpi);
         _moon = place.MoonCentre;
+        _card = place.Card;
         OpenMs = clock.ElapsedMilliseconds;   // trigger → the card's visuals set up (spec §8: < 100 ms)
         _moonBefore = _sahar.MoonProps.TryGetScalar("moon", out var m) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? m : 1;
         int gen = ++_openGen;
@@ -218,7 +233,7 @@ internal sealed class MenuCard : IDisposable
 
     // ---- Pointer and keys ----
 
-    private RectF Screen(RectF r) => new(_visual.Card.X + r.X * _dpi, _visual.Card.Y + r.Y * _dpi, r.Width * _dpi, r.Height * _dpi);
+    private RectF Screen(RectF r) => new(_card.X + r.X * _dpi, _card.Y + r.Y * _dpi, r.Width * _dpi, r.Height * _dpi);
 
     private IEnumerable<string> Targets()
     {
@@ -242,7 +257,7 @@ internal sealed class MenuCard : IDisposable
             if (_layout!.Rects.TryGetValue(id, out var r)) _visual.SetHover(r, true, Radius(id));
             Press(id);
         }
-        else if (!_visual.Card.Contains(p.X, p.Y)) Close();   // a click on the card between items does nothing
+        else if (!_card.Contains(p.X, p.Y)) Close();   // a click on the card between items does nothing
     }
 
     private void Hover(Vector2 p)
@@ -290,7 +305,7 @@ internal sealed class MenuCard : IDisposable
             var r = Screen(_layout.Rects[id]);
             return FormattableString.Invariant($"{id}:{r.X + r.Width / 2:0},{r.Y + r.Height / 2:0},{r.Width:0},{r.Height:0}");
         }));
-        var card = _visual.Card;
+        var card = _card;
         string B(bool b) => b ? "true" : "false";
         return FormattableString.Invariant(
             $"open=true view={View} focus={_focus ?? "none"} caret=false mic={B(_view.MicShown)} hush={B(_content.Hushed)} dark={B(_content.T == Tokens.Dark)} ") +

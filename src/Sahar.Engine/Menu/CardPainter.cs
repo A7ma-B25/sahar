@@ -131,9 +131,16 @@ internal static class CardPainter
             ? new Matrix3x2(-k, 0, 0, k, ox + size, oy)
             : new Matrix3x2(k, 0, 0, k, ox, oy);
         dc.PushTransform(m);
-        foreach (var p in icon.Paths) dc.DrawGeometry(dc.Path(PathData.Parse(p)), brush, MenuIcons.Stroke, round);
+        foreach (var p in icon.Paths) dc.DrawGeometry(dc.Path(Parsed(p)), brush, MenuIcons.Stroke, round);
         foreach (var (cx, cy, r) in icon.Circles) dc.DrawEllipse(new Vector2(cx, cy), new Vector2(r), brush, MenuIcons.Stroke, round);
         dc.PopTransform();
+    }
+
+    private static readonly Dictionary<string, IReadOnlyList<PathCommand>> ParsedPaths = [];
+    private static IReadOnlyList<PathCommand> Parsed(string d)
+    {
+        if (!ParsedPaths.TryGetValue(d, out var p)) ParsedPaths[d] = p = PathData.Parse(d);
+        return p;
     }
 
     private static D2DRect R(RectF r) => new() { Left = r.X, Top = r.Y, Right = r.Right, Bottom = r.Bottom };

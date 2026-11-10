@@ -33,6 +33,8 @@ internal sealed class CardVisual : IDisposable
     private readonly CompositionEllipseGeometry _claspGeo;
     private float _dpi;
     private int _generation;
+    // Animations are built once and reused (each open used to make new ones: the menu stage saw memory creep).
+    private readonly Dictionary<string, CompositionAnimation> _anims = [];
 
     public CardVisual(CompositionHost host)
     {
@@ -115,16 +117,28 @@ internal sealed class CardVisual : IDisposable
         if (ExpressionPlayer.Reduced)
         {
             _root.Scale = Vector3.One;
-            _root.StartAnimation("Opacity", Scalar(0, 1, 100, null));
+            _root.StartAnimation("Opacity", Anim("open-reduced", () => Scalar(0, 1, 100, null)));
             return;
         }
-        var ease = _c.CreateCubicBezierEasingFunction(new Vector2(0.2f, 0.9f), new Vector2(0.3f, 1f));
-        _root.StartAnimation("Opacity", Scalar(0, 1, 180, ease));
-        var scale = _c.CreateVector3KeyFrameAnimation();
-        scale.InsertKeyFrame(0, new Vector3(0.96f, 0.96f, 1));
-        scale.InsertKeyFrame(1, Vector3.One, ease);
-        scale.Duration = TimeSpan.FromMilliseconds(180);
-        _root.StartAnimation("Scale", scale);
+        _root.StartAnimation("Opacity", Anim("open-opacity", () => Scalar(0, 1, 180, OpenEase)));
+        _root.StartAnimation("Scale", Anim("open-scale", () =>
+        {
+            var scale = _c.CreateVector3KeyFrameAnimation();
+            scale.InsertKeyFrame(0, new Vector3(0.96f, 0.96f, 1));
+            scale.InsertKeyFrame(1, Vector3.One, OpenEase);
+            scale.Duration = TimeSpan.FromMilliseconds(180);
+            return scale;
+        }));
+    }
+
+    private CompositionEasingFunction? _openEase, _closeEase;
+    private CompositionEasingFunction OpenEase => _openEase ??= _c.CreateCubicBezierEasingFunction(new Vector2(0.2f, 0.9f), new Vector2(0.3f, 1f));
+    private CompositionEasingFunction CloseEase => _closeEase ??= _c.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f));
+
+    private CompositionAnimation Anim(string key, Func<CompositionAnimation> make)
+    {
+        if (!_anims.TryGetValue(key, out var a)) _anims[key] = a = make();
+        return a;
     }
 
     public void Close()
@@ -135,13 +149,15 @@ internal sealed class CardVisual : IDisposable
         SetFocus(null, 0);
         int gen = ++_generation;
         if (ExpressionPlayer.Reduced) { _root.IsVisible = false; return; }
-        var ease = _c.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f));
         var batch = _c.CreateScopedBatch(CompositionBatchTypes.Animation);
-        _root.StartAnimation("Opacity", Scalar(1, 0, 120, ease));
-        var scale = _c.CreateVector3KeyFrameAnimation();
-        scale.InsertKeyFrame(1, new Vector3(0.98f, 0.98f, 1), ease);
-        scale.Duration = TimeSpan.FromMilliseconds(120);
-        _root.StartAnimation("Scale", scale);
+        _root.StartAnimation("Opacity", Anim("close-opacity", () => Scalar(1, 0, 120, CloseEase)));
+        _root.StartAnimation("Scale", Anim("close-scale", () =>
+        {
+            var scale = _c.CreateVector3KeyFrameAnimation();
+            scale.InsertKeyFrame(1, new Vector3(0.98f, 0.98f, 1), CloseEase);
+            scale.Duration = TimeSpan.FromMilliseconds(120);
+            return scale;
+        }));
         batch.End();
         batch.Completed += (_, _) => { if (_generation == gen) _root.IsVisible = false; };
     }
@@ -204,7 +220,7 @@ internal sealed class CardVisual : IDisposable
     private void Fade(Visual v, float to, double ms)
     {
         if (ms <= 0) { v.StopAnimation("Opacity"); v.Opacity = to; return; }
-        v.StartAnimation("Opacity", Scalar(null, to, ms, null));
+        v.StartAnimation("Opacity", Anim($"fade-{to}-{ms}", () => Scalar(null, to, ms, null)));
     }
 
     private ScalarKeyFrameAnimation Scalar(float? from, float to, double ms, CompositionEasingFunction? ease)
