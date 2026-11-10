@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -2354,6 +2354,121 @@ function Stage-Games {
     Stop-Engine
 }
 
+# The shell (Explorer, taskbar tools such as Now Bar, notifications) must never take her for a fullscreen app:
+# no Sahar window may contain a whole monitor, and Explorer keeps its taskbar topmost.
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ShellProbe {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+    [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int state);
+    public delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc proc, IntPtr l);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder text, int max);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    /// Explorer drops WS_EX_TOPMOST from its taskbar while it sees a fullscreen ("rude") window on that monitor.
+    public static bool TrayTopmost() { var h = FindWindow("Shell_TrayWnd", null); return h != IntPtr.Zero && ((long)GetWindowLongPtr(h, -20) & 8) != 0; }
+    public static int Quns() { int s; return SHQueryUserNotificationState(out s) == 0 ? s : -1; }
+    /// "name=l,t,r,b;…" for the visible top-level windows of a process (our own engine: its titles are ours).
+    public static string Rects(int pid) {
+        var list = new List<string>();
+        EnumWindows((h, l) => {
+            uint p; GetWindowThreadProcessId(h, out p);
+            if (p == pid && IsWindowVisible(h)) {
+                RECT r; GetWindowRect(h, out r);
+                var t = new StringBuilder(64); GetWindowText(h, t, 64);
+                list.Add(t.ToString().Replace(" ", "_") + "=" + r.L + "," + r.T + "," + r.R + "," + r.B);
+            }
+            return true;
+        }, IntPtr.Zero);
+        return string.Join(";", list);
+    }
+}
+"@
+
+function Assert-NoCover([string]$when) {
+    $rects = [ShellProbe]::Rects($script:engine.Id)
+    Write-Host "    ${when}: windows $rects"
+    foreach ($w in ($rects -split ';' | Where-Object { $_ })) {
+        $name, $xy = $w -split '=', 2
+        $l, $t, $r, $b = $xy -split ',' | ForEach-Object { [int]$_ }
+        foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
+            $m = $s.Bounds
+            if ($l -le $m.Left -and $t -le $m.Top -and $r -ge $m.Right -and $b -ge $m.Bottom) {
+                throw "${when}: window '$name' $l,$t,$r,$b covers monitor $($m.Left),$($m.Top),$($m.Right),$($m.Bottom)"
+            }
+        }
+    }
+}
+
+function Tray([string]$when) {
+    $t = [ShellProbe]::TrayTopmost()
+    Write-Host "    taskbar topmost $t, notification state $([ShellProbe]::Quns()) ($when)"
+    $t
+}
+
+function Assert-TrayKept([string]$when) {
+    $t = Tray $when
+    if ($t -ne $script:trayBefore) { throw "${when}: the taskbar's topmost changed ($($script:trayBefore) -> $t): the shell took her for a fullscreen app" }
+}
+
+function Stage-Shell {
+    $script:trayBefore = $null
+    Step 'a normal window in front; the taskbar before Sahar' {
+        $script:win = Start-TestWindow 'typing'
+        Start-Sleep -Seconds 1
+        $script:trayBefore = Tray 'before Sahar'
+    }
+    Step 'at rest no Sahar window covers a monitor and the taskbar stays topmost' {
+        Start-Engine
+        Start-Sleep -Milliseconds 800
+        & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # the test window in front again
+        Start-Sleep -Milliseconds 1500
+        Assert-NoCover 'at rest'
+        Assert-TrayKept 'at rest'
+    }
+    Step 'talking: no window covers a monitor' {
+        $t64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('مرحبا 🌙'))
+        Send ('{"type":"cmd","name":"say","args":{"text64":"' + $t64 + '"}}') | Out-Null
+        Start-Sleep -Milliseconds 500
+        Assert-NoCover 'talking'
+    }
+    Step 'menu open: no window covers a monitor and the taskbar stays topmost' {
+        $c = Body-Centre
+        [Mouse]::Click($c[0], $c[1], $true)
+        Wait-Menu 'true' 2000 'menu open after a right-click' | Out-Null
+        Start-Sleep -Milliseconds 1200
+        try { Assert-NoCover 'menu open'; Assert-TrayKept 'menu open' }
+        finally { Send '{"type":"cmd","name":"menu-close"}' | Out-Null }
+    }
+    Step 'a game: no window covers a monitor and the taskbar stays topmost' {
+        & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null
+        Start-Sleep -Milliseconds 500
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball","seconds":"20"}}' | Out-Null
+        Start-Sleep -Milliseconds 1200
+        try { Assert-NoCover 'game'; Assert-TrayKept 'game' }
+        finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
+    }
+    Step 'her showcase and the butterfly: no window covers a monitor' {
+        Start-Sleep -Milliseconds 800
+        Send '{"type":"cmd","name":"showcase"}' | Out-Null
+        Start-Sleep -Milliseconds 1500
+        try { Assert-NoCover 'showcase' } finally { Send '{"type":"cmd","name":"showcase-stop"}' | Out-Null }
+        Start-Sleep -Milliseconds 1500
+        Send '{"type":"cmd","name":"motion","args":{"kind":"ChaseButterfly"}}' | Out-Null
+        Start-Sleep -Milliseconds 1500
+        Assert-NoCover 'butterfly'
+    }
+    Stop-Engine
+    if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -2369,6 +2484,7 @@ try {
             'senses' { Stage-Senses }
             'prayer' { Stage-Prayer }
             'games' { Stage-Games }
+            'shell' { Stage-Shell }
         }
     }
 }
