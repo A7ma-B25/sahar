@@ -2413,9 +2413,34 @@ function Tray([string]$when) {
     $t
 }
 
-function Assert-TrayKept([string]$when) {
-    $t = Tray $when
-    if ($t -ne $script:trayBefore) { throw "${when}: the taskbar's topmost changed ($($script:trayBefore) -> $t): the shell took her for a fullscreen app" }
+# Both checks, both printed: the taskbar's topmost (when asked) and no window over a whole monitor.
+function Assert-Shell([string]$when, [switch]$Tray) {
+    $errors = @()
+    if ($Tray) {
+        $t = Tray $when
+        if ($t -ne $script:trayBefore) { $errors += "the taskbar's topmost changed ($($script:trayBefore) -> $t): the shell took her for a fullscreen app" }
+    }
+    try { Assert-NoCover $when } catch { $errors += "$_" }
+    if ($errors.Count) { throw "${when}: $($errors -join '; ')" }
+}
+
+function Overlay { Kv 'debug-overlay' }
+
+# The overlay holds her body (screen pixels), e.g. after she hid and came back.
+function Assert-OverlayHolds([string]$when) {
+    $o = Overlay; $st = State
+    Write-Host "    ${when}: overlay $($o.x),$($o.y) $($o.w)x$($o.h) (needs $($o.needs)); body $($st.x),$($st.y) $($st.width)x$($st.height)"
+    if ($st.x -lt [int]$o.x -or $st.y -lt [int]$o.y -or $st.x + $st.width -gt [int]$o.x + [int]$o.w -or $st.y + $st.height -gt [int]$o.y + [int]$o.h) {
+        throw "${when}: her body is outside the overlay"
+    }
+}
+
+# A pixel that must have changed between two screenshots (something of hers is drawn there, not clipped away).
+function Assert-Drawn([string]$before, [string]$after, [int]$x, [int]$y, [string]$what) {
+    $a = Pixel $before $x $y; $b = Pixel $after $x $y
+    $diff = [math]::Abs($a.R - $b.R) + [math]::Abs($a.G - $b.G) + [math]::Abs($a.B - $b.B)
+    Write-Host "    $what at ($x,$y): $($a.R),$($a.G),$($a.B) -> $($b.R),$($b.G),$($b.B)"
+    if ($diff -lt 60) { throw "$what is not drawn at ($x,$y): clipped by the overlay?" }
 }
 
 function Stage-Shell {
@@ -2430,29 +2455,57 @@ function Stage-Shell {
         Start-Sleep -Milliseconds 800
         & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null   # the test window in front again
         Start-Sleep -Milliseconds 1500
-        Assert-NoCover 'at rest'
-        Assert-TrayKept 'at rest'
+        Assert-Shell 'at rest' -Tray
+    }
+    Step 'at rest the overlay is her size and never moves' {
+        $o = Overlay
+        $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        if ([int]$o.w * [int]$o.h -ge $screen.Width * $screen.Height / 2) { throw "overlay $($o.w)x$($o.h) is not her size" }
+        Start-Sleep -Seconds 3
+        $o2 = Overlay
+        Write-Host "    moves $($o.moves) -> $($o2.moves), resizes $($o.resizes) -> $($o2.resizes)"
+        if ($o2.moves -ne $o.moves -or $o2.resizes -ne $o.resizes) { throw 'the overlay moved while she rested' }
+        Assert-OverlayHolds 'at rest'
     }
     Step 'talking: no window covers a monitor' {
         $t64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('مرحبا 🌙'))
+        $before = Screenshot 'shell-before-talk.png'
         Send ('{"type":"cmd","name":"say","args":{"text64":"' + $t64 + '"}}') | Out-Null
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 600
+        $after = Screenshot 'shell-talk.png'
         Assert-NoCover 'talking'
+        # Her bubble: above her body, white; its left part has no text (right-to-left).
+        $st = State
+        Assert-Drawn $before $after ([int]($st.x + $st.width / 2 - 95)) ([int]($st.y - 30)) 'her speech bubble'
     }
     Step 'menu open: no window covers a monitor and the taskbar stays topmost' {
+        Start-Sleep -Seconds 8   # her bubble has gone
+        $before = Screenshot 'shell-before-menu.png'
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $true)
-        Wait-Menu 'true' 2000 'menu open after a right-click' | Out-Null
+        $m = Wait-Menu 'true' 2000 'menu open after a right-click'
+        [Mouse]::Move(5, 5)
         Start-Sleep -Milliseconds 1200
-        try { Assert-NoCover 'menu open'; Assert-TrayKept 'menu open' }
+        $after = Screenshot 'shell-menu.png'
+        try {
+            Assert-Shell 'menu open' -Tray
+            foreach ($b in $m.buttons) { Assert-Drawn $before $after ([int]$b.x) ([int]($b.y - $b.r / 2)) "menu button $($b.id)" }
+        }
         finally { Send '{"type":"cmd","name":"menu-close"}' | Out-Null }
     }
     Step 'a game: no window covers a monitor and the taskbar stays topmost' {
         & agent-desktop --headed mouse-click --xy '430,320' 2>&1 | Out-Null
         Start-Sleep -Milliseconds 500
+        $before = Screenshot 'shell-before-game.png'
         Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball","seconds":"20"}}' | Out-Null
-        Start-Sleep -Milliseconds 1200
-        try { Assert-NoCover 'game'; Assert-TrayKept 'game' }
+        Start-Sleep -Milliseconds 1500
+        try {
+            $g = Game
+            $after = Screenshot 'shell-game.png'
+            Assert-Shell 'game' -Tray
+            # The ball rests near the pointer, far from her: drawn only if the overlay grew to the game's screen.
+            Assert-Drawn $before $after ([int]$g.ballX + 15) ([int]$g.ballY + 15) "the ball ($($g.ball))"
+        }
         finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
     }
     Step 'her showcase and the butterfly: no window covers a monitor' {
@@ -2464,6 +2517,21 @@ function Stage-Shell {
         Send '{"type":"cmd","name":"motion","args":{"kind":"ChaseButterfly"}}' | Out-Null
         Start-Sleep -Milliseconds 1500
         Assert-NoCover 'butterfly'
+    }
+    Step 'after she hid and came back, and after a display change, the overlay holds her' {
+        Start-Sleep -Seconds 6   # the butterfly has flown off
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null
+        Wait-State { param($st) $st.hidden } 2000 'hidden' | Out-Null
+        Start-Sleep -Seconds 2
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Wait-State { param($st) -not $st.hidden } 3000 'shown again' | Out-Null
+        Start-Sleep -Seconds 2
+        Assert-OverlayHolds 'after hide/show'
+        Assert-NoCover 'after hide/show'
+        Send '{"type":"cmd","name":"debug-display-changed"}' | Out-Null
+        Start-Sleep -Seconds 1
+        Assert-OverlayHolds 'after a display change'
+        if ((Overlay).needs -ne 'none') { throw "needs left behind: $((Overlay).needs)" }
     }
     Stop-Engine
     if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
