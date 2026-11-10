@@ -9,7 +9,7 @@ namespace Sahar.Engine.Render;
 
 /// <summary>
 /// Sahar's visual tree on the overlay. Back to front: halo, shadow, orbit, moon (back half), stars, then her
-/// character — Character → Float → Hop → (leaf, body A, body B, the night inside her and its stars, pleats/highlight,
+/// character — Character → Float → Lean → Hop → (leaf, body A, body B, the night inside her and its stars, pleats/highlight,
 /// blush, face (eyes, mouth), headphones) — moon (front half), orb, extras. Existing motions animate Character; the
 /// soul layer (0.10a) animates Float and Hop inside it. Moon, stars and shadow stay put, as in the design.
 /// </summary>
@@ -39,7 +39,9 @@ internal sealed class SaharVisual
     public ContainerVisual Character { get; }
     /// <summary>The soul's looping float, sway and follow-through (inside Character).</summary>
     public ContainerVisual Float { get; }
-    /// <summary>The soul's one-shot hop (inside Float); her parts live here.</summary>
+    /// <summary>Her lean toward the pointer (inside Float; an implicit rotation, 0.10a Ruling 7).</summary>
+    public ContainerVisual Lean { get; }
+    /// <summary>The soul's one-shot hop (inside Lean); her parts live here.</summary>
     public ContainerVisual Hop { get; }
     public ContainerVisual Stars { get; }
     public ContainerVisual Leaf { get; }
@@ -123,8 +125,10 @@ internal sealed class SaharVisual
         Root.Children.InsertAtTop(Character);
         Float = _c.CreateContainerVisual();
         Character.Children.InsertAtTop(Float);
+        Lean = _c.CreateContainerVisual();
+        Float.Children.InsertAtTop(Lean);
         Hop = _c.CreateContainerVisual();
-        Float.Children.InsertAtTop(Hop);
+        Lean.Children.InsertAtTop(Hop);
         Leaf = _c.CreateContainerVisual();
         Hop.Children.InsertAtTop(Leaf);
         Layer(_leaf, Leaf);
@@ -273,7 +277,7 @@ internal sealed class SaharVisual
         }
         Character.Size = canvas;
         Character.CenterPoint = new Vector3(150 * Scale, (BodyUnits.Y + BodyUnits.Height) * Scale, 0);  // bottom-centre
-        foreach (var soul in new[] { Float, Hop })
+        foreach (var soul in new[] { Float, Lean, Hop })
         {
             soul.Size = canvas;
             soul.CenterPoint = new Vector3(150 * Scale, (BodyUnits.Y + BodyUnits.Height) * Scale, 0);      // her pivot: bottom-centre

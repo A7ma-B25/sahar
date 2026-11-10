@@ -63,10 +63,13 @@ internal sealed partial class MotionController
     /// <summary>Sitting or sleeping: no idle bob.</summary>
     public bool Still { get; private set; }
 
+    private readonly SoulLayer _soul;
+
     public MotionController(SaharVisual v, ExpressionPlayer player, Ticker ticker, Action<Vector2> moveCanvasTo, Action<string, bool> express,
-        Action<Eyes, Mouth, float> face)
+        Action<Eyes, Mouth, float> face, SoulLayer soul)
     {
         _face = face;
+        _soul = soul;
         _v = v;
         _player = player;
         _ticker = ticker;
@@ -140,7 +143,9 @@ internal sealed partial class MotionController
         Current = next;
         _step = null;
         // Her eyes follow the mouse whenever she is resting (spec §6 motion 4).
+        bool wasLooking = _eyes;
         _eyes = next is MotionKind.Hover or MotionKind.EyesFollow or MotionKind.LandAndSit or MotionKind.PerchWindow;
+        if (wasLooking && !_eyes) _soul.Look(Vector2.Zero, 0);   // not resting: she looks ahead
         Still = false;
         var root = _v.Root;
         root.StopAnimation("RotationAngleInDegrees");
@@ -186,12 +191,13 @@ internal sealed partial class MotionController
 
     private void RestoreBob()
     {
-        if (!Still && !_player.Current.Extras.HasFlag(Sahar.Core.Expressions.Extras.Grounded)) IdleAnimations.StartBob(_v);
+        _soul.SetFloating(!Still && !_player.Current.Extras.HasFlag(Sahar.Core.Expressions.Extras.Grounded));
     }
 
     private void HoldStill()
     {
         Still = true;
+        _soul.SetFloating(false);
         _v.Character.StopAnimation("Offset.Y");
         _v.Character.Offset = _v.Character.Offset with { Y = 0 };
     }
@@ -362,17 +368,13 @@ internal sealed partial class MotionController
         _eyeClock += dt;
         if (_sinceCursorMoved > 0.5f || _eyeClock < 0.033f) return;
         _eyeClock = 0;
-        if (PointerNear is { } near)
-        {
-            var b = Body;
-            float dx = MathF.Max(0, MathF.Max(b.X - cursor.X, cursor.X - b.Right)), dy = MathF.Max(0, MathF.Max(b.Y - cursor.Y, cursor.Y - b.Bottom));
-            near(MathF.Sqrt(dx * dx + dy * dy) / _v.DpiScale);
-        }
+        var b = Body;
+        float dx = MathF.Max(0, MathF.Max(b.X - cursor.X, cursor.X - b.Right)), dy = MathF.Max(0, MathF.Max(b.Y - cursor.Y, cursor.Y - b.Bottom));
+        float distanceDip = MathF.Sqrt(dx * dx + dy * dy) / _v.DpiScale;
+        PointerNear?.Invoke(distanceDip);
+        // The soul looks (pupils + a lean) toward the cursor within 400 DIP; it only sets targets (implicit animations).
         var eyes = _v.Position + new Vector2(150, 154) * _v.Scale;
-        var d = cursor - eyes;
-        float len = d.Length();
-        var offset = len < 1 ? Vector2.Zero : d / len * MathF.Min(1, len / 200f) * EyesUnits * _v.Scale;
-        _v.FaceGroup.Offset = new Vector3(offset, 0);
+        _soul.Look(Sahar.Core.Motion.SoulMath.Look(cursor, eyes, _v.CanvasPx.Width / 2f, distanceDip));
     }
 
     // ---------- 5 Drag ----------

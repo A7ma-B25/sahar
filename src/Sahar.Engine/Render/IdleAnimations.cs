@@ -4,13 +4,13 @@ using Windows.UI.Composition;
 namespace Sahar.Engine.Render;
 
 /// <summary>
-/// Her idle life, all as compositor keyframe animations that loop forever (the engine sleeps meanwhile):
-/// bob, hem flutter, blink, leaf sway, star spin and twinkle, moon orbit, shadow breathing, halo and bud glow.
+/// Her original-look loops, all as compositor keyframe animations that loop forever (the engine sleeps meanwhile):
+/// hem flutter, star spin and twinkle, the inner stars and dots, moon orbit (16 s a lap), halo and bud glow. Float,
+/// blink, leaf sway and the shadow are the soul's (<see cref="SoulLayer"/>, 0.10a Ruling 5).
 /// Values come from the approved design (tools/art/design.py); distances are design units × scale.
 /// </summary>
 internal static class IdleAnimations
 {
-    public const float BobUnits = 10f;
     public const float OrbitRx = 112f, OrbitRy = 26f, OrbitTiltDegrees = -10f;
     /// <param name="reduced">Windows "Animation effects" off: no loops at all; everything rests (stars lit, moon beside her).</param>
     public static void Start(SaharVisual v, bool reduced = false)
@@ -21,11 +21,11 @@ internal static class IdleAnimations
 
         if (reduced)
         {
-            foreach (var x in new Visual[] { v.Character, v.ShadowVisual, v.BodyB.Container, v.EyesLayer.Container, v.Leaf, v.HaloLayer.Container,
-                         v.BudGlow.Container, v.Stars })
-                foreach (var p in new[] { "Opacity", "Scale", "Offset.Y", "RotationAngleInDegrees" }) x.StopAnimation(p);
+            foreach (var x in new Visual[] { v.BodyB.Container, v.HaloLayer.Container, v.BudGlow.Container, v.Stars })
+                foreach (var p in new[] { "Opacity", "RotationAngleInDegrees" }) x.StopAnimation(p);
             v.BodyB.Container.Opacity = 0;
-            v.EyesLayer.Container.Scale = Vector3.One;
+            v.HaloLayer.Container.Opacity = 0.6f;
+            v.BudGlow.Container.Opacity = 0.5f;
             for (int i = 0; i < v.StarVisuals.Length; i++) { v.StarVisuals[i].StopAnimation("Opacity"); v.StarVisuals[i].Opacity = 1; }
             for (int i = 0; i < v.InnerStarVisuals.Length; i++)
             {
@@ -40,17 +40,8 @@ internal static class IdleAnimations
             return;
         }
 
-        StartBob(v);
-
         // Hem flutter: the second body frame fades in and out over 2.2 s on top of the first.
         v.BodyB.Container.StartAnimation("Opacity", Loop(c, 2.2, (0f, 0f), (0.5f, 1f), (1f, 0f)));
-
-        // Blink once every 6 s (92–100 % of the cycle): the eyes only (the mouth stays).
-        v.EyesLayer.Container.StartAnimation("Scale", Loop3(c, 6.0,
-            (0f, Vector3.One), (0.92f, Vector3.One), (0.96f, new Vector3(1, 0.1f, 1)), (1f, Vector3.One)));
-
-        // Leaf sways ±5° around the stem base over 5 s.
-        v.Leaf.StartAnimation("RotationAngleInDegrees", Loop(c, 5.0, (0f, -5f), (0.5f, 5f), (1f, -5f)));
 
         // Halo and bud glow breathe.
         v.HaloLayer.Container.StartAnimation("Opacity", Loop(c, 4.0, (0f, 0.45f), (0.5f, 0.7f), (1f, 0.45f)));
@@ -91,17 +82,8 @@ internal static class IdleAnimations
         return a;
     }
 
-    /// <summary>Bob: the character floats up 10 units and back over 3.6 s; the shadow shrinks and fades in step.</summary>
-    public static void StartBob(SaharVisual v)
-    {
-        var c = v.Root.Compositor;
-        v.Character.StartAnimation("Offset.Y", Loop(c, 3.6, (0f, 0f), (0.5f, -BobUnits * v.Scale), (1f, 0f)));
-        v.ShadowVisual.StartAnimation("Scale", Loop3(c, 3.6, (0f, Vector3.One), (0.5f, new Vector3(50f / 62f, 1, 1)), (1f, Vector3.One)));
-        v.ShadowVisual.StartAnimation("Opacity", Loop(c, 3.6, (0f, 1f), (0.5f, 0.5f), (1f, 1f)));
-    }
-
     /// <summary>
-    /// The moon travels a tilted ellipse every 9 s, starting at the right and passing in front of her on the
+    /// The moon travels a tilted ellipse every 16 s (spec §4), starting at the right and passing in front of her on the
     /// lower half (the front copy is visible for the first half of the cycle, the back copy for the second).
     /// </summary>
     private static void StartOrbit(SaharVisual v, Compositor c, float s, bool still = false)
@@ -110,7 +92,7 @@ internal static class IdleAnimations
         var t = c.CreateScalarKeyFrameAnimation();
         t.InsertKeyFrame(0f, 0f);
         t.InsertKeyFrame(1f, 1f, c.CreateLinearEasingFunction());
-        t.Duration = TimeSpan.FromSeconds(9);
+        t.Duration = TimeSpan.FromSeconds(Sahar.Core.Motion.SoulMath.MoonLapSeconds);
         t.IterationBehavior = AnimationIterationBehavior.Forever;
 
         float tilt = OrbitTiltDegrees * MathF.PI / 180f;

@@ -16,6 +16,7 @@ internal sealed class ExpressionPlayer
     public const float ShiverDip = 2f;
 
     private readonly SaharVisual _v;
+    private readonly SoulLayer _soul;
     private readonly Extras _extras;
     private SwapSurface? _orbSurface;
     private SpriteVisual? _orbSprite;
@@ -24,11 +25,19 @@ internal sealed class ExpressionPlayer
     /// <summary>True while a motion keeps her still (sitting, sleeping, dragged): no idle bob.</summary>
     public Func<bool>? Still { get; set; }
 
-    public ExpressionPlayer(SaharVisual v)
+    public ExpressionPlayer(SaharVisual v, SoulLayer soul)
     {
         _v = v;
+        _soul = soul;
         _extras = new Extras(v);
         _v.Orb.Opacity = 0;
+        // The hop is the squish (0.10a Ruling 8): a hop starting stops a running one.
+        _soul.HopStarted += () =>
+        {
+            if (!Current.Extras.HasFlag(ExtrasFlags.Squish)) return;
+            _v.Character.StopAnimation("Scale");
+            _v.Character.Scale = Vector3.One;
+        };
     }
 
     public void Play(ExpressionPreset p)
@@ -93,12 +102,19 @@ internal sealed class ExpressionPlayer
 
         if (x.HasFlag(ExtrasFlags.Grounded))
         {
+            _soul.SetFloating(false);
             ch.StopAnimation("Offset.Y");
             Animate(ch, "Offset.Y", GroundedDip * dip, fade: true);
         }
-        else if (Still?.Invoke() != true) IdleAnimations.StartBob(_v);
+        else if (Still?.Invoke() != true)
+        {
+            // Off the ground: she floats again (the soul's float; the old bob also took back Character's offset).
+            ch.StopAnimation("Offset.Y");
+            ch.Offset = ch.Offset with { Y = 0 };
+            _soul.SetFloating(true);
+        }
 
-        if (x.HasFlag(ExtrasFlags.Squish))
+        if (x.HasFlag(ExtrasFlags.Squish) && !_soul.Hopping)
             ch.StartAnimation("Scale", IdleAnimations.Loop3(c, 2.4,
                 (0f, Vector3.One), (0.12f, new Vector3(1.14f, 0.86f, 1)), (0.2f, new Vector3(0.94f, 1.08f, 1)),
                 (0.25f, Vector3.One), (1f, Vector3.One)));

@@ -401,6 +401,41 @@ function Stage-Gallery {
     Stop-Engine
 }
 
+# ---- 0.10a soul: motion seen in pixels (owner ruling 2026-11-10) ----
+# Her body's bottom edge in a central column band: the lowest row (from just above her shadow upward) whose pixel is
+# at least 60 away (R+G+B) from the same pixel with her moved away. The body bottom is her pivot, so it rises exactly
+# as much as she does, whatever her stretch.
+function Bottom-Edge([System.Drawing.Bitmap]$bmp, [System.Drawing.Bitmap]$base, $st, [int]$dx = 0, [int]$dy = 0) {
+    $x0 = [int]($st.x + $st.width * 0.36) - $dx; $x1 = [int]($st.x + $st.width * 0.64) - $dx
+    $yb = [int]($st.y + $st.height + 2) - $dy; $yt = [int]($st.y + $st.height * 0.4) - $dy
+    for ($y = $yb; $y -ge $yt; $y--) {
+        for ($x = $x0; $x -le $x1; $x += 2) {
+            $p = $bmp.GetPixel($x, $y); $b = $base.GetPixel($x + $dx, $y + $dy)
+            if ([math]::Abs($p.R - $b.R) + [math]::Abs($p.G - $b.G) + [math]::Abs($p.B - $b.B) -ge 60) { return $y + $dy }
+        }
+    }
+    $null
+}
+# A capture of a screen rectangle (fast, for a live burst); its pixels are addressed like a full screenshot via $dx/$dy.
+function Grab([int]$x, [int]$y, [int]$w, [int]$h) {
+    $bmp = [System.Drawing.Bitmap]::new($w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($x, $y, 0, 0, [System.Drawing.Size]::new($w, $h), [System.Drawing.CopyPixelOperation]::SourceCopy)
+    $g.Dispose()
+    $bmp
+}
+function Soul-Freeze([string]$args) { Send ('{"type":"cmd","name":"debug-soul-freeze","args":{' + $args + '}}') }
+# A screenshot of her place with her moved away (the backdrop), then her back where she was.
+function Backdrop([string]$name) {
+    $i = Info
+    Send '{"type":"cmd","name":"pose","args":{"x":"1200","y":"650"}}' | Out-Null
+    Start-Sleep -Milliseconds 400
+    $path = Screenshot $name
+    Send ('{"type":"cmd","name":"pose","args":{"x":"' + [int]$i.canvasX + '","y":"' + [int]$i.canvasY + '"}}') | Out-Null
+    Start-Sleep -Milliseconds 300
+    $path
+}
+
 function Stage-Motion {
     $dir = Join-Path $Out 'motion'
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -548,6 +583,147 @@ function Stage-Motion {
         Write-Host "    face offset: left $left, right $right"
         if ($null -eq $left -or [double]$left -ge 0) { throw "eyes did not look left ($left)" }
         if ($null -eq $right -or [double]$right -le 0) { throw "eyes did not look right ($right)" }
+    }
+    Step 'she floats on one clock (her body really moves)' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Milliseconds 600
+        if ((Kv 'debug-soul').floating -ne 'true') { throw 'not floating' }
+        $st = State
+        $base = [System.Drawing.Bitmap]::new((Backdrop 'soul-backdrop.png'))
+        Start-Sleep -Milliseconds 500
+        $edges = @()
+        try {
+            foreach ($i in 0..2) {
+                $shot = [System.Drawing.Bitmap]::new((Screenshot "soul-float-$i.png"))
+                try { $edges += Bottom-Edge $shot $base $st } finally { $shot.Dispose() }
+                Start-Sleep -Milliseconds 1050
+            }
+        }
+        finally { $base.Dispose() }
+        Write-Host "    body bottom edge over 2.1 s: $($edges -join ', ')"
+        if ($edges.Count -lt 3 -or ($edges | Where-Object { $null -eq $_ })) { throw "her body was not found in every frame ($($edges -join ','))" }
+        $range = ($edges | Measure-Object -Maximum -Minimum)
+        if ($range.Maximum - $range.Minimum -lt 2) { throw "she did not float: bottom edge stayed at $($edges -join ',')" }
+    }
+    Step 'her leaf sways (two frozen float times, same height)' {
+        $st = State
+        Soul-Freeze '"floatT":"0"' | Out-Null; Start-Sleep -Milliseconds 300
+        $a = [System.Drawing.Bitmap]::new((Screenshot 'soul-leaf-a.png'))
+        Soul-Freeze '"floatT":"2.1"' | Out-Null; Start-Sleep -Milliseconds 300
+        $b = [System.Drawing.Bitmap]::new((Screenshot 'soul-leaf-b.png'))
+        Soul-Freeze '' | Out-Null
+        try {
+            # Leaf box: rig x 92–152, y 8–60 → canvas +30; the body rect starts at canvas (70,88), 160 units wide.
+            $u = $st.width / 160
+            $x0 = [int]($st.x + (122 - 70) * $u); $x1 = [int]($st.x + (182 - 70) * $u)
+            $y0 = [int]($st.y + (38 - 88) * $u); $y1 = [int]($st.y + (90 - 88) * $u)
+            $n = 0
+            for ($y = $y0; $y -le $y1; $y++) { for ($x = $x0; $x -le $x1; $x++) {
+                $p = $a.GetPixel($x, $y); $q = $b.GetPixel($x, $y)
+                if ([math]::Abs($p.R - $q.R) + [math]::Abs($p.G - $q.G) + [math]::Abs($p.B - $q.B) -gt 60) { $n++ } } }
+            Write-Host "    leaf pixels changed: $n"
+            if ($n -lt 30) { throw "the leaf did not move ($n pixels)" }
+        }
+        finally { $a.Dispose(); $b.Dispose() }
+    }
+    Step 'a hop and back' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        $before = State
+        $r = Send '{"type":"cmd","name":"soul-hop","args":{"power":"1"}}'
+        if ($r.error -notmatch 'hopped=true') { throw "no hop: $($r.error)" }
+        if ((Kv 'debug-soul').hopping -ne 'true') { throw 'not hopping right after the hop' }
+        Start-Sleep -Milliseconds 1600
+        if ((Kv 'debug-soul').hopping -ne 'false') { throw 'still hopping after 1.6 s' }
+        if ((Info).bodyScale -ne 'free') { throw 'body scale still busy' }
+        $after = State
+        if ([math]::Abs($after.x - $before.x) -gt 2 -or [math]::Abs($after.y - $before.y) -gt 2) { throw "she moved: ($($before.x),$($before.y)) -> ($($after.x),$($after.y))" }
+    }
+    Step 'she really rises (frozen at +0.29 s, and live)' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"pose","args":{"x":"400","y":"250"}}' | Out-Null
+        $st = State
+        $dpi = [double](Info).dpi
+        if (-not $dpi) { $dpi = 1 }
+        $base = [System.Drawing.Bitmap]::new((Backdrop 'soul-hop-backdrop.png'))
+        $dir = Join-Path $Out 'hop-strip'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $times = @(0, 0.045, 0.15, 0.29, 0.45, 0.6, 0.8, 1.1)
+        $rises = @(); $tiles = @()
+        $size = [int]($st.width * 2.1)
+        try {
+            Soul-Freeze '"floatT":"0","hopT":"0"' | Out-Null; Start-Sleep -Milliseconds 300
+            $rest = $null
+            foreach ($t in $times) {
+                Soul-Freeze ('"floatT":"0","hopT":"' + $t + '"') | Out-Null
+                Start-Sleep -Milliseconds 250
+                $path = Screenshot ('hop-{0:000}.png' -f [int]($t * 1000))
+                $bmp = [System.Drawing.Bitmap]::new($path)
+                try { $edge = Bottom-Edge $bmp $base $st } finally { $bmp.Dispose() }
+                if ($null -eq $rest) { $rest = $edge }
+                $rises += [math]::Round(($rest - $edge) / $dpi, 1)
+                $tile = Join-Path $dir ('{0:000}.png' -f [int]($t * 1000))
+                Crop $path ([int]($st.x + $st.width / 2)) ([int]($st.y + $st.height / 2 - $st.height * 0.25)) $size $tile
+                $tiles += $tile
+            }
+            # The strip for the owner: eight moments of one hop, left to right.
+            $strip = [System.Drawing.Bitmap]::new($size * $tiles.Count, $size)
+            $g = [System.Drawing.Graphics]::FromImage($strip)
+            $font = [System.Drawing.Font]::new('Segoe UI', 10)
+            for ($i = 0; $i -lt $tiles.Count; $i++) {
+                $img = [System.Drawing.Image]::FromFile($tiles[$i]); $g.DrawImage($img, $i * $size, 0, $size, $size); $img.Dispose()
+                $g.DrawString(('+{0:0.000} s' -f $times[$i]), $font, [System.Drawing.Brushes]::Gray, $i * $size + 4, 4)
+            }
+            $g.Dispose(); $strip.Save((Join-Path $Out 'hop-strip.png'), [System.Drawing.Imaging.ImageFormat]::Png); $strip.Dispose()
+        }
+        finally { Soul-Freeze '' | Out-Null }
+        Write-Host "    rise (DIP) at $($times -join ', ') s: $($rises -join ', ')"
+        if ([math]::Abs($rises[3] - 19) -gt 4) { throw "at +0.29 s she rose $($rises[3]) DIP, not about 19" }
+        if ([math]::Abs($rises[0]) -gt 2 -or [math]::Abs($rises[1]) -gt 2 -or [math]::Abs($rises[7]) -gt 2) { throw "she was off the ground outside the air phase: $($rises -join ',')" }
+        if ($rises[2] -le 2 -or $rises[4] -le 2) { throw "no rise and fall around the peak: $($rises -join ',')" }
+        # Live: a burst of quick captures during a real hop finds her high.
+        $gx = [int]($st.x - $st.width * 0.1); $gy = [int]($st.y - $st.height * 0.5); $gw = [int]($st.width * 1.2); $gh = [int]($st.height * 1.6)
+        $restGrab = Grab $gx $gy $gw $gh
+        $restEdge = Bottom-Edge $restGrab $base $st -dx $gx -dy $gy
+        $restGrab.Dispose()
+        if ($null -eq $restEdge) { $base.Dispose(); throw 'the quick capture does not see her (CopyFromScreen)' }
+        Start-Sleep -Milliseconds 800
+        Send '{"type":"cmd","name":"soul-hop","args":{"power":"1"}}' | Out-Null
+        $best = 0; $sw = [Diagnostics.Stopwatch]::StartNew()
+        while ($sw.ElapsedMilliseconds -lt 700) {
+            $f = Grab $gx $gy $gw $gh
+            try { $e = Bottom-Edge $f $base $st -dx $gx -dy $gy; if ($null -ne $e) { $best = [math]::Max($best, ($restEdge - $e) / $dpi) } } finally { $f.Dispose() }
+        }
+        $base.Dispose()
+        Write-Host "    live hop: highest rise seen $([math]::Round($best, 1)) DIP"
+        if ($best -lt 8) { throw "in a live hop she rose only $best DIP" }
+    }
+    Step 'no hop while dragged' {
+        Start-Sleep -Milliseconds 1000
+        $st = State
+        $from = '{0},{1}' -f [int]($st.x + $st.width / 2), [int]($st.y + $st.height / 2)
+        $to = '{0},{1}' -f [int]($st.x + $st.width / 2 + 150), [int]($st.y + $st.height / 2)
+        $drag = Start-Job -ScriptBlock { param($from, $to) & agent-desktop --headed drag --from-xy $from --to-xy $to --duration 1600 --drop-delay 200 --timeout-ms 8000 } -ArgumentList $from, $to
+        $tried = $false
+        while ($drag.State -eq 'Running') {
+            Start-Sleep -Milliseconds 120
+            if ((State).motion -eq 'Drag' -and -not $tried) {
+                $tried = $true
+                $r = Send '{"type":"cmd","name":"soul-hop","args":{"power":"1"}}'
+                if ($r.error -notmatch 'hopped=false') { Remove-Job $drag -Force; throw "she hopped while dragged: $($r.error)" }
+            }
+        }
+        Remove-Job $drag -Force
+        if (-not $tried) { throw 'never saw the drag' }
+        Start-Sleep -Milliseconds 1500
+    }
+    Step 'the soul survives a rescale' {
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Send '{"type":"cmd","name":"soul-hop","args":{"power":"1"}}' | Out-Null
+        Send '{"type":"cmd","name":"debug-display-changed"}' | Out-Null
+        Start-Sleep -Milliseconds 1600
+        if ((Kv 'debug-soul').hopping -ne 'false') { throw 'still hopping after a rescale' }
+        Assert-BodyInWork (State) 'after a hop and a display change'
     }
     Step 'click pokes her' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null

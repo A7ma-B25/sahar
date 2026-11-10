@@ -53,16 +53,21 @@ internal sealed unsafe class App
         };
         sahar.Position = StartPosition(sahar, work);
         sahar.SetInnerStars(settings.InnerStars);
-        IdleAnimations.Start(sahar);
-        var player = new ExpressionPlayer(sahar);
+        // Her soul (0.10a): float, sway, leaf lag, hop, look and blink on the compositor; her original loops beside it.
+        var soul = new SoulLayer(sahar);
+        IdleAnimations.Start(sahar, soul.Reduced);
+        soul.Start();
+        var player = new ExpressionPlayer(sahar, soul);
         sahar.Rescaled += () =>
         {
-            IdleAnimations.Start(sahar);
+            IdleAnimations.Start(sahar, soul.Reduced);
+            soul.Start();
             player.Reapply();
         };
         host.DeviceLost += () =>
         {
             sahar.Redraw();
+            soul.Start();
             player.Reapply();
         };
 
@@ -130,7 +135,10 @@ internal sealed unsafe class App
             faceTimer.Interval = TimeSpan.FromSeconds(seconds);
             faceTimer.Start();
         }
-        var motion = new MotionController(sahar, player, ticker, MoveTo, Express, Face);
+        var motion = new MotionController(sahar, player, ticker, MoveTo, Express, Face, soul);
+        soul.Motion = () => motion.Current;
+        soul.Still = () => motion.Still;
+        soul.Grounded = () => player.Current.Extras.HasFlag(Sahar.Core.Expressions.Extras.Grounded);
         _state.MotionName = () => motion.Current.ToString();
         LifeDirector? life = null;
         using var menu = new RadialMenu(host, _options.Capturable, () => motion.Body, () => sahar.Origin);
@@ -369,6 +377,7 @@ internal sealed unsafe class App
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
+        soul.Busy = () => _state.Hidden || Sulking() || games.Running;
         director.NeedsYou += () => Safe(() => { if (sulk.End()) SulkOver("a face needs you"); });
 
         // The first start: she says hello and asks your name and whether you are a man or a woman, so her words
@@ -547,7 +556,7 @@ internal sealed unsafe class App
         {
             pipe.Register("debug-info", _ => new PipeReply(true,
                 $"generation={host.Generation} overlayVisible={(Native.IsWindowVisible(overlay.Hwnd) != 0 ? "true" : "false")} " +
-                FormattableString.Invariant($"faceOffsetX={sahar.FaceGroup.Offset.X:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0}") +
+                FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
@@ -711,6 +720,21 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-foreground", _ => new PipeReply(false, FullscreenWatcher.Describe()));
             pipe.Register("debug-presence", _ => new PipeReply(true, idle.Describe()));
+            // The soul (0.10a): a hop on demand, its state, and a frozen pose for pixel checks.
+            pipe.Register("soul-hop", r =>
+            {
+                float power = r.Args?.TryGetValue("power", out var p) == true && float.TryParse(p, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pv) ? pv : 1f;
+                bool hopped = soul.Hop(power);
+                return new PipeReply(true, $"hopped={(hopped ? "true" : "false")} " + soul.Describe());
+            });
+            pipe.Register("debug-soul", _ => new PipeReply(true, soul.Describe()));
+            pipe.Register("debug-soul-freeze", r =>
+            {
+                static double? Num(PipeRequest r, string k) => r.Args?.TryGetValue(k, out var v) == true
+                    && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+                soul.Freeze(Num(r, "floatT"), Num(r, "hopT"), (float)(Num(r, "power") ?? 1));
+                return new PipeReply(true, soul.Describe());
+            });
             pipe.Register("debug-tray", _ => tray.IconRect() is { } r
                 ? new PipeReply(true, State: _state.Snapshot() with { X = r.Left, Y = r.Top, Width = r.Right - r.Left, Height = r.Bottom - r.Top })
                 : new PipeReply(false, "tray icon unknown to Explorer"));
