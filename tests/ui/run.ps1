@@ -2657,6 +2657,8 @@ function Stage-Prayer {
         Post 'user.away' | Out-Null
         Start-Sleep -Seconds 3
         $st = State
+        # Between 00:00 and 04:59 (CI runs at any hour) her once-a-night "late-night" moment may show first; it passes.
+        if ($st.expression -eq 'late-night') { $st = Wait-State { param($s) $s.expression -ne 'late-night' } 12000 'the late-night moment passing' }
         if ($st.expression -ne 'quran') { throw "face during the Quran while 'away': $($st.expression)" }
         if ($st.motion -in 'SleepInCorner', 'NapOnIcon') { throw "she went to nap during the Quran ($($st.motion))" }
         Post 'user.back' | Out-Null
