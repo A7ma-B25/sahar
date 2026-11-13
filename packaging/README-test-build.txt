@@ -7,12 +7,16 @@
   بيتثبّت إلك انت بس (بلا صلاحيات أدمن) بمجلد %LocalAppData%\Programs\Sahar،
   بيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
 - لما تطلع نسخة جديدة، سَحَر بتقلك بفقاعتها: «في نسخة جديدة مني …، بدك ثبّتها؟» وتحتها «إي» و«بعدين».
-  «إي»: بتنزّلها، بتتأكد إنها نفس الملف يلي انرفع (بصمة SHA-256)، بتسكّر حالها، بتتثبّت، وبترجع لحالها بعد ثواني.
+  «إي»: بتنزّلها، بتتأكد إنها منّا نحنا (توقيع رقمي) وإنها نفس الملف بالضبط، والمثبّت بيسكّرها وبيثبّت وبيرجّعها بعد ثواني.
+  إذا ما زبط التثبيت لأي سبب، بترجع متل ما كانت وبتقلك «ما زبط التحديث».
+  إذا كنت مشغّلها من الـ zip: بيطلعلك المثبّت لتشوف وين رح تنحط وتختار إذا بدها تشتغل مع الويندوز، وبعدها بتقلك وين صارت ساكنة.
   «بعدين» (أو إذا سكّرت الفقاعة): بتسألك مرة تانية بكرا. أبداً ما بتحدّث حالها بلا ما تقلها «إي».
 - بتدوّر دقيقتين بعد ما تشتغل، وبعدين كل 12 ساعة. وبإيدك: كبسة يمين على أيقونتها ← «دوّر على تحديث».
 - إعداداتك وملاحظاتك وسجلّها بيضلّوا متل ما هنن وقت التحديث أو لما تثبّتها فوق حالها.
 - الإزالة: إعدادات الويندوز ← التطبيقات ← سَحَر ← إزالة. بتسألك إذا بدك تمسح إعداداتها كمان (الجواب العادي «لا»).
-- النت: بتحكي بس مع api.github.com وملفات النسخة على GitHub، وما بتبعت شي عنك غير اسمها ورقم نسختها.
+- صار إلها أيقونة: وجّها 🌱 (بقائمة ابدأ، جنب الساعة، وبالإعدادات ← التطبيقات). شوف docs/design/icon/icon-sheet.png
+- إذا شغّلت مثبّت أقدم من النسخة يلي عندك، بيسألك قبل ما يبدّلها.
+- النت: بتحكي بس مع github.com (ملفات النسخة)، وما بتبعت شي عنك غير اسمها ورقم نسختها.
   إذا ما في نت بتسكت وبتجرّب بعدين (والسجل بيكتب سطر واحد).
 
 جرّب بإيدك: ثبّتها من Sahar-Setup-0.11.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها؛
@@ -238,12 +242,17 @@ New in the next version — an installer, and updates she asks you about 📦
 - An installer: Sahar-Setup-0.11.0.exe. Run it once; nothing to unzip. It installs for you only (no admin) into
   %LocalAppData%\Programs\Sahar, puts «سحر» in the Start menu and asks whether she starts with Windows (ticked).
 - When a new version is out she says so in her bubble («في نسخة جديدة مني …، بدك ثبّتها؟») with yes and later.
-  Yes: she downloads it, checks it is the file that was published (SHA-256), closes herself, installs it and is back
-  a few seconds later. Later (or closing the bubble): she asks again the next day. She never updates without a yes.
+  Yes: she downloads it, checks it is ours (a digital signature) and exactly that file; the installer closes her,
+  installs it and starts her again a few seconds later. If the install does not work out, she is back as she was and
+  tells you. Running from the zip: you get the installer's wizard (you see where she goes and choose start-with-
+  Windows), and afterwards she tells you where she lives now. Later (or closing the bubble): she asks again the next
+  day. She never updates without a yes.
 - She looks 2 minutes after she starts, then every 12 hours; by hand: right-click her icon → «دوّر على تحديث».
 - Your settings, notes and her log stay as they are through an update or a reinstall.
 - Uninstall: Windows Settings → Apps → سَحَر → Uninstall. It asks whether to delete her settings too (default: no).
-- Network: only api.github.com and the release's files on GitHub; nothing about you but her name and version.
+- She has an icon now: her face 🌱 (Start menu, by the clock, Settings → Apps). See docs/design/icon/icon-sheet.png
+- An older setup over a newer Sahar asks before replacing her.
+- Network: only github.com (the release's files); nothing about you but her name and version.
   No internet: she stays quiet and tries later (one line in the log).
 
 What's new in 0.11.0 — her new menu and a chat box 💬

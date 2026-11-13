@@ -13,7 +13,8 @@ A small magical companion who lives on your Windows desktop. Arabic-first, light
 3. «التالي» ← «إنهاء». بتلاقي «سحر» بقائمة ابدأ. التحديثات الجاية بتسألك عنها هي بفقاعتها.
 
 The setup is unsigned, so SmartScreen warns on its first run: **More info → Run anyway**. It installs per user into
-`%LocalAppData%\Programs\Sahar`; updates come from inside Sahar (she asks first). Uninstall from Settings → Apps.
+`%LocalAppData%\Programs\Sahar`; updates come from inside Sahar (she asks first, and only a setup signed with the
+release key — `Sahar-update.json` + `.sig`, signed on `main` only — is run). Uninstall from Settings → Apps.
 
 ## Layout
 

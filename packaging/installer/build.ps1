@@ -16,7 +16,14 @@ $iscc = Join-Path $Tools 'ISCC.exe'
 if (-not (Test-Path $iscc)) {
     $download = Join-Path ([System.IO.Path]::GetTempPath()) "innosetup-6.7.4-$([guid]::NewGuid().ToString('N')).exe"
     Write-Host "downloading Inno Setup 6.7.4 (official release)"
-    Invoke-WebRequest -Uri $InnoUrl -OutFile $download -UseBasicParsing
+    for ($try = 1; ; $try++) {
+        try { Invoke-WebRequest -Uri $InnoUrl -OutFile $download -UseBasicParsing; break }
+        catch {
+            if ($try -ge 3) { throw "Inno Setup download failed 3 times: $_" }
+            Write-Host "download failed ($_), trying again"
+            Start-Sleep -Seconds (5 * $try)
+        }
+    }
     $hash = (Get-FileHash $download -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($hash -ne $InnoSha256) { Remove-Item $download -Force; throw "Inno Setup download has SHA-256 $hash, expected $InnoSha256" }
     $p = Start-Process -FilePath $download -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/NOICONS', "/DIR=`"$Tools`"" -Wait -PassThru
