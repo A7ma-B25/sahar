@@ -191,6 +191,7 @@ internal sealed partial class MindEngine
     /// quarter, the check, the end. Numbers only reach the log.</summary>
     private void Progress(DownloadProgress p)
     {
+        if (p.Model == "runtime-cuda") { Log.Write($"mind: cuda pack {p.State}"); return; }   // the page shows it
         var before = _lastProgress?.State;
         _lastProgress = p;
         string? line = p.State switch

@@ -201,6 +201,7 @@ internal sealed class MindHost : ITurnIO
     /// <summary>Downloads (spec §6). The engine sends "start" only after his yes (the page's «نزّليه» or the bubble's «إي»).</summary>
     private void Download(MindMsg m)
     {
+        if (m.Model == "runtime-cuda") { CudaPack(m.Op); return; }
         var entry = m.Model is { } id ? _registry.Find(id) : _registry.Find(ModelCatalog.DefaultId);
         if (entry is null || entry.Sha256 is null || entry.Repo is null || entry.Commit is null || entry.File is null)
         {
@@ -257,6 +258,54 @@ internal sealed class MindHost : ITurnIO
                 Send(new MindMsg { T = "progress", Progress = new DownloadProgress(entry.Id, entry.File, 0, entry.Bytes, 0, "cancelled", "hf") });
                 break;
         }
+    }
+
+    /// <summary>The optional CUDA pack (spec §5: ≈ 680 MB, only on his yes): the official llama.cpp CUDA 12.4 build and
+    /// its cudart DLLs, each verified against tools/mind/pins.json, unpacked into %LocalAppData%\Sahar\runtime.</summary>
+    private void CudaPack(string? op)
+    {
+        if (op is "pause" or "cancel") { _download?.Cancel(); return; }
+        if (op is not ("start" or "resume") || _download is not null) return;
+        var pins = RuntimePins.Load();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(_quit.Token);
+        _download = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var dl = new Downloader(new SocketsHttpHandler { AllowAutoRedirect = false }, () => DateTimeOffset.Now, FreeBytes);
+                foreach (var variant in new[] { "cuda", "cudart" })
+                {
+                    var a = pins.Asset(variant)!;
+                    if (a.Sha256 is null) { Send(new MindMsg { T = "progress", Progress = new DownloadProgress("runtime-cuda", a.Name, 0, a.Bytes, 0, "failed", "github", "not-pinned") }); return; }
+                    var zip = Path.Combine(MindPaths.Runtime, a.Name);
+                    var plan = new DownloadPlan("runtime-cuda", RuntimePins.Url(pins, a), zip, a.Bytes, a.Sha256, DateTimeOffset.Now);
+                    var r = File.Exists(zip) ? new DownloadResult("done", a.Bytes) : await dl.RunAsync(plan, new Reporter(p => Send(new MindMsg { T = "progress", Progress = p })), cts.Token);
+                    MindLog.Write($"download: cuda {variant} {r.State}");
+                    if (r.State != "done") { Send(new MindMsg { T = "progress", Progress = new DownloadProgress("runtime-cuda", a.Name, r.Done, a.Bytes, 0, r.State, "github", r.Error) }); return; }
+                    var dir = Path.Combine(MindPaths.Runtime, variant);
+                    var tmp = dir + ".unzip";
+                    if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+                    System.IO.Compression.ZipFile.ExtractToDirectory(zip, tmp);
+                    Directory.CreateDirectory(dir);
+                    foreach (var f in Directory.EnumerateFiles(tmp, "*", SearchOption.AllDirectories))
+                    {
+                        var n = Path.GetFileName(f);
+                        if (n == "llama-server.exe" || n.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || n.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase))
+                            File.Copy(f, Path.Combine(dir, n), overwrite: true);
+                    }
+                    Directory.Delete(tmp, true);
+                    File.Delete(zip);
+                }
+                Send(new MindMsg { T = "progress", Progress = new DownloadProgress("runtime-cuda", "", 1, 1, 0, "done", "github") });
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                MindLog.Write($"download: cuda unpack failed ({e.GetType().Name})");
+                Send(new MindMsg { T = "progress", Progress = new DownloadProgress("runtime-cuda", "", 0, 0, 0, "failed", "github", "io") });
+            }
+            finally { _download = null; }
+        });
     }
 
     private async Task Bench(bool quick)
