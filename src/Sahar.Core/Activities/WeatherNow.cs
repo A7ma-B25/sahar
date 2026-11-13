@@ -71,3 +71,62 @@ public static class WeatherCity
 
     public static double Round(double deg) => Math.Round(deg, 2, MidpointRounding.AwayFromZero);
 }
+
+/// <summary>Open-Meteo's answers → <see cref="Forecast"/> (spec 0.13 §2 Weather). The hours count from the current
+/// hour (the request asks for the next 12), so a stale or test answer still lines up with now.</summary>
+public static class OpenMeteo
+{
+    public static string ForecastUrl(double lat, double lon) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCity.Round(lat)}&longitude={WeatherCity.Round(lon)}&current=temperature_2m,weather_code&hourly=temperature_2m,weather_code,precipitation_probability,wind_gusts_10m&daily=temperature_2m_max,temperature_2m_min&forecast_hours=12&forecast_days=1&timezone=auto");
+
+    public static string AirUrl(double lat, double lon) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={WeatherCity.Round(lat)}&longitude={WeatherCity.Round(lon)}&hourly=european_aqi&forecast_hours=1&timezone=auto");
+
+    public static Forecast? Parse(string forecastJson, string? airJson, DateTimeOffset now)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(forecastJson);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("hourly", out var hourly) || !hourly.TryGetProperty("weather_code", out var codes)) return null;
+            static double[] Nums(System.Text.Json.JsonElement parent, string name) =>
+                parent.TryGetProperty(name, out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? a.EnumerateArray().Select(e => e.ValueKind == System.Text.Json.JsonValueKind.Number ? e.GetDouble() : 0).ToArray() : [];
+            var code = Nums(hourly, "weather_code");
+            var temp = Nums(hourly, "temperature_2m");
+            var rain = Nums(hourly, "precipitation_probability");
+            var gust = Nums(hourly, "wind_gusts_10m");
+            var start = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, 0, 0, now.Offset);
+            var hours = code.Select((c, i) => new HourCast(start.AddHours(i), i < temp.Length ? temp[i] : 0, (int)c,
+                i < rain.Length ? (int)rain[i] : 0, i < gust.Length ? gust[i] : 0)).ToList();
+            if (hours.Count == 0) return null;
+            double tempNow = hours[0].Temp;
+            int codeNow = hours[0].Code;
+            if (root.TryGetProperty("current", out var cur))
+            {
+                if (cur.TryGetProperty("temperature_2m", out var t) && t.TryGetDouble(out var tv)) tempNow = tv;
+                if (cur.TryGetProperty("weather_code", out var wc) && wc.TryGetInt32(out var cv)) codeNow = cv;
+            }
+            double max = hours.Max(h => h.Temp), min = hours.Min(h => h.Temp);
+            if (root.TryGetProperty("daily", out var daily))
+            {
+                if (Nums(daily, "temperature_2m_max") is [var mx, ..]) max = mx;
+                if (Nums(daily, "temperature_2m_min") is [var mn, ..]) min = mn;
+            }
+            return new Forecast(tempNow, codeNow, hours, max, min, Aqi(airJson), now);
+        }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+
+    private static int? Aqi(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("hourly", out var h) && h.TryGetProperty("european_aqi", out var a)
+                && a.ValueKind == System.Text.Json.JsonValueKind.Array && a.GetArrayLength() > 0 && a[0].TryGetDouble(out var v) ? (int)Math.Round(v) : null;
+        }
+        catch (System.Text.Json.JsonException) { return null; }
+    }
+}

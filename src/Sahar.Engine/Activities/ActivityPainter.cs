@@ -406,7 +406,7 @@ internal static class ActivityPainter
     {
         float y = p.HeadCol(ActivityText.Copying, "من نافذة النسخ تبع الويندوز", 8);
         y += 16;
-        p.Text(ActivityText.Percent(c.Percent), 32, 600, R(8 + 10, y, 140, 34), p.T.Ink, TextAlign.Start);
+        p.Text(ActivityText.Percent(c.Percent), 32, 600, R(p.X(8 + 10, 140), y, 140, 34), p.T.Ink, TextAlign.Start);
         if (c.Left is { } left)
             p.Text($"باقي {ActivityText.Long(left)} تقريباً", 13, 400, R(8 + 10, y + 12, Inner - 20, 20), p.T.Text2, TextAlign.End);
         y += 34 + 10;

@@ -4053,7 +4053,7 @@ function Stage-Activities {
     foreach ($theme in @('light', 'dark')) {
         Step "every tag and card ($theme)" {
             Stop-Engine
-            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '" }')
+            Write-Settings ('{ "helloDone": true, "actScreenTime": true, "appearance": "' + $theme + '" }')   # screen time is off by default
             $script:actWin = Start-TestWindow "scene-$theme"
             Start-Engine
             Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null

@@ -9,25 +9,24 @@ using Windows.System;
 namespace Sahar.Engine.Senses;
 
 /// <summary>
-/// Rain coming (spec §5 #7, §8.1), only when you turn it on: your city goes to Open-Meteo's geocoding once, then
-/// only its coordinates, at most once an hour. Test mode reads geocode.json / forecast.json from a folder instead.
+/// The weather (spec §5 #7, §8.1; 0.13 §2), only when you turn it on: your city goes to Open-Meteo's geocoding once,
+/// then only its coordinates (rounded to 0.01°), at most once an hour — the forecast and the air quality. Test mode
+/// reads geocode.json / forecast.json / air.json from a folder instead.
 /// </summary>
 internal sealed class Weather : IDisposable
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private readonly string? _stub;
-    private readonly Action<EventKind> _post;
     private readonly DispatcherQueue _ui;
-    private DateTimeOffset? _lastFetch, _lastRain;
+    private DateTimeOffset? _lastFetch;
 
     public double? Latitude { get; private set; }
     public double? Longitude { get; private set; }
     public bool On => Latitude is not null && Longitude is not null;
 
-    public Weather(DispatcherQueue ui, Action<EventKind> post, string? stubDir, double? lat, double? lon)
+    public Weather(DispatcherQueue ui, string? stubDir, double? lat, double? lon)
     {
         _ui = ui;
-        _post = post;
         _stub = stubDir;
         (Latitude, Longitude) = (lat, lon);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("Sahar/1.0 (desktop companion)");
@@ -37,9 +36,14 @@ internal sealed class Weather : IDisposable
         t.Start();
     }
 
+    /// <summary>Turned off (the tray, the settings): her weather tag goes.</summary>
+    public event Action? TurnedOff;
+
     public void TurnOff()
     {
         Latitude = Longitude = null;
+        Last = null;
+        TurnedOff?.Invoke();
         Log.Write("weather: off");
     }
 
@@ -69,29 +73,45 @@ internal sealed class Weather : IDisposable
         _ = CheckAsync();
     }
 
+    /// <summary>The last forecast (0.13: her weather tag and card), raised on the UI thread.</summary>
+    public event Action<Sahar.Core.Activities.Forecast>? Forecasted;
+    public Sahar.Core.Activities.Forecast? Last { get; private set; }
+
+    /// <summary>Fetches at most once an hour (also called on unlock: then only if the last one is stale).</summary>
     public async Task CheckAsync()
     {
         try
         {
             if (!On || !WeatherRules.ShouldFetch(DateTimeOffset.Now, _lastFetch)) return;
             _lastFetch = DateTimeOffset.Now;
+            double lat = Latitude!.Value, lon = Longitude!.Value;
             var json = _stub is not null
                 ? await File.ReadAllTextAsync(Path.Combine(_stub, "forecast.json"))
-                : await _http.GetStringAsync(string.Create(CultureInfo.InvariantCulture,
-                    $"https://api.open-meteo.com/v1/forecast?latitude={Latitude:0.###}&longitude={Longitude:0.###}&hourly=weather_code,precipitation_probability&forecast_hours=2&timezone=auto"));
-            var f = JsonSerializer.Deserialize(json, WeatherJson.Default.ForecastResponse);
-            if (f?.Hourly is not { } h) return;
-            if (!WeatherRules.RainSoon(h.WeatherCode ?? [], (h.PrecipitationProbability ?? []).Select(p => p ?? 0).ToList())) return;
-            if (_lastRain is { } last && DateTimeOffset.Now - last < TimeSpan.FromHours(3)) return;
-            _lastRain = DateTimeOffset.Now;
-            Log.Write("weather: rain coming");
-            _ui.TryEnqueue(() => _post(EventKind.WeatherRain));
+                : await _http.GetStringAsync(Sahar.Core.Activities.OpenMeteo.ForecastUrl(lat, lon));
+            string? air = null;
+            try
+            {
+                air = _stub is not null
+                    ? (File.Exists(Path.Combine(_stub, "air.json")) ? await File.ReadAllTextAsync(Path.Combine(_stub, "air.json")) : null)
+                    : await _http.GetStringAsync(Sahar.Core.Activities.OpenMeteo.AirUrl(lat, lon));
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException) { Log.Write($"weather: air quality failed ({e.GetType().Name})"); }
+            if (Sahar.Core.Activities.OpenMeteo.Parse(json, air, DateTimeOffset.Now) is not { } f) { Log.Write("weather: forecast not understood"); return; }
+            Log.Write("weather: forecast");
+            _ui.TryEnqueue(() =>
+            {
+                Last = f;
+                Forecasted?.Invoke(f);
+            });
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or JsonException)
         {
             Log.Write($"weather: forecast failed ({e.GetType().Name})");
         }
     }
+
+    /// <summary>A fetch now (on unlock or wake), if the last one is older than an hour.</summary>
+    public void Stale() => _ = CheckAsync();
 
     public void Dispose() => _http.Dispose();
 }
@@ -103,12 +123,5 @@ internal sealed record GeoResult(
 
 internal sealed record GeoResponse([property: JsonPropertyName("results")] List<GeoResult>? Results);
 
-internal sealed record Hourly(
-    [property: JsonPropertyName("weather_code")] List<int>? WeatherCode,
-    [property: JsonPropertyName("precipitation_probability")] List<int?>? PrecipitationProbability);
-
-internal sealed record ForecastResponse([property: JsonPropertyName("hourly")] Hourly? Hourly);
-
 [JsonSerializable(typeof(GeoResponse))]
-[JsonSerializable(typeof(ForecastResponse))]
 internal sealed partial class WeatherJson : JsonSerializerContext;

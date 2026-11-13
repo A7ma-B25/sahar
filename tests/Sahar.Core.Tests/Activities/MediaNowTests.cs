@@ -80,3 +80,14 @@ public class MediaNowTests
         Assert.True(s <= 0.61, $"saturation {s}");
     }
 }
+
+public class MediaAppLabelTests
+{
+    [Theory]
+    [InlineData("Spotify.exe", "Spotify")]
+    [InlineData("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "Spotify")]
+    [InlineData("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic", "ZuneMusic")]
+    [InlineData("chrome", "Chrome")]
+    [InlineData("", "")]
+    public void AppLabel(string aumid, string label) => Assert.Equal(label, MediaNow.AppLabel(aumid));
+}

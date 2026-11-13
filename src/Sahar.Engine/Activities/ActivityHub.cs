@@ -73,7 +73,12 @@ internal sealed class ActivityHub : IDisposable
         _tick.Interval = TimeSpan.FromSeconds(1);
         _tick.Tick += (_, _) => Safe(Tick);
         _tick.Start();
+        _momentEnd = ui.CreateTimer();
+        _momentEnd.IsRepeating = false;
+        _momentEnd.Tick += (_, _) => Safe(Refresh);
     }
+
+    private readonly DispatcherQueueTimer _momentEnd;
 
     public ActivityStack Stack => _stack;
     public ActivityCard Card => _card;
@@ -112,6 +117,10 @@ internal sealed class ActivityHub : IDisposable
         if (_lockedAway) return;   // the lock screen: kept for «وإنت غايب»
         _stack.Moment(a, DateTimeOffset.Now);
         Log.Write($"activity: {a.Kind} moment");
+        // Back to the pick right when the moment ends (6 s; the volume 1.5 s), not at the next second's tick.
+        _momentEnd.Stop();
+        _momentEnd.Interval = ActivityRank.MomentLength(a.Kind) + TimeSpan.FromMilliseconds(30);
+        _momentEnd.Start();
         if (line is not null && !Hushed()) Say(line);
         Refresh();
     }

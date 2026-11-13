@@ -27,6 +27,16 @@ public static class MediaNow
         return best;
     }
 
+    /// <summary>A player's name from its media app id ("Spotify.exe", "…_8wekyb3d8bbwe!App").</summary>
+    public static string AppLabel(string aumid)
+    {
+        if (aumid.Length == 0) return "";
+        var s = aumid.Contains('!') ? aumid[(aumid.IndexOf('!') + 1)..] : aumid;
+        if (s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) s = s[..^4];
+        s = s.Split('.')[^1];
+        return s.Length == 0 ? "" : char.ToUpperInvariant(s[0]) + s[1..];
+    }
+
     public static bool KeepPaused(DateTimeOffset pausedAt, DateTimeOffset now, PausedKeep keep) => keep switch
     {
         PausedKeep.Always => true,

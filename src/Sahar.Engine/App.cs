@@ -331,8 +331,9 @@ internal sealed unsafe class App
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
         // Rain coming (opt-in): the tray item asks for your city.
-        using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
-            settings.WeatherEnabled ? settings.WeatherLatitude : null, settings.WeatherEnabled ? settings.WeatherLongitude : null);
+        // Owner ruling 4 (0.13): with no city of its own the weather uses the prayer place.
+        var weatherPlace = settings.WeatherEnabled ? Sahar.Core.Activities.WeatherCity.Resolve(settings) : null;
+        using var weather = new Weather(ui, _options.WeatherStubDir, weatherPlace?.Lat, weatherPlace?.Lon);
         tray.WeatherCity = weather.On ? settings.WeatherCity : null;
         void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
         void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
@@ -500,6 +501,9 @@ internal sealed unsafe class App
         };
         using var activities = acts;
         var claudeSource = new ClaudeSource(acts, director.Post);
+        var weatherSource = new WeatherSource(acts, weather, () => settings, director.Post);
+        var mediaSource = new MediaSource(ui, acts, () => settings, Save, Path.Combine(Log.Folder, "lyrics"));
+        tray.SessionLocked += locked => Safe(() => { if (!locked) weather.Stale(); });
         tray.SessionLocked += locked => Safe(() => acts.Locked(locked));
         host.DeviceLost += () => Safe(acts.DeviceLost);
         overlay.SettingChanged += () => Safe(acts.Refresh);
@@ -679,6 +683,19 @@ internal sealed unsafe class App
             if (old is { } o) hotkey.TryRegister(o, out _);
             return "taken";
         }
+        void ApplyWeather(SaharSettings next)
+        {
+            if (next.WeatherEnabled && Sahar.Core.Activities.WeatherCity.Resolve(next) is { } place)
+            {
+                weather.Use(new GeoResult(place.Label, place.Lat, place.Lon));
+                tray.WeatherCity = place.Label;
+            }
+            else
+            {
+                weather.TurnOff();
+                tray.WeatherCity = null;
+            }
+        }
         // The settings app saved something (0.12): read the file and apply what changed, then she hops.
         (IReadOnlyList<string> Applied, string Hotkey) ReloadSettings(bool askHello)
         {
@@ -708,19 +725,11 @@ internal sealed unsafe class App
                         break;
                     case "menu": menu.Reload(next, _ => true); acts.Refresh(); break;
                     case "stars": sahar.SetInnerStars(next.InnerStars); break;
-                    case "prayer": prayer.Reload(); break;
-                    case "weather":
-                        if (next.WeatherEnabled && next.WeatherLatitude is { } lat && next.WeatherLongitude is { } lon)
-                        {
-                            weather.Use(new GeoResult(next.WeatherCity, lat, lon));
-                            tray.WeatherCity = next.WeatherCity;
-                        }
-                        else
-                        {
-                            weather.TurnOff();
-                            tray.WeatherCity = null;
-                        }
+                    case "prayer":
+                        prayer.Reload();
+                        if (next.WeatherEnabled && string.IsNullOrWhiteSpace(next.WeatherCity)) ApplyWeather(next);   // the weather follows the prayer place
                         break;
+                    case "weather": ApplyWeather(next); break;
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
                     case "activities": acts.SettingsChanged(); break;
                 }
