@@ -50,6 +50,7 @@ internal static class Program
                 {
                     await web.StartAsync();
                     window.Show();
+                    web.Shown();
                 }
                 catch (Exception e)
                 {

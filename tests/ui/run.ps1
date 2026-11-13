@@ -3842,6 +3842,7 @@ function Stage-Settings {
         $b = Js "document.getElementById('float').getAttribute('transform') + '|' + document.getElementById('squash').getAttribute('transform')"
         if ($a -ne $b) { throw "the preview moves under reduced motion: $a / $b" }
         SOk 'emulate' '{"reducedMotion":"false"}'
+        Write-Host "    page visibility: $((SKv 'state').visible); reduced: $(Js "matchMedia('(prefers-reduced-motion: reduce)').matches")"
         Start-Sleep -Milliseconds 300
         $a = Js "document.getElementById('float').getAttribute('transform')"
         Start-Sleep -Milliseconds 700
