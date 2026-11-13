@@ -1,7 +1,30 @@
-سَحَر · Sahar — نسخة تجريبية 0.11.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.12.0 (ويندوز)
 =============================================
 
-شو الجديد بـ 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
+شو الجديد بـ 0.12.0 — «إعداداتي»: برنامج إعدادات إلها ⚙️
+-------------------------------------------------
+- زر «إعداداتي» بقائمتها (وبقائمة أيقونتها جنب الساعة) بيفتح نافذة إعدادات هادية بنفس ألوانها، فاتحة أو غامقة متل الويندوز.
+  كل تغيير بيتطبّق فوراً، بلا زر حفظ. النافذة وحدة بس: إذا فتحتها مرة تانية بتجيك يلي مفتوحة. ولما تسكّرها بتطلع كلياً.
+  ما بتفتح الإنترنت أبداً: البحث عن مدينتك بيمرق من سَحَر نفسها.
+- الصفحات: سحورة · القائمة / الصلاة · الاستماع / عام · الخصوصية / عن سحر. (الأصوات و Claude Code مخبّايين لحد ما يشتغلوا.)
+- سحورة: سَحَر صغيرة حيّة بالصفحة بتنط وبتحكيلك كلمة مع كل تغيير. اسمك، شب ولا صبية (كلامها بيتغيّر معك: «اكتبي اسمك»)،
+  حجمها (صغيرة / وسط / كبيرة — وهي عالشاشة بتكبر وبتصغر فوراً)، نشاطها، وشو بتعمل لحالها: تعلّق على شغلك، مزاجها يتغيّر لحالو،
+  تلعب لحالها، تحس بالطقس — والنجوم جواتها.
+- القائمة: شو بيطلع بقائمتها (كل شي بينطفى ويشتغل)، شو بيبيّن فوق، بشو بتنفتح ووين، واختصار الكيبورد
+  (اكبس «غيّر» واكبس الاختصار الجديد؛ إذا مأخود أو بتستعمله البرامج بتقلّك ليش وبتضل عالقديم).
+- الصلاة: أوقات اليوم الخمسة والجاية مع عدّاد، المدينة أو موقع الويندوز، طريقة الحساب، العصر (الجمهور / حنفي)، والتذكير وقديش قبل.
+- الاستماع: مين القارئ. عام: فاتح / غامق / متل الويندوز، واللغة (عربي أو English — هلق للإعدادات بس).
+- الخصوصية: امسح يلي نسخته، الطقس، و«امسح كل شي عني» (بتنسى كل شي وبترجع تتعرّف عليك من جديد).
+- إذا ملف إعداداتها خرب وما عم تقدر تقراه: بتطلع ملاحظة هادية فوق كل صفحة مع «نبلّش من جديد».
+  بتسألك «أكيد؟»، وبعدين بترجع لإعداداتها الأولى وبتسألك عن اسمك من جديد. الملف الخربان بيضل على جنب (.bad) وملاحظاتك متل ما هي.
+- حجمها من الإعدادات صار يتطبّق فعلاً (قبل كان دايماً وسط).
+- الملف المضغوط صار أكبر بحوالي 30 ميغا: برنامج الإعدادات جوّا مجلد Sahar.Settings جنب Sahar.Engine.exe — خلّيهن سوا.
+  بيحتاج "WebView2" من مايكروسوفت (موجود بويندوز 11 وبأغلب ويندوز 10). إذا مش موجود، زر «إعداداتي» ما بيطلع.
+
+شو جرّب: افتح «إعداداتي» وغيّر حجمها وشوفها عالشاشة؛ طفّي «نلعب؟» من صفحة القائمة وافتح قائمتها؛ غيّر الاختصار لـ Ctrl+Alt+K
+وجرّبه؛ خلّي الويندوز غامق وشوف النافذة؛ سكّر النافذة وتأكد إنها راحت من مدير المهام.
+
+من 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
 -------------------------------------------------
 - القائمة الدائرية راحت. كبسة يمين عليها (أو Ctrl+Alt+S من أي مكان) بتفتح بطاقة هادية جنبها:
   فوق سطرها هي «شو بدك نعمل؟» وتحتو أهم شي هلق (المؤقت، الصلاة الجاية، القرآن، أو قديش باقي لترجع تحكي)،
@@ -151,7 +174,7 @@
 
 كيف تشغّلها
 -----------
-1. فك الضغط عن الملف Sahar-0.11.0-test-win-x64.zip بأي مجلد.
+1. فك الضغط عن الملف Sahar-0.12.0-test-win-x64.zip بأي مجلد.
 2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
    إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
 3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
@@ -197,7 +220,7 @@
 - 🎵 شغّل أغنية بسبوتيفاي وجرّب ⏮️ ⏯️ ⏭️ من قائمتها، وشوف إذا الفقاعة بتقول اسم الأغنية.
 - 📖 شغّل سورة والسماعات بأذنيك وأغنية شغالة: لازم توقف الأغنية وتبلش التلاوة، وسَحَر تهدى. وبآخر السورة بترجع عادي.
 
-بهالنسخة لسا ما في: الأصوات، الإعدادات، وربط Claude. هدول بالخطط الجاية.
+بهالنسخة لسا ما في: الأصوات وربط Claude. هدول بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -207,10 +230,34 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.11.0 (Windows)
+Sahar — test build 0.12.0 (Windows)
 ==================================
 
-What's new in 0.11.0 — her new menu and a chat box 💬
+What's new in 0.12.0 — «إعداداتي»: her own settings app ⚙️
+-----------------------------------------------
+- «إعداداتي» in her menu (and in her tray icon's menu) opens a quiet settings window in her colours, light or dark like
+  Windows. Every change applies at once, no Save button. Only one window: opening it again brings the open one to the
+  front; closing it ends it completely. It never goes online: your city is searched through Sahar herself.
+- Pages: Sahar · Menu / Prayer · Listening / General · Privacy / About. (Sounds and Claude Code stay hidden until they work.)
+- Sahar: a small living Sahar on the page hops and says a word on every change. Your name, guy or girl (her words follow
+  you), her size (small / medium / large — she resizes on screen at once), how lively she is, and what she does by
+  herself: comment on your work, change mood by herself, play by herself, feel the weather — and the stars inside her.
+- Menu: what her menu shows (each item on or off), what shows at the top, what opens it and where, and the keyboard
+  shortcut (press «غيّر», then the new keys; one that is taken or common is refused with the reason, the old one stays).
+- Prayer: today's five times and the next with a countdown, the city or Windows location, the method, Asr, the reminder.
+- Listening: the reciter. General: light / dark / like Windows, and the language (Arabic or English — the settings only, for now).
+- Privacy: clear what you copied, the weather, and «امسح كل شي عني» (she forgets everything and gets to know you again).
+- If her settings file is damaged and can't be read: a calm note above every page offers «نبلّش من جديد». She asks «أكيد؟»,
+  then goes back to her first settings and asks your name again. The damaged file is kept aside (.bad); your notes stay.
+- Her size from the settings now really applies (before, she was always medium).
+- The zip is about 30 MB bigger: the settings app is in the Sahar.Settings folder next to Sahar.Engine.exe — keep them
+  together. It needs Microsoft "WebView2" (in Windows 11 and most of Windows 10); without it «إعداداتي» does not show.
+
+What to try: open «إعداداتي» and change her size while watching her; turn «نلعب؟» off on the Menu page and open her
+menu; change the shortcut to Ctrl+Alt+K and try it; switch Windows to dark and look at the window; close it and check
+Task Manager that it is gone.
+
+From 0.11.0 — her new menu and a chat box 💬
 -----------------------------------------------
 - The radial ring is gone. A right-click on her (or Ctrl+Alt+S from anywhere) opens a quiet card beside her: her
   line «شو بدك نعمل؟», under it the one most urgent thing (a running timer, the next prayer, the Quran, or how long
@@ -356,7 +403,7 @@ Still here from 0.2.0
 
 Run it
 ------
-1. Unzip Sahar-0.11.0-test-win-x64.zip anywhere.
+1. Unzip Sahar-0.12.0-test-win-x64.zip anywhere.
 2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
    If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
 3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
@@ -402,7 +449,7 @@ Manual checks (GitHub cannot test these)
 - 📖 Play a surah with headphones on while a song plays: the song pauses, the recitation starts, Sahar goes quiet,
   and at the end of the surah she is back to normal.
 
-Not in this build yet: sounds, settings and the Claude link (later plans).
+Not in this build yet: sounds and the Claude link (later plans).
 
 If something goes wrong
 -----------------------

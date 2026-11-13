@@ -3793,6 +3793,142 @@ function Stage-Settings {
         Wait-Settings '"language"\s*:\s*"auto"' 3000 'language back to Auto'
         Wait-Until { (SKv 'state').dir -eq 'rtl' } 2000 'the page is not right-to-left again'
     }
+    # ---- The full settings stage (Task 8; spec §8): the tour, keyboard, two writers, without her, the unreadable file ----
+    Step 'the tour: every page, light and dark' {
+        Stop-SettingsApp
+        Write-Settings '{ "helloDone": true, "prayerCity": "حلب", "prayerLatitude": 36.2, "prayerLongitude": 37.16 }'
+        Reload-Settings | Out-Null
+        Start-SettingsApp | Out-Null
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
+        if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
+        foreach ($theme in 'light', 'dark') {
+            SOk 'emulate' ('{"theme":"' + $theme + '"}')
+            Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+            foreach ($page in $titles.Keys) {
+                SNav $page
+                Start-Sleep -Milliseconds 700
+                $st = SKv 'state'
+                if ((Text64 $st.h1_64) -ne $titles[$page]) { throw "$page h1: $(Text64 $st.h1_64)" }
+                if ($st.blocked -ne '0') { throw "blocked=$($st.blocked) on $page" }
+                Capture "app-$page-$theme"
+                SOk 'snapshot' ('{"name":"' + $page + '-' + $theme + '"}')
+                Screenshot "settings-$page-$theme.png" | Out-Null
+            }
+        }
+        SOk 'emulate' '{"theme":""}'
+        SOk 'emulate' '{"reducedMotion":"true"}'
+        SNav 'sahar'
+        Start-Sleep -Milliseconds 300
+        $a = Js "document.getElementById('float').getAttribute('transform') + '|' + document.getElementById('squash').getAttribute('transform')"
+        Start-Sleep -Seconds 1
+        $b = Js "document.getElementById('float').getAttribute('transform') + '|' + document.getElementById('squash').getAttribute('transform')"
+        if ($a -ne $b) { throw "the preview moves under reduced motion: $a / $b" }
+        SOk 'emulate' '{"reducedMotion":"false"}'
+        Start-Sleep -Milliseconds 300
+        $a = Js "document.getElementById('float').getAttribute('transform')"
+        Start-Sleep -Milliseconds 700
+        if ($a -eq (Js "document.getElementById('float').getAttribute('transform')")) { throw 'the preview does not float' }
+    }
+    Step 'keyboard reach' {
+        SNav 'sahar'
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("document.activeElement?.blur(); true")) + '"}')
+        $seen = @()
+        foreach ($i in 1..14) {
+            SKey 'Tab'
+            $f = Text64 (SKv 'state').focus64
+            if ($f -eq 'body' -or -not $f) { throw "Tab $i reached the body" }
+            if ($seen -contains $f) { throw "Tab $i came back to $f" }
+            $seen += $f
+        }
+        Write-Host "    tab order: $($seen -join ' → ')"
+        if ($seen[0] -ne 'nav-sahar') { throw "the first stop is $($seen[0])" }
+        if (-not ($seen -contains 'name') -or -not ($seen -contains 'size-1')) { throw 'Tab does not reach the page controls' }
+        Screenshot 'settings-focus-ring.png' | Out-Null
+        SOk 'focus' '{"sel":"#size-1"}'
+        SKey 'ArrowLeft'
+        Wait-Settings '"size"\s*:\s*"large"' 3000 'the arrow did not move the size (RTL: left is the next one)'
+        if ((Text64 (SKv 'state').focus64) -ne 'size-2') { throw 'the focus did not follow the choice' }
+        SKey 'ArrowRight'
+        Wait-Settings '"size"\s*:\s*"medium"' 3000 'the arrow back'
+        SOk 'focus' '{"sel":"#sw-stars"}'
+        SKey 'Space'
+        Wait-Settings '"innerStars"\s*:\s*false' 3000 'Space did not flip the switch'
+        SKey 'Space'
+        Wait-Settings '"innerStars"\s*:\s*true' 3000 'Space did not flip it back'
+    }
+    Step 'two writers' {
+        $r = Kva 'set-activity' '{"level":"Lively"}'
+        SClick '#size-0'
+        Wait-Settings '"size"\s*:\s*"small"' 3000 'the page saved the size'
+        $j = Settings-Json
+        if ($j -notmatch '"activity"\s*:\s*"lively"') { throw "the engine's activity was lost: $j" }
+        # The page asks again when the window comes to the front (WM_ACTIVATE → {"type":"focus"}): the same reload here.
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("window.sahar.reload().then(() => true)")) + '"}')
+        Wait-Until { (Js "String(window.sahar.settings().activity)") -match '^lively$' } 3000 'the page does not show the engine''s newer activity'
+        SClick '#size-1'
+        Wait-Settings '"size"\s*:\s*"medium"' 3000 'size back to medium'
+        if ((Settings-Json) -notmatch '"activity"\s*:\s*"lively"') { throw 'the engine''s activity was lost on the second save' }
+    }
+    Step 'settings without her' {
+        Stop-Engine
+        Wait-Until { -not (Test-Path '\\.\pipe\sahar') } 5000 'the engine pipe is still there'
+        SClick '#sw-mood'
+        Wait-Settings '"autoMood"\s*:\s*false' 3000 'a switch saved without her'
+        SNav 'prayer'
+        SType '#prayer-city' 'دمشق'
+        SKey 'Enter'
+        Wait-Until { (SText '#prayer-city-line') -eq 'شغّلني أول لدوّر عالمدينة.' } 3000 "the city search does not say she is off ($(SText '#prayer-city-line'))"
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log') -Raw
+        if ($log -match 'دمشق') { throw 'settings.log has the typed city' }
+        Start-Engine
+        SClick '#sw-mood'
+        Wait-Settings '"autoMood"\s*:\s*true' 3000 'the switch back'
+    }
+    Step 'change size → the engine size changes over the pipe' {
+        SNav 'sahar'
+        $dpi = [double](Info).dpi
+        SClick '#size-2'
+        Wait-Until { [math]::Abs((State).width - 120 * $dpi) -le 2 } 1500 'her width is not 120 DIP'
+        SClick '#size-1'
+        Wait-Until { [math]::Abs((State).width - 80 * $dpi) -le 2 } 1500 'her width is not 80 DIP'
+    }
+    Step 'an unreadable settings file: نبلّش من جديد' {
+        Stop-SettingsApp
+        Set-Content -Path $script:SettingsFile -Value '{ not json' -NoNewline
+        $notes = Join-Path $env:APPDATA 'Sahar\notes.json'
+        $keptNotes = if (Test-Path $notes) { Get-Content $notes -Raw } else { $null }
+        Set-Content -Path $notes -Value '["keep me"]' -Encoding UTF8
+        $st = Start-SettingsApp
+        Wait-Until { (SKv 'state').broken -eq 'true' } 3000 'the page does not know the file is unreadable'
+        if ((SText '#reset-note .label') -ne 'ما عم اقدر اقرا ملف إعداداتي.') { throw "note: $(SText '#reset-note .label')" }
+        if ((SText '#reset-start') -ne 'نبلّش من جديد') { throw "button: $(SText '#reset-start')" }
+        SNav 'general'
+        if (-not (Js "!!document.getElementById('reset-note')")) { throw 'the note is not above every page' }
+        SClick '#appearance-2'
+        Start-Sleep -Milliseconds 500
+        if ((Get-Content $script:SettingsFile -Raw) -ne '{ not json') { throw 'a change was written over the unreadable file' }
+        Capture 'app-reset-light'
+        SClick '#reset-start'
+        Wait-Until { (SText '#reset-note .label') -eq 'أكيد؟' } 2000 'no «أكيد؟»'
+        if ((SText '#reset-yes') -ne 'نبلّش من جديد' -or (SText '#reset-no') -ne 'لا') { throw 'the buttons are not [نبلّش من جديد] [لا]' }
+        Capture 'app-reset-confirm-light'
+        SClick '#reset-no'
+        Wait-Until { (SText '#reset-note .label') -eq 'ما عم اقدر اقرا ملف إعداداتي.' } 2000 '«لا» did not go back'
+        SClick '#reset-start'
+        SClick '#reset-yes'
+        Wait-Until { (SText '#reset-note .label') -eq 'رجعت متل أول.' } 5000 'no «رجعت متل أول.»'
+        if ((Get-Content ($script:SettingsFile + '.bad') -Raw) -ne '{ not json') { throw 'the unreadable file was not kept aside as .bad' }
+        if ($null -eq (Settings-Json | ConvertFrom-Json)) { throw 'settings.json is not readable after the reset' }
+        if ((Setting 'helloDone') -ne $false) { throw 'HelloDone did not reset' }
+        if ((Get-Content $notes -Raw) -notmatch 'keep me') { throw 'the notes went' }
+        Wait-Until { (Kv 'debug-bubble').open -eq 'true' } 5000 'she did not ask your name again'
+        $title = Text64 (Kv 'debug-bubble').title64
+        if ($title -notmatch 'شو بدك ناديك') { throw "her bubble: $title" }
+        if ($null -ne $keptNotes) { Set-Content -Path $notes -Value $keptNotes -NoNewline } else { Remove-Item $notes -ErrorAction SilentlyContinue }
+        Stop-SettingsApp
+        Start-SettingsApp | Out-Null
+    }
     Step 'privacy: clear and erase' {
         SNav 'privacy'
         Capture 'app-privacy-light'

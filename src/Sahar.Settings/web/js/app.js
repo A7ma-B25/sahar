@@ -153,15 +153,15 @@ window.sahar = {
     broken: S.caps.broken ? 'true' : 'false',
   }),
   settings: () => S.value,
+  /** What the window does when it comes to the front: ask the host again (the engine may have saved meanwhile). */
+  reload: async () => { await load(); applyLook(); await render(); },
 };
 
 onPush(async (msg) => {
   if (msg?.type !== 'focus') return;
   // The window came to the front: the engine may have saved meanwhile (two writers).
-  const typing = document.activeElement?.tagName === 'INPUT';
-  await load();
-  applyLook();
-  if (!typing) render();
+  if (document.activeElement?.tagName === 'INPUT') { await load(); applyLook(); return; }   // never under your typing
+  await window.sahar.reload();
 });
 darkQuery.addEventListener('change', () => { applyLook(); });
 // عام changed light/dark or the language: the whole page follows (a pure mirror for English).

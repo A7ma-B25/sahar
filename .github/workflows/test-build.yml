@@ -99,11 +99,15 @@ jobs:
           $dir = "artifacts/Sahar-$env:SAHAR_VERSION-test-win-x64"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Copy-Item artifacts/engine/Sahar.Engine.exe $dir
+          Copy-Item artifacts/engine/Sahar.Settings $dir -Recurse
+          Get-ChildItem "$dir/Sahar.Settings" -Filter *.pdb -Recurse | Remove-Item
           Copy-Item packaging/README-test-build.txt $dir
           Compress-Archive -Path "$dir/*" -DestinationPath "$dir.zip" -Force
           $names = (Get-ChildItem $dir).Name | Sort-Object
           Write-Host "zip contains: $($names -join ', ')"
-          if (($names -join ',') -ne 'README-test-build.txt,Sahar.Engine.exe') { throw "unexpected zip contents: $names" }
+          if (($names -join ',') -ne 'README-test-build.txt,Sahar.Engine.exe,Sahar.Settings') { throw "unexpected zip contents: $names" }
+          if (-not (Test-Path "$dir/Sahar.Settings/Sahar.Settings.exe") -or -not (Test-Path "$dir/Sahar.Settings/web/index.html")) { throw 'the settings app is incomplete' }
+          Write-Host ("zip size: {0:0.0} MB" -f ((Get-Item "$dir.zip").Length / 1MB))
       - uses: actions/upload-artifact@v4
         with:
           name: Sahar-${{ env.SAHAR_VERSION }}-test-win-x64
