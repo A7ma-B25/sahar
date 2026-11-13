@@ -128,13 +128,13 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
     public StyleCard Style()
     {
         var samples = Read(StyleFile, MemoryJson.Default.StyleData, () => new StyleData()).Samples;
-        return Card(samples);
+        return StyleSummary.Card(samples);
     }
 
     public int AddSamples(LearnSource source, IEnumerable<string> lines)
     {
         if (!consent().Allows(source)) return 0;
-        var clean = lines.Select(l => Clean(l, MaxSampleChars)).Where(l => l.Length >= 2).ToList();
+        var clean = lines.Select(l => Clean(Import.Scrub.Clean(l), MaxSampleChars)).Where(l => l.Length >= 2).ToList();
         if (clean.Count == 0) return 0;
         return Change(StyleFile, MemoryJson.Default.StyleData, () => new StyleData(), d =>
         {
@@ -230,7 +230,7 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
                 w.WriteEndObject();
             }
             w.WriteEndArray();
-            w.WriteString("style", Card(style.Samples).SummaryAr);
+            w.WriteString("style", StyleSummary.Card(style.Samples).SummaryAr);
             w.WriteStartArray("samples");
             foreach (var s in style.Samples)
             {
@@ -338,9 +338,6 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
         var s = string.Join(' ', (text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return s.Length > max ? s[..max].TrimEnd() : s;
     }
-
-    private static StyleCard Card(IReadOnlyList<SampleRow> samples) =>
-        new("", samples.Count, samples.Count(s => s.Source == LearnSource.Imports), samples.Count(s => s.Source == LearnSource.Examples));
 
     /// <summary>The stricter of two: anything sensitive wins over None.</summary>
     private static Sensitivity Stricter(Sensitivity a, Sensitivity b) => a != Sensitivity.None ? a : b;
