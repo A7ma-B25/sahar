@@ -44,6 +44,25 @@ function Stage-MindAutonomy {
     Start-Engine
     Pose-Body ([int]($Work.Width * 0.3)) ([int]($Work.Height * 0.35)) | Out-Null
 
+    Step 'mind (autonomy): her brain''s engine side stays light (a turn, calls, the log: < 3 MB over rest)' {
+        Start-Sleep -Seconds 20
+        $rest = (State).workingSetBytes
+        Kva 'mind-test-fake' '{"on":"true"}' | Out-Null
+        for ($k = 0; $k -lt 5; $k++) {
+            Kva 'mind-test-initiative' '{"force":"true"}' | Out-Null
+            $id = ([regex]::Matches((Mind-Sent), 'turn:(i\d+):initiative') | Select-Object -Last 1).Groups[1].Value
+            Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":1,"tool":"prayer.next","data":"{}","why":"x"}')
+            Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":2,"tool":"note.save","data":"{\"text\":\"rest-check\"}","why":"x"}')
+            Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"","final":true}')
+            Mind-Log 'all' | Out-Null
+        }
+        Start-Sleep -Seconds 3
+        $after = (State).workingSetBytes
+        Write-Host ("    engine working set: {0:N1} MB at rest, {1:N1} MB after five turns (+{2:N1} MB)" -f ($rest / 1MB), ($after / 1MB), (($after - $rest) / 1MB))
+        if ($after - $rest -gt 3MB) { throw "the autonomy side costs the engine $((($after - $rest) / 1MB)) MB" }
+        Kva 'mind-test-fake' '{"on":"false"}' | Out-Null
+    }
+
     Step 'mind (autonomy): the tools are her real abilities, and no Claude-permission tool exists' {
         $a = Auto
         $tools = $a.tools -split ','
