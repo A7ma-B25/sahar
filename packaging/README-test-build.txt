@@ -1,6 +1,24 @@
 سَحَر · Sahar — نسخة تجريبية 0.11.0 (ويندوز)
 =============================================
 
+الجديد بالنسخة الجاية — مثبّت، وتحديثات بتسألك عنها 📦
+-------------------------------------------------
+- صار في مثبّت: Sahar-Setup-0.11.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط.
+  بيتثبّت إلك انت بس (بلا صلاحيات أدمن) بمجلد %LocalAppData%\Programs\Sahar،
+  بيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
+- لما تطلع نسخة جديدة، سَحَر بتقلك بفقاعتها: «في نسخة جديدة مني …، بدك ثبّتها؟» وتحتها «إي» و«بعدين».
+  «إي»: بتنزّلها، بتتأكد إنها نفس الملف يلي انرفع (بصمة SHA-256)، بتسكّر حالها، بتتثبّت، وبترجع لحالها بعد ثواني.
+  «بعدين» (أو إذا سكّرت الفقاعة): بتسألك مرة تانية بكرا. أبداً ما بتحدّث حالها بلا ما تقلها «إي».
+- بتدوّر دقيقتين بعد ما تشتغل، وبعدين كل 12 ساعة. وبإيدك: كبسة يمين على أيقونتها ← «دوّر على تحديث».
+- إعداداتك وملاحظاتك وسجلّها بيضلّوا متل ما هنن وقت التحديث أو لما تثبّتها فوق حالها.
+- الإزالة: إعدادات الويندوز ← التطبيقات ← سَحَر ← إزالة. بتسألك إذا بدك تمسح إعداداتها كمان (الجواب العادي «لا»).
+- النت: بتحكي بس مع api.github.com وملفات النسخة على GitHub، وما بتبعت شي عنك غير اسمها ورقم نسختها.
+  إذا ما في نت بتسكت وبتجرّب بعدين (والسجل بيكتب سطر واحد).
+
+جرّب بإيدك: ثبّتها من Sahar-Setup-0.11.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها؛
+شغّل المثبّت مرة تانية وهي شغّالة (لازم تسكّر وترجع، وإعداداتك متل ما هي)؛ «دوّر على تحديث» من أيقونتها؛
+وأزلها من الإعدادات وجاوب «لا» (لازم ترجع متل ما كانت إذا رجعت ثبّتها).
+
 شو الجديد بـ 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
 -------------------------------------------------
 - القائمة الدائرية راحت. كبسة يمين عليها (أو Ctrl+Alt+S من أي مكان) بتفتح بطاقة هادية جنبها:
@@ -149,12 +167,16 @@
 - إذا غبت 5 دقايق بتنام بالزاوية، ولما ترجع بتصحى.
 - لترجّع تعلّمها من الأول: سكّرها وامسح الملف %AppData%\Sahar\life.json
 
-كيف تشغّلها
+كيف تثبّتها
 -----------
-1. فك الضغط عن الملف Sahar-0.11.0-test-win-x64.zip بأي مجلد.
-2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
-3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
+1. نزّل Sahar-Setup-0.11.0.exe من صفحة النسخة على GitHub وشغّلو.
+2. الويندوز رح يقلك «Windows protected your PC» (هاد SmartScreen) لأن النسخة مش موقّعة لسا. طبيعي:
+   كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
+   هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
+3. اختار إذا بدك ياها تشتغل مع الويندوز ← «التالي» ← «إنهاء». سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
+   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.11.0-test-win-x64.zip وشغّل Sahar.Engine.exe (نفس تحذير SmartScreen).
+   إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
+4. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
    "إخفاء ساعة" بيخبّيها ساعة وبترجع لحالها.
 
 شو تجرّب
@@ -209,6 +231,19 @@
 
 Sahar — test build 0.11.0 (Windows)
 ==================================
+
+New in the next version — an installer, and updates she asks you about 📦
+-----------------------------------------------
+- An installer: Sahar-Setup-0.11.0.exe. Run it once; nothing to unzip. It installs for you only (no admin) into
+  %LocalAppData%\Programs\Sahar, puts «سحر» in the Start menu and asks whether she starts with Windows (ticked).
+- When a new version is out she says so in her bubble («في نسخة جديدة مني …، بدك ثبّتها؟») with yes and later.
+  Yes: she downloads it, checks it is the file that was published (SHA-256), closes herself, installs it and is back
+  a few seconds later. Later (or closing the bubble): she asks again the next day. She never updates without a yes.
+- She looks 2 minutes after she starts, then every 12 hours; by hand: right-click her icon → «دوّر على تحديث».
+- Your settings, notes and her log stay as they are through an update or a reinstall.
+- Uninstall: Windows Settings → Apps → سَحَر → Uninstall. It asks whether to delete her settings too (default: no).
+- Network: only api.github.com and the release's files on GitHub; nothing about you but her name and version.
+  No internet: she stays quiet and tries later (one line in the log).
 
 What's new in 0.11.0 — her new menu and a chat box 💬
 -----------------------------------------------
@@ -354,12 +389,15 @@ Still here from 0.2.0
 - Away for 5 minutes: she naps in the corner and wakes when you are back.
 - To reset what she learned: quit her and delete %AppData%\Sahar\life.json
 
-Run it
-------
-1. Unzip Sahar-0.11.0-test-win-x64.zip anywhere.
-2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
-   If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
-3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
+Install it
+----------
+1. Download Sahar-Setup-0.11.0.exe from the release page on GitHub and run it.
+2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
+   click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
+3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.
+   Portable instead: unzip Sahar-0.11.0-test-win-x64.zip and run Sahar.Engine.exe (same SmartScreen warning).
+   Running her from the zip: the installer closes her for you; delete the old folder afterwards.
+4. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
    "Hide 1 h" hides her for an hour.
 
 What to try
