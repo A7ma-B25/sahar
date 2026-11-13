@@ -22,32 +22,54 @@ public sealed class ModelRegistry
         (_models, _active) = Load();
     }
 
-    public ModelEntry? Active => _models.FirstOrDefault(m => m.Id == _active && m.Installed);
+    public ModelEntry? Active { get { Reload(); return _models.FirstOrDefault(m => m.Id == _active && m.Installed); } }
 
-    public IReadOnlyList<ModelEntry> List() => _models.Select(m => m with { Active = m.Id == _active && m.Installed }).ToList();
+    public IReadOnlyList<ModelEntry> List()
+    {
+        Reload();
+        return _models.Select(m => m with { Active = m.Id == _active && m.Installed }).ToList();
+    }
+
+    /// <summary>Two programs write models.json (the Mind and the settings app): every read and change starts from the
+    /// file as it is now, under a named mutex, so neither drops the other's change.</summary>
+    private void Reload() => (_models, _active) = Load();
+
+    private T Locked<T>(Func<T> f)
+    {
+        using var m = new Mutex(false, "Local\\Sahar.Models." + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(_path).ToLowerInvariant())))[..16]);
+        bool owned = false;
+        try { owned = m.WaitOne(TimeSpan.FromSeconds(5)); }
+        catch (AbandonedMutexException) { owned = true; }
+        try { Reload(); return f(); }
+        finally { if (owned) m.ReleaseMutex(); }
+    }
 
     public ModelEntry? Find(string id) => List().FirstOrDefault(m => m.Id == id);
 
-    public bool Use(string id)
+
+    public bool Use(string id) => Locked(() =>
     {
         if (_models.FirstOrDefault(m => m.Id == id) is not { Installed: true }) return false;
         _active = id;
         Save();
         return true;
-    }
+    });
 
     public void MarkInstalled(string id, string path) => Change(id, m => m with { Installed = true, LocalPath = path });
 
     /// <summary>The file was deleted («احذفي»): the entry stays (recommended) or goes (added), and is no longer active.</summary>
-    public void MarkRemoved(string id)
+    public void MarkRemoved(string id) => Locked(() =>
     {
-        Change(id, m => m with { Installed = false, LocalPath = m.Origin == ModelOrigin.Local ? m.LocalPath : null });
-        if (_active == id) { _active = null; Save(); }
-    }
+        int i = _models.FindIndex(m => m.Id == id);
+        if (i >= 0) _models[i] = _models[i] with { Installed = false, LocalPath = _models[i].Origin == ModelOrigin.Local ? _models[i].LocalPath : null };
+        if (_active == id) _active = null;
+        Save();
+        return 0;
+    });
 
     public void SetBench(string id, BenchResult bench) => Change(id, m => m with { Bench = bench, Ability = bench.Ability });
 
-    public ModelEntry AddHf(string owner, string repo, string commit, string file, long bytes, string sha256, string? license)
+    public ModelEntry AddHf(string owner, string repo, string commit, string file, long bytes, string sha256, string? license) => Locked(() =>
     {
         var id = $"hf:{owner}/{repo}/{file}";
         if (_models.FirstOrDefault(m => m.Id == id) is { } had) return had;
@@ -56,9 +78,9 @@ public sealed class ModelRegistry
         _models.Add(e);
         Save();
         return e;
-    }
+    });
 
-    public ModelEntry AddLocal(string path, string sha256, long bytes)
+    public ModelEntry AddLocal(string path, string sha256, long bytes) => Locked(() =>
     {
         var id = "file:" + sha256[..16];
         if (_models.FirstOrDefault(m => m.Id == id) is { } had) return had;
@@ -68,10 +90,10 @@ public sealed class ModelRegistry
         _models.Add(e);
         Save();
         return e;
-    }
+    });
 
     /// <summary>Removes an added model from the list (recommended ones stay listed; delete their file instead).</summary>
-    public bool Remove(string id)
+    public bool Remove(string id) => Locked(() =>
     {
         var m = _models.FirstOrDefault(x => x.Id == id);
         if (m is null || m.Origin == ModelOrigin.Recommended) return false;
@@ -79,7 +101,7 @@ public sealed class ModelRegistry
         if (_active == id) _active = null;
         Save();
         return true;
-    }
+    });
 
     /// <summary>A typed or pasted path to a .gguf file (quotes stripped), or null.</summary>
     public static string? LocalGguf(string? text)
@@ -107,13 +129,14 @@ public sealed class ModelRegistry
         return stem.Replace('_', ' ');
     }
 
-    private void Change(string id, Func<ModelEntry, ModelEntry> f)
+    private void Change(string id, Func<ModelEntry, ModelEntry> f) => Locked(() =>
     {
         int i = _models.FindIndex(m => m.Id == id);
-        if (i < 0) return;
+        if (i < 0) return 0;
         _models[i] = f(_models[i]);
         Save();
-    }
+        return 0;
+    });
 
     private (List<ModelEntry>, string?) Load()
     {

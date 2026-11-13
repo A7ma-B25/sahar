@@ -162,7 +162,7 @@ internal static class Probe
         long free = 0;
         try { Directory.CreateDirectory(MindPaths.Models); free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(MindPaths.Models))!).AvailableFreeSpace / (1024 * 1024); }
         catch (Exception) { }
-        return new HardwareProbe(Native.TotalRamMB(), gpus, System.Runtime.Intrinsics.X86.Avx2.IsSupported, free);
+        return new HardwareProbe(Native.TotalRamMB(), gpus, Native.Avx2(), free);
     }
 }
 
