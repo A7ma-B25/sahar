@@ -46,6 +46,17 @@ jobs:
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: Publish the settings app (self-contained, next to the engine)
         run: dotnet publish src/Sahar.Settings -c Release -r win-x64 -o artifacts/engine/Sahar.Settings
+      - name: Publish her brain's process (Native AOT, next to the engine)
+        run: dotnet publish src/Sahar.Mind -c Release -r win-x64 -o artifacts/mind-exe
+      - name: Her brain's runtime (official llama.cpp release, pinned SHA-256 and GitHub's digest)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Copy-Item artifacts/mind-exe/Sahar.Mind.exe artifacts/engine/
+          ./tools/mind/fetch.ps1 -Runtime vulkan,cpu -Out artifacts/mind
+          New-Item -ItemType Directory -Force -Path artifacts/engine/runtime | Out-Null
+          Copy-Item artifacts/mind/runtime/cpu artifacts/engine/runtime/cpu -Recurse
       - uses: actions/upload-artifact@v4
         with:
           name: engine
@@ -79,6 +90,16 @@ jobs:
         with:
           name: engine
           path: artifacts/engine
+      # The mind stage's tiny model (plan Ruling 4, 291.5 MB): cached by its pin; never the 5 GB model.
+      - uses: actions/cache@v4
+        if: contains(matrix.group.stages, 'mind')
+        with:
+          path: artifacts/mind/downloads
+          key: mind-ci-model-${{ hashFiles('tools/mind/pins.json') }}
+      - name: The mind stage's tiny model (pinned)
+        if: contains(matrix.group.stages, 'mind')
+        shell: pwsh
+        run: ./tools/mind/fetch.ps1 -Model -Out artifacts/mind
       - name: UI tests (${{ matrix.group.stages }})
         shell: pwsh
         env:
