@@ -123,8 +123,11 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
             {
                 var dir = options.SnapshotDir ?? Path.GetTempPath();
                 Directory.CreateDirectory(dir);
-                await using var file = File.Create(Path.Combine(dir, Arg(r, "name") + ".png"));
-                await web.View!.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
+                // DevTools' screenshot forces a frame even when the window is behind another (CapturePreview waits for
+                // the next painted frame, which never comes while the window is covered: CI run 43480934329).
+                var json = await web.View!.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", """{"format":"png"}""");
+                using var doc = JsonDocument.Parse(json);
+                await File.WriteAllBytesAsync(Path.Combine(dir, Arg(r, "name") + ".png"), Convert.FromBase64String(doc.RootElement.GetProperty("data").GetString()!));
                 return new PipeReply(true);
             }
             case "emulate":
