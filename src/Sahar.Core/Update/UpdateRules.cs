@@ -10,6 +10,16 @@ namespace Sahar.Core.Update;
 /// </summary>
 public static partial class UpdateRules
 {
+    public const string Repo = "A7ma-B25/sahar";
+    private const string GitHubApi = "https://api.github.com";
+
+    /// <summary>All she sends about herself: her name and version.</summary>
+    public static string UserAgent => $"Sahar/{CoreInfo.Version}";
+
+    /// <summary>The GitHub API address of the channel's release (<paramref name="apiBase"/>: test mode's fake API).</summary>
+    public static Uri ReleaseApi(UpdateChannel channel, string? apiBase = null) =>
+        new($"{(apiBase ?? GitHubApi).TrimEnd('/')}/repos/{Repo}/releases/" + (channel == UpdateChannel.Stable ? "latest" : "tags/test-build"));
+
     [GeneratedRegex(@"^Sahar-Setup-(?<v>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\.exe$")]
     private static partial Regex SetupName();
 
