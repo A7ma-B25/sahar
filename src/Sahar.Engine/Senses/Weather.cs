@@ -34,6 +34,7 @@ internal sealed class Weather : IDisposable
         t.Interval = TimeSpan.FromMinutes(10);
         t.Tick += (_, _) => _ = CheckAsync();
         t.Start();
+        if (On) ui.TryEnqueue(() => _ = CheckAsync());   // 0.13: her weather tag from the start, not after ten minutes
     }
 
     /// <summary>Turned off (the tray, the settings): her weather tag goes.</summary>

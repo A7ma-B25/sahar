@@ -3461,7 +3461,11 @@ function Write-Settings([string]$json) {
     New-Item -ItemType Directory -Force -Path (Split-Path $script:SettingsFile) | Out-Null
     Set-Content -Path $script:SettingsFile -Value $json -Encoding UTF8
 }
-function Settings-Json { if (Test-Path $script:SettingsFile) { Get-Content $script:SettingsFile -Raw } else { '' } }
+function Settings-Json {
+    # Read while the page may be writing it (two quick saves): a sharing violation is "not yet", and the wait goes on.
+    if (-not (Test-Path $script:SettingsFile)) { return '' }
+    try { Get-Content $script:SettingsFile -Raw -ErrorAction Stop } catch [System.IO.IOException] { '' }
+}
 function Reload-Settings([string]$extra = '') {
     $r = Send ('{"type":"cmd","name":"settings-reload"' + $extra + '}')
     if (-not $r.ok) { throw "settings-reload not ok: $($r.error)" }
@@ -3784,6 +3788,28 @@ function Stage-Settings {
         if ((Js "document.getElementById('reciter-ar-husary').getAttribute('aria-checked')") -ne 'true') { throw 'the row is not checked' }
         Capture 'app-listen-light'
     }
+    Step 'activities (0.13): her switches, lyrics, paused music, the weather city, Claude Code' {
+        SNav 'activities'
+        if ((Text64 (SKv 'state').h1_64) -ne 'النشاطات') { throw 'the page is not «النشاطات»' }
+        SClick '#sw-actCopy'
+        Wait-Settings '"actCopy"\s*:\s*false' 3000 'copy off'
+        SClick '#sw-actCopy'
+        Wait-Settings '"actCopy"\s*:\s*true' 3000 'copy back on'
+        SClick '#sw-actScreenTime'
+        Wait-Settings '"actScreenTime"\s*:\s*true' 3000 'screen time on'
+        SClick '#sw-lyricsEnabled'
+        Wait-Settings '"lyricsConsented"\s*:\s*true' 3000 'lyrics on (and consented)'
+        SClick '#music-keep-1'
+        Wait-Settings '"musicPausedKeep"\s*:\s*"hour"' 3000 'paused music kept an hour'
+        $line = SText '#weather-city-line'
+        Write-Host "    weather city line: $line"
+        Wait-Until { (SText '#claude-link') -ne '' } 3000 'the Claude Code row'
+        Write-Host "    claude: $(SText '#claude-link-label') / $(SText '#claude-link')"
+        SClick '#sw-lyricsEnabled'
+        Wait-Settings '"lyricsEnabled"\s*:\s*false' 3000 'lyrics off'
+        SClick '#sw-actScreenTime'
+        Wait-Settings '"actScreenTime"\s*:\s*false' 3000 'screen time off'
+    }
     Step 'general: light, dark and English' {
         SNav 'general'
         Capture 'app-general-light'
@@ -3819,7 +3845,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
@@ -3979,7 +4005,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 11) { throw "the sidebar has $n entries" }
+        if ($n -ne 12) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
@@ -4179,12 +4205,15 @@ function Stage-Activities {
         foreach ($s in @('SENTINELFILE', 'SENTINELCMD', 'SENTINELPROJECT', 'نسّم')) { if ($log -match $s) { throw "engine.log holds '$s'" } }
     }
     Step 'her expressions: the music sway, the halo from the cover, the leaf like an umbrella' {
+        $scene = Start-TestWindow 'scene-light'
+        Start-Sleep -Seconds 8   # her bubble from the hooks above goes first
         $e = Kva 'activity-expr' '{"music":"true","cover":"#E07A3A","rain":"true"}'
         if ($e.sway -ne 'music' -or $e.droop -ne '14' -or $e.halo -eq 'mood') { throw "sway $($e.sway) droop $($e.droop) halo $($e.halo)" }
         Start-Sleep -Milliseconds 900
         $st = State
         $shot = Screenshot 'act-expressions.png'
         Crop-Rect $shot ([int]$st.x - 60) ([int]$st.y - 70) ([int]$st.width + 120) ([int]$st.height + 110) (Join-Path $Out 'app-expressions-light.png')
+        Stop-Process -Id $scene.Id -ErrorAction SilentlyContinue
         $e = Kva 'activity-expr' '{}'
         if ($e.sway -ne 'soft' -or $e.droop -ne '0' -or $e.halo -ne 'mood') { throw 'the expressions did not end' }
     }
@@ -4212,6 +4241,8 @@ function Stage-Activities {
         $r = Run-Hook (Hook-Json 'Stop')
         if ($r.code -ne 0 -or $r.out -ne '' -or $r.ms -gt 3000) { throw "exit $($r.code) out '$($r.out)' in $($r.ms) ms" }
     }
+    # The next stages start from no settings (a weather city or a prayer place here would change their menus).
+    Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue
     $sheet = @(Get-ChildItem $Out -Filter 'app-*-tag-light.png' | Select-Object -First 16 | ForEach-Object FullName)
     if ($sheet.Count) { Contact-Sheet $sheet 4 240 (Join-Path $Out 'activities-tags.png') }
 }
