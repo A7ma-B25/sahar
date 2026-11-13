@@ -88,15 +88,28 @@ public sealed class BenchTests
         Assert.True(r.ToolPass + r.DialectPass is > 0 and < 60);
     }
 
+    [Fact]
+    public async Task Bench_ServerCrash_RestartsAndGoesOn()
+    {
+        var llm = new Scripted(good: true) { CrashAt = 10 };
+        int warms = 0;
+        var r = await BenchRunner.RunAsync(llm, "m", "{}", () => { warms++; return Task.FromResult(new RuntimeReady("m", "", Tier.Gpu6, Backend.Vulkan, 1, 0, 0)); },
+            () => (0, 0), golden: true, null, () => DateTimeOffset.UnixEpoch, default);
+        Assert.Equal(2, warms);
+        Assert.Equal(60, r.ToolTotal + r.DialectTotal);
+        Assert.Equal(59, r.ToolPass + r.DialectPass);
+    }
+
     /// <summary>Answers every tool row with its expected call (or garbage), every chat line in Syrian.</summary>
     private sealed class Scripted(bool good) : ILlm
     {
         public int Calls;
-        public int FailEvery;
+        public int FailEvery, CrashAt;
         public Task<LlmReply> CompleteAsync(LlmRequest request, Action<string>? partial, CancellationToken ct)
         {
             Calls++;
             if (FailEvery > 0 && Calls > 1 && Calls % FailEvery == 0) throw new MindRuntimeException("bad-output");
+            if (Calls == CrashAt) throw new MindRuntimeException("load-failed");
             var line = request.Messages[^1].Content;
             var row = BenchSuite.Rows.FirstOrDefault(r => r.Text == line);
             string text = row is { Kind: "tool" }
