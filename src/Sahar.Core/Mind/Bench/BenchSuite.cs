@@ -147,7 +147,7 @@ public static class BenchRunner
             foreach (var row in BenchSuite.Rows)
             {
                 ct.ThrowIfCancellationRequested();
-                var reply = await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2 }), null, ct);
+                var reply = await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2, MaxTokens = 96 }), null, ct);
                 if (row.Kind == "tool") { tTotal++; if (ToolScore.Pass(row, reply.Text)) tPass++; }
                 else { dTotal++; if (DialectScore.Pass(DialectScore.SayOf(reply.Text), english: row.Text.Any(char.IsAsciiLetter))) dPass++; }
                 rowsDone?.Report(++done);

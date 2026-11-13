@@ -33,6 +33,7 @@ internal sealed class MindHost : ITurnIO
     private CancellationTokenSource? _download;
     private DateTimeOffset _lastUse = DateTimeOffset.UtcNow;
     private IMindStore? _store;
+    private int _busy;   // a bench running: never unloaded under it
 
     public MindHost(NamedPipeClientStream pipe, string? script)
     {
@@ -312,6 +313,7 @@ internal sealed class MindHost : ITurnIO
     {
         if (_registry.Active is not { } model && _runtime is not ScriptRuntime) { Send(new MindMsg { T = "error", Error = "model-missing" }); return; }
         var id = _registry.Active?.Id ?? "script";
+        Interlocked.Increment(ref _busy);
         try
         {
             Send(new MindMsg { T = "state", Phase = "loading" });
@@ -326,7 +328,7 @@ internal sealed class MindHost : ITurnIO
         }
         catch (MindRuntimeException e) { Send(new MindMsg { T = "error", Error = e.Code }); }
         catch (OperationCanceledException) { }
-        finally { _lastUse = DateTimeOffset.UtcNow; Send(new MindMsg { T = "state", Phase = "idle" }); }
+        finally { Interlocked.Decrement(ref _busy); _lastUse = DateTimeOffset.UtcNow; Send(new MindMsg { T = "state", Phase = "idle" }); }
     }
 
     private async Task IdleLoop()
@@ -335,7 +337,7 @@ internal sealed class MindHost : ITurnIO
         {
             try { await Task.Delay(TimeSpan.FromSeconds(Environment.GetEnvironmentVariable("SAHAR_MIND_FAST_IDLE") == "1" ? 2 : 15), _quit.Token); }
             catch (OperationCanceledException) { return; }
-            if (_turn is not null || _download is not null) continue;
+            if (_turn is not null || _download is not null || Volatile.Read(ref _busy) > 0) continue;
             var s = Settings();
             bool battery = Native.OnBattery();
             var step = IdlePolicy.Decide(DateTimeOffset.UtcNow, _lastUse, _runtime.Loaded, battery, s.MindUnloadMinutes);
