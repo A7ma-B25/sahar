@@ -14,6 +14,7 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
 {
     public const string Host = "sahar.settings";
     public const string Origin = "https://" + Host + "/";
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(20);
     private CoreWebView2Environment? _env;
     private CoreWebView2Controller? _controller;
 
@@ -31,8 +32,10 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
     public async Task StartAsync()
     {
         var envOptions = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = false };
-        _env = await CoreWebView2Environment.CreateAsync(null, DataFolder(options), envOptions);
-        _controller = await _env.CreateCoreWebView2ControllerAsync(window.Hwnd);
+        // Its own data folder; one that cannot be made (a file in the way, no rights) fails here, at once.
+        Directory.CreateDirectory(DataFolder(options));
+        _env = await CoreWebView2Environment.CreateAsync(null, DataFolder(options), envOptions).WaitAsync(StartTimeout);
+        _controller = await _env.CreateCoreWebView2ControllerAsync(window.Hwnd).WaitAsync(StartTimeout);
         var bg = Tokens.Light.Bg;
         _controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, bg.R, bg.G, bg.B);
         var view = _controller.CoreWebView2;

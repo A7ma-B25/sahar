@@ -1921,24 +1921,26 @@ function Stage-Menu {
         $app = Join-Path (Split-Path $Exe) 'Sahar.Settings'
         $aside = "$app.aside"
         if (Test-Path $app) { Rename-Item $app $aside }
-        try { Restart-With '{ "helloDone": true }' }
+        try {
+            Restart-With '{ "helloDone": true }'
+            [System.Windows.Forms.SendKeys]::SendWait('^%s')
+            $m = Wait-Menu 'true' 2000 'card open by Ctrl+Alt+S'
+            Start-Sleep -Milliseconds 400
+            $m = Menu
+            if ($m.focus -ne 'chat' -or $m.caret -ne 'true') { throw "focus: $($m.focus) caret: $($m.caret)" }
+            $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+            if ($log -notmatch 'menu: open \(shortcut\)') { throw 'the log does not say the shortcut opened it' }
+            if ((Ids $m) -match 'settings') { throw 'a settings button without the settings app' }
+            [System.Windows.Forms.SendKeys]::SendWait('^%s')
+            Wait-Menu 'false' 1000 'card closed by the shortcut again' | Out-Null
+        }
         finally { if (Test-Path $aside) { Rename-Item $aside $app } }
-        [System.Windows.Forms.SendKeys]::SendWait('^%s')
-        $m = Wait-Menu 'true' 2000 'card open by Ctrl+Alt+S'
-        Start-Sleep -Milliseconds 400
-        $m = Menu
-        if ($m.focus -ne 'chat' -or $m.caret -ne 'true') { throw "focus: $($m.focus) caret: $($m.caret)" }
-        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
-        if ($log -notmatch 'menu: open \(shortcut\)') { throw 'the log does not say the shortcut opened it' }
-        if ((Ids $m) -match 'settings') { throw 'a settings button without the settings app' }
-        [System.Windows.Forms.SendKeys]::SendWait('^%s')
-        Wait-Menu 'false' 1000 'card closed by the shortcut again' | Out-Null
     }
     Step 'only the chosen items show' {
         Restart-With '{ "helloDone": true, "menuItems": ["play", "timer"] }'
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         $m = Wait-Menu 'true' 1000 'card open'
-        if ((Ids $m) -ne 'play,timer') { throw "buttons: $(Ids $m)" }
+        if ((Ids $m) -ne 'play,timer,settings') { throw "buttons: $(Ids $m)" }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
     }
     Step 'right-click only' {
@@ -2028,7 +2030,7 @@ Start-Sleep -Seconds 60
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $true)
         $m = Wait-Menu 'true' 2000 'card open'
-        if ($m.buttons.Count -ne 0) { throw "buttons: $(Ids $m)" }
+        if ((Ids $m) -ne 'settings') { throw "buttons: $(Ids $m) (only the settings door, which is not an item)" }
         Start-Sleep -Milliseconds 400
         Screenshot 'menu-empty.png' | Out-Null
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
@@ -3577,7 +3579,7 @@ function Stage-Settings {
         if ($r.applied -ne 'menu') { throw "applied: $($r.applied)" }
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         $m = Wait-Menu 'true' 1000 'card open'
-        if ((Ids $m) -ne 'play') { throw "buttons: $(Ids $m)" }
+        if ((Ids $m) -ne 'play,settings') { throw "buttons: $(Ids $m)" }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         Wait-Menu 'false' 1000 'card closed' | Out-Null
     }
