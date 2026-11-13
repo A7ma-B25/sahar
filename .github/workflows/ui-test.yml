@@ -44,6 +44,8 @@ jobs:
         run: dotnet test tests/Sahar.Core.Tests -c Release --filter FullyQualifiedName~SettingsStore
       - name: Publish engine (Native AOT)
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+      - name: Publish the settings app (self-contained, next to the engine)
+        run: dotnet publish src/Sahar.Settings -c Release -r win-x64 -o artifacts/engine/Sahar.Settings
       - uses: actions/upload-artifact@v4
         with:
           name: engine
@@ -66,6 +68,13 @@ jobs:
           node-version: 22
       - name: Install agent-desktop
         run: npm i -g agent-desktop@1.2.0
+      - name: The WebView2 runtime is installed (the settings app needs it)
+        shell: pwsh
+        run: |
+          $key = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $pv = @("HKLM:\SOFTWARE\WOW6432Node\$key", "HKCU:\Software\$key") | ForEach-Object { (Get-ItemProperty $_ -ErrorAction SilentlyContinue).pv } | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1
+          if (-not $pv) { throw 'The WebView2 runtime is not installed on this runner: the settings app cannot run.' }
+          Write-Host "WebView2 runtime $pv"
       - uses: actions/download-artifact@v4
         with:
           name: engine

@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdSettings = 7, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -58,6 +58,9 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     /// <summary>The level shown as checked in the menu.</summary>
     public ActivityLevel Activity { get; set; } = ActivityLevel.Medium;
     public event Action? Quit;
+    /// <summary>«إعداداتي»: the settings app (0.12), shown only while it can be opened (hidden, not greyed out).</summary>
+    public event Action? SettingsClicked;
+    public Func<bool> SettingsAvailable { get; set; } = () => false;
     /// <summary>"مين أنا؟": she asks your name and whether you are a man or a woman again.</summary>
     public event Action? WhoAmI;
     public event Action? PowerChanged;
@@ -164,8 +167,10 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* show = Sahar.Core.Settings.Address.ToYou(ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves"))
         fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — {Sahar.Core.Settings.Address.ToYou("وقّف")} / Weather: {city} — off" : "الطقس… / Weather…")
         fixed (char* who = "مين أنا؟ (اسمي) / Who am I?")
+        fixed (char* settings = "إعداداتي / Settings")
         fixed (char* quit = "إغلاق / Quit")
         {
+            if (SettingsAvailable()) Native.AppendMenu(menu, MF_STRING, CmdSettings, settings);
             Native.AppendMenu(menu, MF_STRING, CmdShow, show);
             Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
@@ -186,15 +191,19 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         else if (cmd == CmdShow) ShowToggled?.Invoke();
         else if (cmd == CmdWeather) WeatherClicked?.Invoke();
         else if (cmd == CmdWho) WhoAmI?.Invoke();
+        else if (cmd == CmdSettings) SettingsClicked?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 
     /// <summary>Test mode: a tray item as a click would pick it.</summary>
     public bool Pick(string item)
     {
-        if (item != "who") return false;
-        WhoAmI?.Invoke();
-        return true;
+        switch (item)
+        {
+            case "who": WhoAmI?.Invoke(); return true;
+            case "settings" when SettingsAvailable(): SettingsClicked?.Invoke(); return true;
+            default: return false;
+        }
     }
 
     /// <summary>Opens %LocalAppData%\Sahar (where engine.log lives) in Explorer, so the log is easy to send.</summary>

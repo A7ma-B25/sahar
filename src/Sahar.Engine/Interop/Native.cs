@@ -568,6 +568,9 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial int SetForegroundWindow(nint hwnd);
 
+    [LibraryImport("user32.dll")]
+    public static partial int AllowSetForegroundWindow(uint processId);
+
     [LibraryImport("user32.dll", EntryPoint = "PostMessageW")]
     public static partial int PostMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
 

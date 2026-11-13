@@ -35,6 +35,9 @@ internal static class SettingsLauncher
         if (!Available) return false;
         try
         {
+            // A second start only brings the open window to the front (the app's own single-instance rule); she may let
+            // it take the foreground, as the click was hers.
+            Native.AllowSetForegroundWindow(0xFFFFFFFF /* ASFW_ANY */);
             Process.Start(new ProcessStartInfo(ExePath) { UseShellExecute = false, Arguments = testMode ? "--test-mode" : "" });
             Log.Write("settings: opened");
             return true;

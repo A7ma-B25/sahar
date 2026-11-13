@@ -443,6 +443,8 @@ internal sealed unsafe class App
         }
 
         tray.WhoAmI += () => Safe(StartHello);
+        tray.SettingsAvailable = () => SettingsLauncher.Available;
+        tray.SettingsClicked += () => Safe(() => SettingsLauncher.Open(_options.TestMode));
         if (!_options.TestMode && !settings.HelloDone)
         {
             var helloTimer = ui.CreateTimer();

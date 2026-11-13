@@ -1159,7 +1159,7 @@ function Stage-Menu {
         $m = Wait-Menu 'true' 2000 'card open after a right-click'
         if ($m.view -ne 'main') { throw "view $($m.view)" }
         $ids = Ids $m
-        if ($ids -ne 'chat,send,play,dnd,hide,timer,note,listen,clipboard') { throw "buttons: $ids (no mic, no settings yet)" }
+        if ($ids -ne 'chat,send,play,dnd,hide,timer,note,listen,clipboard,settings') { throw "buttons: $ids (no mic; the settings app is next to her)" }
         if (-not (State).menuOpen) { throw 'state.menuOpen is false' }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -notmatch 'menu: open \(right\)') { throw 'the log does not say how the card opened' }
@@ -1903,8 +1903,26 @@ function Stage-Menu {
         [Mouse]::Move(5, 5)
         Start-Sleep -Milliseconds 500
     }
-    Step 'the shortcut opens the card with the focus in the chat row' {
+    Step 'the settings door opens the app' {
         Restart-With '{ "helloDone": true }'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'card open' | Out-Null
+        Press 'settings'
+        $deadline = (Get-Date).AddSeconds(10)
+        while (-not (Get-Process -Name 'Sahar.Settings' -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        $apps = @(Get-Process -Name 'Sahar.Settings' -ErrorAction SilentlyContinue)
+        if (-not $apps.Count) { throw 'no Sahar.Settings process' }
+        Start-Sleep -Seconds 2
+        $apps | ForEach-Object { try { $_.CloseMainWindow() | Out-Null; if (-not $_.WaitForExit(5000)) { $_.Kill() } } catch { } }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+    }
+    Step 'the shortcut opens the card with the focus in the chat row' {
+        # No settings app for this one engine start: then the card has no settings button (hidden, not greyed out).
+        $app = Join-Path (Split-Path $Exe) 'Sahar.Settings'
+        $aside = "$app.aside"
+        if (Test-Path $app) { Rename-Item $app $aside }
+        try { Restart-With '{ "helloDone": true }' }
+        finally { if (Test-Path $aside) { Rename-Item $aside $app } }
         [System.Windows.Forms.SendKeys]::SendWait('^%s')
         $m = Wait-Menu 'true' 2000 'card open by Ctrl+Alt+S'
         Start-Sleep -Milliseconds 400
@@ -3476,6 +3494,53 @@ Start-Sleep -Seconds 60
     $holder
 }
 
+$script:SettingsExe = Join-Path (Split-Path $Exe) 'Sahar.Settings\Sahar.Settings.exe'
+function SSend([string]$json) {
+    $reply = & "$PSScriptRoot\pipe.ps1" -Line $json -Pipe 'sahar-settings' -TimeoutMs 20000
+    Write-Host "    s-> $json`n    s<- $reply"
+    if (-not $reply) { throw "no reply from the settings app to $json" }
+    $reply | ConvertFrom-Json
+}
+function SKv([string]$cmd, [string]$argsJson = '{}') {
+    $r = SSend ('{"type":"cmd","name":"' + $cmd + '","args":' + $argsJson + '}')
+    if (-not $r.ok) { throw "settings $cmd not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ("$($r.error)" -split ' ')) { $k, $v = $pair -split '=', 2; if ($k) { $h[$k] = $v } }
+    $h
+}
+function SOk([string]$cmd, [string]$argsJson = '{}') {
+    $r = SSend ('{"type":"cmd","name":"' + $cmd + '","args":' + $argsJson + '}')
+    if (-not $r.ok) { throw "settings $cmd not ok: $($r.error)" }
+}
+function Js([string]$code) {
+    $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($code))
+    $r = SKv 'eval' ('{"code64":"' + $b + '"}')
+    $json = Text64 $r.result64
+    if ($json -eq 'null' -or -not $json) { return $null }
+    $json | ConvertFrom-Json
+}
+function Settings-Procs { @(Get-Process -Name 'Sahar.Settings' -ErrorAction SilentlyContinue) }
+function Our-WebViews {
+    @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'Sahar\\Settings\.WebView2' })
+}
+function Start-SettingsApp([string[]]$Extra = @()) {
+    $script:settingsApp = Start-Process -FilePath $script:SettingsExe -ArgumentList (@('--test-mode', '--snapshot-dir', $Out) + $Extra) -PassThru
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path '\\.\pipe\sahar-settings') -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
+    if (-not (Test-Path '\\.\pipe\sahar-settings')) { throw 'the settings pipe did not appear within 30 s' }
+    $deadline = (Get-Date).AddSeconds(30)
+    do { $st = SKv 'state'; if ($st.ready -eq 'true') { return $st }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline)
+    throw 'the settings page was not ready within 30 s'
+}
+function Stop-SettingsApp {
+    if ($script:settingsApp -and -not $script:settingsApp.HasExited) {
+        try { SOk 'close' } catch { }
+        if (-not $script:settingsApp.WaitForExit(5000)) { $script:settingsApp.Kill() }
+    }
+    Settings-Procs | ForEach-Object { try { $_.Kill() } catch { } }
+}
+
 function Stage-Settings {
     $kept = Settings-Json
     Step 'she starts at her saved size' {
@@ -3543,7 +3608,52 @@ function Stage-Settings {
         if ($r.ok -ne 'true') { throw 'clipboard-clear' }
         if ((Clip-Count) -ne 0) { throw "count $(Clip-Count) after clearing" }
     }
+    # ---- The app (Task 3): it opens, one window only, it closes completely, a broken WebView2 folder fails cleanly ----
+    Step 'it opens' {
+        if (-not (Test-Path $script:SettingsExe)) { throw "no settings app at $script:SettingsExe" }
+        $st = Start-SettingsApp
+        $dpi = [double]$st.dpi
+        Write-Host "    client $($st.clientW)x$($st.clientH) at dpi $dpi, window $($st.winW)x$($st.winH)"
+        if ([int]$st.clientW -lt 720 * $dpi -or [int]$st.clientH -lt 520 * $dpi) { throw "client $($st.clientW)x$($st.clientH) is under 720x520 DIP" }
+        if ($st.blocked -ne '0') { throw "blocked=$($st.blocked)" }
+        Start-Sleep -Milliseconds 800
+        Screenshot 'settings-open.png' | Out-Null
+    }
+    Step 'one window only' {
+        $second = Start-Process -FilePath $script:SettingsExe -ArgumentList '--test-mode' -PassThru
+        if (-not $second.WaitForExit(3000)) { $second.Kill(); throw 'the second start did not exit within 3 s' }
+        if ($second.ExitCode -ne 0) { throw "the second start exited with $($second.ExitCode)" }
+        $n = (Settings-Procs).Count
+        if ($n -ne 1) { throw "$n settings processes" }
+    }
+    Step 'it closes completely' {
+        $app = Get-Process -Id $script:settingsApp.Id
+        $views = Our-WebViews
+        $mb = ($app.WorkingSet64 + (($views | ForEach-Object { (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue).WorkingSet64 }) | Measure-Object -Sum).Sum) / 1MB
+        Write-Host ("    settings RAM while open: {0:0} MB ({1} WebView2 processes)" -f $mb, $views.Count)
+        if ($views.Count -lt 1) { throw 'no WebView2 process of ours found while open' }
+        SOk 'close'
+        if (-not $script:settingsApp.WaitForExit(5000)) { throw 'the app did not exit within 5 s' }
+        if ($script:settingsApp.ExitCode -ne 0) { throw "exit code $($script:settingsApp.ExitCode)" }
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Our-WebViews).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+        if ((Our-WebViews).Count) { throw "$((Our-WebViews).Count) WebView2 processes of ours left" }
+        Write-Host '    settings RAM after close: 0 MB'
+    }
+    Step 'a broken WebView2 folder fails cleanly' {
+        $file = Join-Path $env:TEMP 'sahar-not-a-folder.txt'
+        Set-Content -Path $file -Value 'x'
+        $p = Start-Process -FilePath $script:SettingsExe -ArgumentList '--test-mode', '--webview-data', $file -PassThru
+        if (-not $p.WaitForExit(10000)) { $p.Kill(); throw 'it did not exit within 10 s' }
+        if ($p.ExitCode -ne 2) { throw "exit code $($p.ExitCode), want 2" }
+        if (Get-Process -Name 'WerFault' -ErrorAction SilentlyContinue) { throw 'a crash dialog appeared' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log') -Raw
+        if ($log -notmatch 'webview2: failed') { throw 'settings.log does not say WebView2 failed' }
+    }
+    Stop-SettingsApp
     Stop-Engine
+    $slog = Join-Path $env:LOCALAPPDATA 'Sahar\settings.log'
+    if (Test-Path $slog) { Copy-Item $slog (Join-Path $Out 'settings.log') -Force }
     if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
 }
 
