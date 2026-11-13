@@ -50,6 +50,18 @@ public class SettingsPatchTests
         ("lyricsConsented", "true"),
         ("musicPausedKeep", "\"hour\""),
         ("shelfScreenshots", "false"),
+        ("mindEnabled", "true"),
+        ("mindUnloadMinutes", "15"),
+        ("mindInitiative", "\"rare\""),
+        ("mindSelfActions", "false"),
+        ("mindVoice", "\"self\""),
+        ("mindBackend", "\"cuda\""),
+        ("mindUseGpu", "false"),
+        ("mindLearnChats", "true"),
+        ("mindLearnImports", "true"),
+        ("mindLearnExamples", "true"),
+        ("mindLearnMusic", "true"),
+        ("mindEpisodeDays", "7"),
     ];
 
     public static TheoryData<string, string> Valid

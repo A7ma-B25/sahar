@@ -25,7 +25,13 @@ public static class SettingsPatch
         "prayerMethod", "prayerHanafiAsr", "prayerReminderOn", "prayerReminderMinutes", "quranReciter",
         "actMusic", "actWeather", "actClaude", "actShelf", "actSystem", "actMicCam", "actCopy", "actAway", "actScreenTime",
         "lyricsEnabled", "lyricsConsented", "musicPausedKeep", "shelfScreenshots",
+        "mindEnabled", "mindUnloadMinutes", "mindInitiative", "mindSelfActions", "mindVoice", "mindBackend", "mindUseGpu",
+        "mindLearnChats", "mindLearnImports", "mindLearnExamples", "mindLearnMusic", "mindEpisodeDays",
     ];
+
+    /// <summary>«فرّغي عقلي بعد» choices, and how long chat episodes are kept (spec §8, §7.3).</summary>
+    public static IReadOnlyList<int> UnloadMinutes { get; } = [1, 5, 15, 30];
+    public static IReadOnlyList<int> EpisodeDays { get; } = [7, 30, 90];
 
     public static SaharSettings Apply(SaharSettings s, string key, JsonElement value, out string? error)
     {
@@ -68,6 +74,18 @@ public static class SettingsPatch
             "lyricsConsented" => Bool(value) is { } l2 ? s with { LyricsConsented = l2 } : null,
             "musicPausedKeep" => Enum<Sahar.Core.Activities.PausedKeep>(value) is { } pk ? s with { MusicPausedKeep = pk } : null,
             "shelfScreenshots" => Bool(value) is { } sh ? s with { ShelfScreenshots = sh } : null,
+            "mindEnabled" => Bool(value) is { } m1 ? s with { MindEnabled = m1 } : null,
+            "mindUnloadMinutes" => Int(value) is { } um && UnloadMinutes.Contains(um) ? s with { MindUnloadMinutes = um } : null,
+            "mindInitiative" => Enum<Sahar.Core.Mind.Initiative.InitiativeLevel>(value) is { } il ? s with { MindInitiative = il } : null,
+            "mindSelfActions" => Bool(value) is { } m2 ? s with { MindSelfActions = m2 } : null,
+            "mindVoice" => Enum<Sahar.Core.Mind.Memory.MindVoice>(value) is { } mv ? s with { MindVoice = mv } : null,
+            "mindBackend" => Enum<Sahar.Core.Mind.Runtime.Backend>(value) is { } mb ? s with { MindBackend = mb } : null,
+            "mindUseGpu" => Bool(value) is { } m3 ? s with { MindUseGpu = m3 } : null,
+            "mindLearnChats" => Bool(value) is { } m4 ? s with { MindLearnChats = m4 } : null,
+            "mindLearnImports" => Bool(value) is { } m5 ? s with { MindLearnImports = m5 } : null,
+            "mindLearnExamples" => Bool(value) is { } m6 ? s with { MindLearnExamples = m6 } : null,
+            "mindLearnMusic" => Bool(value) is { } m7 ? s with { MindLearnMusic = m7 } : null,
+            "mindEpisodeDays" => Int(value) is { } ed && EpisodeDays.Contains(ed) ? s with { MindEpisodeDays = ed } : null,
             _ => Unknown(out error),
         };
         if (next is null)
@@ -97,6 +115,8 @@ public static class SettingsPatch
         error = check.Ok ? null : check.Reason;
         return check.Ok ? s with { MenuShortcut = check.Value.ToString() } : s;
     }
+
+    private static int? Int(JsonElement v) => v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
 
     private static bool? Bool(JsonElement v) => v.ValueKind switch
     {

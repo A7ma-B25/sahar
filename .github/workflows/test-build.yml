@@ -83,7 +83,7 @@ jobs:
       - name: UI tests (all stages)
         if: steps.prior.outputs.run == ''
         shell: pwsh
-        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games,shell,face,settings,activities
+        run: ./tests/ui/run.ps1 -Stage smoke,idle,gallery,motion,events,perf,life,menu,senses,prayer,games,shell,face,settings,activities,mind
       - name: UI tests (smoke, gallery; ui-test run ${{ steps.prior.outputs.run }} passed every stage on this commit)
         if: steps.prior.outputs.run != ''
         shell: pwsh

@@ -22,6 +22,10 @@ public interface IEngineLink
     Task<CityResult> FindCityAsync(string text);
     Task<bool> ClearClipboardAsync();
     Task<bool> EraseAllAsync();
+    /// <summary>0.14 SEAM: any other engine pipe command (the Mind pages' mind-* commands); its reply as key=value
+    /// data, or null when she is not running.</summary>
+    Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args) =>
+        Task.FromResult<IReadOnlyDictionary<string, string>?>(null);
 }
 
 /// <summary>Windows location (an OS service, not a page request).</summary>
@@ -37,12 +41,14 @@ public interface ILocator
 /// </summary>
 public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILocator locator, Func<DateTimeOffset> now)
 {
+    private Dictionary<string, MindBridges.Handler>? _mind;
+
     public const string NoEngineCity = "شغّلني أول لدوّر عالمدينة.";
     public const string WindowsLocation = "موقع الويندوز";
     public const string Unreadable = "unreadable";
 
     /// <summary>The pages shown (plan Ruling 1: الأصوات and Claude Code stay hidden until they work).</summary>
-    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "prayer", "listen", "general", "privacy", "about"];
+    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "general", "privacy", "about"];
 
     private static readonly Prayer.Prayer[] Five =
         [Prayer.Prayer.Fajr, Prayer.Prayer.Dhuhr, Prayer.Prayer.Asr, Prayer.Prayer.Maghrib, Prayer.Prayer.Isha];
@@ -68,6 +74,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
                 "clipboard-clear" => Reply(id, "clipboard-clear", w => { }, await engine.ClearClipboardAsync()),
                 "erase" => Reply(id, "erase", w => { }, await engine.EraseAllAsync()),
                 "reset" => await Reset(id),
+                _ when type.StartsWith("mind-", StringComparison.Ordinal) => await Mind(id, type, req),
                 _ => Reply(id, "error", w => Fail(w, "bad-type")),
             };
         }
@@ -228,6 +235,15 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
         var fresh = SettingsStore.Reset(settingsPath);
         await engine.ReloadAsync(askHello: true);
         return Reply(id, "reset", w => Value(w, fresh), true);
+    }
+
+    /// <summary>0.14: the Mind pages' requests, routed to the handlers each stream registers (<see cref="MindBridges"/>).</summary>
+    private async Task<string> Mind(long? id, string type, JsonElement req)
+    {
+        _mind ??= MindBridges.Table(new MindBridgeContext(settingsPath, engine, now));
+        if (!_mind.TryGetValue(type, out var handler)) return Reply(id, "error", w => Fail(w, "bad-type"));
+        var r = await handler(req);
+        return Reply(id, type, r.Body, r.Ok);
     }
 
     // ---- writing replies ----

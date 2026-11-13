@@ -72,6 +72,8 @@ internal sealed class EngineLink(bool testMode) : IEngineLink
         return true;
     }
 
+    public async Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args) => await Call(name, args);
+
     private static string? Text(string? b64)
     {
         if (string.IsNullOrEmpty(b64)) return null;

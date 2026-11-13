@@ -95,4 +95,22 @@ public sealed record SaharSettings
     public PausedKeep MusicPausedKeep { get; set; } = PausedKeep.TenMinutes;
     /// <summary>New screenshots land on her shelf too.</summary>
     public bool ShelfScreenshots { get; set; } = true;
+    /// <summary>0.14 «عقلي»: on once a model is downloaded and verified (spec §12).</summary>
+    public bool MindEnabled { get; set; }
+    /// <summary>Unload the model after this many idle minutes (1 / 5 / 15 / 30).</summary>
+    public int MindUnloadMinutes { get; set; } = 5;
+    /// <summary>How often she speaks on her own (owner: often).</summary>
+    public Sahar.Core.Mind.Initiative.InitiativeLevel MindInitiative { get; set; } = Sahar.Core.Mind.Initiative.InitiativeLevel.Often;
+    /// <summary>«اعملي شغلاتي الصغيرة لحالي»: class-A self actions.</summary>
+    public bool MindSelfActions { get; set; } = true;
+    public Sahar.Core.Mind.Memory.MindVoice MindVoice { get; set; } = Sahar.Core.Mind.Memory.MindVoice.Complementary;
+    public Sahar.Core.Mind.Runtime.Backend MindBackend { get; set; } = Sahar.Core.Mind.Runtime.Backend.Auto;
+    public bool MindUseGpu { get; set; } = true;
+    /// <summary>The four learning sources, each opt-in (owner: all four, each needs his yes).</summary>
+    public bool MindLearnChats { get; set; }
+    public bool MindLearnImports { get; set; }
+    public bool MindLearnExamples { get; set; }
+    public bool MindLearnMusic { get; set; }
+    /// <summary>Raw chat episodes kept this many days (7 / 30 / 90), then summarised.</summary>
+    public int MindEpisodeDays { get; set; } = 30;
 }

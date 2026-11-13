@@ -65,7 +65,7 @@ public sealed class SettingsBridgeTests : IDisposable
         var caps = r.GetProperty("caps");
         Assert.True(caps.GetProperty("engine").GetBoolean());
         Assert.False(caps.GetProperty("broken").GetBoolean());
-        Assert.Equal(["sahar", "menu", "prayer", "listen", "general", "privacy", "about"],
+        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "general", "privacy", "about"],
             caps.GetProperty("pages").EnumerateArray().Select(p => p.GetString()!));
         Assert.Equal(6, caps.GetProperty("reciters").GetArrayLength());
         Assert.Equal("ar.alafasy", caps.GetProperty("reciters")[0].GetProperty("id").GetString());

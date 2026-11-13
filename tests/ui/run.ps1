@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -3819,7 +3819,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
@@ -3979,7 +3979,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 7) { throw "the sidebar has $n entries" }
+        if ($n -ne 11) { throw "the sidebar has $n entries" }
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
@@ -4216,6 +4216,17 @@ function Stage-Activities {
     if ($sheet.Count) { Contact-Sheet $sheet 4 240 (Join-Path $Out 'activities-tags.png') }
 }
 
+# 0.14 her brain: one stage, three streams, each in its own file (SEAM): mind-runtime.ps1 (A: the runtime with a tiny
+# pinned model, unload, models, download, bench), mind-memory.ps1 (B), mind-autonomy.ps1 (C).
+. (Join-Path $PSScriptRoot 'mind-runtime.ps1')
+. (Join-Path $PSScriptRoot 'mind-memory.ps1')
+. (Join-Path $PSScriptRoot 'mind-autonomy.ps1')
+function Stage-Mind {
+    Stage-MindRuntime
+    Stage-MindMemory
+    Stage-MindAutonomy
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -4235,6 +4246,7 @@ try {
             'face' { Stage-Face }
             'settings' { Stage-Settings }
             'activities' { Stage-Activities }
+            'mind' { Stage-Mind }
         }
     }
 }

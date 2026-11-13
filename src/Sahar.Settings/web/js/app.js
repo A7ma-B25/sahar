@@ -64,8 +64,8 @@ async function load() {
 
 function nav() {
   const pages = visiblePages(S.caps);
-  const groups = [1, 2, 3].map((g) => pages.filter((p) => p.group === g)).filter((g) => g.length);
-  const about = pages.find((p) => p.group === 4);
+  const groups = [1, 2, 3, 4].map((g) => pages.filter((p) => p.group === g)).filter((g) => g.length);
+  const about = pages.find((p) => p.group === 5);
   const item = (p) => h('button', {
     class: 'nav-item hv', type: 'button', id: `nav-${p.id}`, 'data-page': p.id, 'aria-current': S.page === p.id ? 'page' : null,
     onclick: () => go(p.id),

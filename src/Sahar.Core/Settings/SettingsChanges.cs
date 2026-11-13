@@ -3,7 +3,7 @@ namespace Sahar.Core.Settings;
 /// <summary>
 /// What changed between two settings, by group (plan 0.10c Task 2): the engine's settings reload applies only these
 /// and logs their names (never values). Groups, in order: size, activity, address (name, gender), menu (items, header,
-/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran, activities (0.13).
+/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran, activities (0.13), mind (0.14).
 /// </summary>
 public static class SettingsChanges
 {
@@ -28,6 +28,11 @@ public static class SettingsChanges
             || a.ActSystem != b.ActSystem || a.ActMicCam != b.ActMicCam || a.ActCopy != b.ActCopy || a.ActAway != b.ActAway
             || a.ActScreenTime != b.ActScreenTime || a.LyricsEnabled != b.LyricsEnabled || a.LyricsConsented != b.LyricsConsented
             || a.MusicPausedKeep != b.MusicPausedKeep || a.ShelfScreenshots != b.ShelfScreenshots) list.Add("activities");
+        if (a.MindEnabled != b.MindEnabled || a.MindUnloadMinutes != b.MindUnloadMinutes || a.MindInitiative != b.MindInitiative
+            || a.MindSelfActions != b.MindSelfActions || a.MindVoice != b.MindVoice || a.MindBackend != b.MindBackend
+            || a.MindUseGpu != b.MindUseGpu || a.MindLearnChats != b.MindLearnChats || a.MindLearnImports != b.MindLearnImports
+            || a.MindLearnExamples != b.MindLearnExamples || a.MindLearnMusic != b.MindLearnMusic
+            || a.MindEpisodeDays != b.MindEpisodeDays) list.Add("mind");
         return list;
     }
 

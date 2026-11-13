@@ -15,6 +15,10 @@ export const strings = {
     pagePrivacy: 'الخصوصية',
     pageClaude: 'Claude Code',
     aboutTitle: 'عن سحر',
+    pageBrain: 'عقلي',
+    pageModels: 'النماذج',
+    pageYou: 'عنك',
+    pageToday: 'شو عملت اليوم',
 
     resetTitle: 'ما عم اقدر اقرا ملف إعداداتي.',
     resetText: 'لهيك هلق ما عم احفظ شي من يلي بتغيّره. خبّيت نسخة منه على جنب.',
@@ -162,6 +166,10 @@ export const strings = {
     pagePrivacy: 'Privacy',
     pageClaude: 'Claude Code',
     aboutTitle: 'About',
+    pageBrain: 'Mind',
+    pageModels: 'Models',
+    pageYou: 'About you',
+    pageToday: 'Today',
 
     resetTitle: 'I can’t read my settings file.',
     resetText: 'So right now nothing you change gets saved. I put a copy of it aside.',
@@ -299,6 +307,16 @@ export const strings = {
 };
 
 let lang = 'ar';
+
+/** 0.14 SEAM: a page module adds its own strings (its own file under js/strings/), both languages at once. A key
+ * that already exists is refused (two streams never share a key). */
+export function addStrings(extra) {
+  for (const l of ['ar', 'en'])
+    for (const [k, v] of Object.entries(extra[l] || {})) {
+      if (k in strings[l] && strings[l][k] !== v) throw new Error(`i18n: ${l}.${k} exists`);
+      strings[l][k] = v;
+    }
+}
 
 /** 'ar' or 'en'. */
 export function setLang(l) { lang = l === 'en' ? 'en' : 'ar'; }

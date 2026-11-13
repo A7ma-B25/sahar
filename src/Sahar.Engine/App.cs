@@ -636,11 +636,13 @@ internal sealed unsafe class App
             try { if (!soul.Hop(1f)) soul.HappyFace(); }
             finally { chatHop = false; }
         }
+        Sahar.Engine.Mind.MindEngine? mind = null;   // 0.14: her brain (built once the pipe exists)
         menu.ChatSent += text => Safe(() =>
         {
             var c = Sahar.Core.Chat.ChatCommands.Parse(text);
             Log.Write($"chat: {c.Kind}");
             if (c.Kind == Sahar.Core.Chat.ChatKind.Empty) return;
+            if (mind?.TakeChat(c, text) == true) return;   // 0.14: the Mind took a line the fast path does not run
             var reply = Sahar.Core.Chat.ChatReply.For(c, new Sahar.Core.Chat.ChatContext(prayer.Next(), greetings), Address.You);
             switch (c.Kind)
             {
@@ -761,6 +763,7 @@ internal sealed unsafe class App
                     case "weather": ApplyWeather(next); break;
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
                     case "activities": acts.SettingsChanged(); Expressions(); break;
+                    case "mind": mind?.RaiseSettings(next); break;
                 }
             }
             Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
@@ -808,6 +811,15 @@ internal sealed unsafe class App
             EraseRequested = true;
             Native.PostQuitMessage(0);
         });
+        // 0.14: her brain. Each stream fills its own MindEngine.*.cs; App.cs only builds it here.
+        mind = new Sahar.Engine.Mind.MindEngine
+        {
+            Ui = ui, Pipe = pipe, TestMode = _options.TestMode, Settings = () => settings, Save = Save, Menu = menu, Speech = speech,
+            Bubble = bubble, ListBubble = listBubble, Timer = timerTool, Dnd = dndTool, Notes = notes, Director = director,
+            Games = games, Motion = motion, Soul = soul, Prayer = prayer, Music = music, Quran = quran, Media = media, Idle = idle,
+            CameraMic = cameraMic, Activities = acts, Express = Express,
+        };
+        mind.Attach();
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));
         pipe.Register("quit", _ => new PipeReply(true), afterReply: () => Native.PostQuitMessage(0));
         pipe.Register("pose", r =>
