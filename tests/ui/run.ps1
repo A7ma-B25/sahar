@@ -4239,6 +4239,8 @@ function Stage-Activities {
         $r = Run-Hook (Hook-Json 'Stop')
         if ($r.code -ne 0 -or $r.out -ne '' -or $r.ms -gt 3000) { throw "exit $($r.code) out '$($r.out)' in $($r.ms) ms" }
     }
+    # The next stages start from no settings (a weather city or a prayer place here would change their menus).
+    Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue
     $sheet = @(Get-ChildItem $Out -Filter 'app-*-tag-light.png' | Select-Object -First 16 | ForEach-Object FullName)
     if ($sheet.Count) { Contact-Sheet $sheet 4 240 (Join-Path $Out 'activities-tags.png') }
 }
