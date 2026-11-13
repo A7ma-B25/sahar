@@ -53,6 +53,8 @@ internal sealed partial class MindEngine
 
     /// <summary>Set by stream A: sends a line to the Mind (starting it if needed); false when there is no Mind.</summary>
     public Func<MindMsg, bool> Send { get; set; } = _ => false;
+    /// <summary>Set by stream A: sends only when the Mind is already running (never starts it); false otherwise.</summary>
+    public Func<MindMsg, bool> SendIfRunning { get; set; } = _ => false;
     /// <summary>Set by stream A: a model is installed, verified and the Mind is enabled.</summary>
     public Func<bool> Ready { get; set; } = () => false;
     /// <summary>Every line from the Mind (stream A raises it on the UI thread; C and B listen).</summary>

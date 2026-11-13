@@ -50,6 +50,14 @@ internal static unsafe partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetSystemPowerStatus(byte* status);
 
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsProcessorFeaturePresent(uint feature);
+
+    /// <summary>AVX2 as Windows reports it (PF_AVX2_INSTRUCTIONS_AVAILABLE): Avx2.IsSupported is false in an AOT
+    /// build compiled for the x64 baseline (CI run 43502035930 printed avx2=False on an AVX2 runner).</summary>
+    public static bool Avx2() => IsProcessorFeaturePresent(40) || System.Runtime.Intrinsics.X86.Avx2.IsSupported;
+
     /// <summary>ACLineStatus 0 = on battery.</summary>
     public static bool OnBattery()
     {

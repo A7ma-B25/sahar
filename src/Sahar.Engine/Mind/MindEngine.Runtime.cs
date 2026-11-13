@@ -36,6 +36,15 @@ internal sealed partial class MindEngine
     partial void AttachRuntime()
     {
         Send = EnsureAndSend;
+        SendIfRunning = m =>
+        {
+            lock (_mindGate)
+            {
+                if (_mindOut is not { } w) return false;
+                try { w.WriteLine(MindWire.Encode(m)); return true; }
+                catch (Exception e) when (e is IOException or ObjectDisposedException) { Disconnected(); return false; }
+            }
+        };
         Ready = () => Settings().MindEnabled && (Script is not null || ActiveModel() is not null);
         Received += OnRuntimeMessage;
         // The settings app's «عقلي» and «النماذج» (production commands; replies are key=value data).
@@ -191,6 +200,7 @@ internal sealed partial class MindEngine
     /// quarter, the check, the end. Numbers only reach the log.</summary>
     private void Progress(DownloadProgress p)
     {
+        if (p.Model == "runtime-cuda") { Log.Write($"mind: cuda pack {p.State}"); return; }   // the page shows it
         var before = _lastProgress?.State;
         _lastProgress = p;
         string? line = p.State switch

@@ -52,6 +52,30 @@ function Stage-MindRuntime {
             if ([double]$b.Groups[3].Value -le 0) { throw 'no tokens per second: the client read nothing' }
             if ($log0 -match 'runtime: ready') { Write-Host '    (warm logged ready)' }
         }
+        Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
+            Start-SettingsApp | Out-Null
+            SNav 'models'
+            Wait-Until { (Js "document.getElementById('mine-list')?.textContent ?? ''") -match 'CI tiny' } 5000 'the CI model is not under «نماذجك»'
+            SClick '#bench-ci-tiny'
+            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/30' } 300000 'the full bench'
+            Wait-Until { (Js "document.querySelectorAll('#mine-list .m-stat').length") -ge 4 } 8000 'the stat tiles'
+            $b = [regex]::Match((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)')
+            Write-Host "    full bench: dialect $($b.Groups[1].Value)/$($b.Groups[2].Value), tools $($b.Groups[3].Value)/$($b.Groups[4].Value)"
+            if ([int]$b.Groups[3].Value * 5 -lt [int]$b.Groups[4].Value * 4) {
+                Wait-Until { (Js "document.getElementById('mine-list').textContent") -match 'حكي بس' } 5000 'no «حكي بس» badge for a chat-only model'
+            }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Start-Sleep -Milliseconds 600
+                Capture "app-models-ci-$theme"
+                SNav 'brain'
+                Start-Sleep -Milliseconds 600
+                Capture "app-brain-ci-$theme"
+                SNav 'models'
+            }
+            SOk 'emulate' '{"theme":""}'
+            Stop-SettingsApp
+        }
         Step 'mind: the engine stays light while the model is loaded' {
             $i = Info
             Write-Host "    engine privateMB=$($i.privateMB)"

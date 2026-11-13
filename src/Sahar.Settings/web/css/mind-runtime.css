@@ -1,1 +1,15 @@
-/* 0.14 stream runtime's own rules (the shared ones are in mind.css). */
+/* 0.14 stream A: «عقلي» and «النماذج» (mockups PSettingsBrain, PSettingsModels). Shared parts: mind.css. */
+.mr-status { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.mr-preview { flex: none; inline-size: 112px; block-size: 112px; border-radius: 16px; background: var(--sky); display: grid; place-items: center; overflow: hidden; }
+.mr-status-line { font-size: 17px; font-weight: 600; line-height: 1.4; }
+.mr-dl-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.mr-dl-title { font-size: 16px; font-weight: 600; }
+.mr-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 14px; }
+.mr-add .input { flex: 1 1 240px; }
+.mr-add-label { flex: 1 1 100%; font-size: 15px; font-weight: 500; line-height: 1.6; }
+.mr-mine { display: flex; flex-direction: column; gap: 12px; }
+.mr-mine-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.mr-name { font-size: 15px; font-weight: 600; }
+.mr-reason { padding: 0 14px 10px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.mr-reason.bad { color: var(--error); }
+.mr-danger { color: var(--error); }

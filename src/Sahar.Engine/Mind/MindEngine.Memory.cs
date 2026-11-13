@@ -51,6 +51,7 @@ internal sealed partial class MindEngine
         Pipe.Register("mind-forgot", _ =>
         {
             Log.Write("mind: forgot everything");
+            SendIfRunning(new MindMsg { T = "quit" });   // a running Mind stops (never started for this)
             Speech.Say(Address.ToYou("نسيت كل شي… مرحبا من جديد 🌙"));
             return new PipeReply(true, "ok=true");
         });
