@@ -100,6 +100,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
             w.WriteStartObject("caps");
             w.WriteBoolean("engine", engine.Running);
             w.WriteBoolean("broken", broken);
+            w.WriteBoolean("busy", health == SettingsHealth.Busy);   // held for a moment: the page keeps what it knew
             w.WriteStartArray("pages");
             foreach (var p in Pages) w.WriteStringValue(p);
             w.WriteEndArray();

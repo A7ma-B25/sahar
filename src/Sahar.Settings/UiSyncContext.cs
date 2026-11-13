@@ -37,7 +37,7 @@ internal sealed class UiSyncContext : SynchronizationContext
         while (_queue.TryDequeue(out var item))
         {
             try { item.Callback(item.State); }
-            catch (Exception e) { SettingsLog.Write($"error: {e.GetType().Name}: {e.Message}"); }
+            catch (Exception e) { SettingsLog.Write($"error: {Sahar.Core.Diagnostics.LogRules.Kind(e)}"); }   // never the message (paths carry the user name)
         }
     }
 

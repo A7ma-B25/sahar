@@ -208,7 +208,7 @@ internal sealed class OverlayStage
         op.Completed = (_, _) => _ui!.TryEnqueue(() =>
         {
             try { then(); }
-            catch (Exception e) { Log.Write($"stage error: {e}"); }
+            catch (Exception e) { Log.Write($"stage error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         });
     }
 
@@ -219,7 +219,7 @@ internal sealed class OverlayStage
         foreach (var w in list)
         {
             try { w(); }
-            catch (Exception e) { Log.Write($"stage error: {e}"); }
+            catch (Exception e) { Log.Write($"stage error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         }
     }
 }

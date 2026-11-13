@@ -329,5 +329,6 @@ public sealed class SettingsBridgeTests : IDisposable
         var bridge = new SettingsBridge(PathOf, _engine, _locator, () => _now, _dir) { Read = _ => throw new IOException("in use") };
         var r = JsonDocument.Parse(await bridge.HandleAsync("""{"id":33,"type":"get"}""")).RootElement;
         Assert.False(r.GetProperty("caps").GetProperty("broken").GetBoolean());
+        Assert.True(r.GetProperty("caps").GetProperty("busy").GetBoolean());
     }
 }

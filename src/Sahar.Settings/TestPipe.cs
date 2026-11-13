@@ -85,7 +85,7 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
                 var (cw, ch) = window.ClientSize;
                 var (wx, wy, ww, wh) = window.WindowRect;
                 string head = FormattableString.Invariant(
-                    $"ready={B(web.Ready)} blocked={web.Blocked} clientW={cw} clientH={ch} dpi={window.Dpi:0.###} winX={wx} winY={wy} winW={ww} winH={wh} pid={Environment.ProcessId}");
+                    $"ready={B(web.Ready)} blocked={web.Blocked} zoomControl={B(web.ZoomControl)} clientW={cw} clientH={ch} dpi={window.Dpi:0.###} winX={wx} winY={wy} winW={ww} winH={wh} pid={Environment.ProcessId}");
                 if (!web.Ready) return new PipeReply(true, head);
                 var json = await Eval("JSON.stringify(window.sahar ? window.sahar.state() : {})");
                 using var doc = JsonDocument.Parse(JsonSerializer.Deserialize(json, TestJson.Default.String) ?? "{}");

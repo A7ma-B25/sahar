@@ -31,23 +31,31 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
 
     public async Task StartAsync()
     {
-        var envOptions = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = false };
-        // Test mode: the page keeps painting while another window covers it (the CI desktop is small and her card sits
-        // on top), so captures and timers behave as on a real screen.
-        if (options.TestMode)
-            envOptions.AdditionalBrowserArguments = "--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding";
+        // No background traffic of WebView2's own (the README promises the app never goes online): crash reports stay
+        // on the PC, no SmartScreen lookups (below), no component or update pings. Test mode also keeps a covered
+        // window painting (the CI desktop is small and her card sits on top).
+        var envOptions = new CoreWebView2EnvironmentOptions
+        {
+            AreBrowserExtensionsEnabled = false,
+            IsCustomCrashReportingEnabled = true,
+            AdditionalBrowserArguments = SettingsAppPolicy.BrowserArguments(options.TestMode),
+        };
         // Its own data folder; one that cannot be made (a file in the way, no rights) fails here, at once.
         Directory.CreateDirectory(DataFolder(options));
         _env = await CoreWebView2Environment.CreateAsync(null, DataFolder(options), envOptions).WaitAsync(StartTimeout);
         _controller = await _env.CreateCoreWebView2ControllerAsync(window.Hwnd).WaitAsync(StartTimeout);
-        var bg = Tokens.Light.Bg;
-        _controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, bg.R, bg.G, bg.B);
+        // Her colours before the page paints: dark settings or a dark Windows never flash light (review fix m7).
+        Dark = SettingsAppPolicy.IsDark(StartAppearance(), SystemDark());
+        var start = Tokens.For(Dark);
+        _controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, start.Bg.R, start.Bg.G, start.Bg.B);
+        window.SetCaption(Rgb(start.Bg), Rgb(start.Ink), Dark);
         var view = _controller.CoreWebView2;
         var s = view.Settings;
         s.AreDevToolsEnabled = options.TestMode;
         s.AreDefaultContextMenusEnabled = false;
         s.IsStatusBarEnabled = false;
-        s.IsZoomControlEnabled = false;
+        s.IsZoomControlEnabled = true;   // Ctrl + wheel and Ctrl ± (review fix m12)
+        s.IsReputationCheckingRequired = false;   // no SmartScreen: nothing about the page leaves the PC
         s.IsGeneralAutofillEnabled = false;
         s.IsPasswordAutosaveEnabled = false;
         s.AreBrowserAcceleratorKeysEnabled = false;
@@ -103,6 +111,38 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
         _controller.Bounds = new System.Drawing.Rectangle(0, 0, w, h);
     }
 
+    /// <summary>The appearance saved in settings.json (System when the file can't be read).</summary>
+    private static Appearance StartAppearance()
+    {
+        try { return SettingsStore.Health(SettingsStore.DefaultPath) == SettingsHealth.Ok ? SettingsStore.Load(SettingsStore.DefaultPath).Appearance : Appearance.System; }
+        catch (Exception) { return Appearance.System; }
+    }
+
+    /// <summary>Windows' apps in dark mode (Personalize\AppsUseLightTheme = 0).</summary>
+    private static bool SystemDark()
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return k?.GetValue("AppsUseLightTheme") is int v && v == 0;
+        }
+        catch (Exception) { return false; }
+    }
+
+    private TaskCompletionSource? _flushed;
+
+    /// <summary>The window is closing: the page saves what is still waiting (2 s at most), then the window goes.</summary>
+    public async Task FlushAsync()
+    {
+        if (!Ready || View is null) return;
+        _flushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Push("""{"type":"closing"}""");
+        try { await _flushed.Task.WaitAsync(TimeSpan.FromSeconds(2)); }
+        catch (TimeoutException) { SettingsLog.Write("close: the page did not answer in time"); }
+    }
+
+    public bool ZoomControl => View?.Settings.IsZoomControlEnabled == true;
+
     /// <summary>A message the page did not ask for ({"type":"focus"}).</summary>
     public void Push(string json)
     {
@@ -122,6 +162,11 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
         {
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("type", out var t)) type = t.GetString();
+            if (type == "flushed")
+            {
+                _flushed?.TrySetResult();
+                return;
+            }
             if (type == "ready")
             {
                 Ready = true;

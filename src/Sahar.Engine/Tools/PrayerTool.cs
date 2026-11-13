@@ -173,7 +173,7 @@ internal sealed class PrayerTool : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"prayer error: {e}"); }
+        catch (Exception e) { Log.Write($"prayer error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     public void Dispose() => _timer.Stop();

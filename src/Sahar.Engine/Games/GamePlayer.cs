@@ -61,7 +61,7 @@ internal sealed class GamePlayer : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"game error: {e}"); }
+        catch (Exception e) { Log.Write($"game error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     // The game's screen is fixed when it starts: hiding half off an edge never flips it to a neighbour.
@@ -107,7 +107,7 @@ internal sealed class GamePlayer : IDisposable
             if (!_ballHeld) _pointer = new Vector2(c.X, c.Y);
             bool go;
             try { go = _tick?.Invoke(dt) ?? false; }
-            catch (Exception e) { Log.Write($"game error: {e}"); go = false; }   // never a frozen game holding the mouse
+            catch (Exception e) { Log.Write($"game error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); go = false; }   // never a frozen game holding the mouse
             if (_clock >= _limit) go = false;
             if (!go) { _tick = null; Finish(); }
             return go;

@@ -30,7 +30,7 @@ internal static unsafe partial class SignIn
         }
         catch (Exception e)
         {
-            Log.Write($"sign-in time unknown: {e.Message}");
+            Log.Write($"sign-in time unknown: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
             return null;
         }
         finally

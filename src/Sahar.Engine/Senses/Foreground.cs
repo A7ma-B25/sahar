@@ -31,6 +31,6 @@ internal static unsafe class Foreground
     private static void OnEvent(nint hook, uint ev, nint hwnd, int idObject, int idChild, uint thread, uint time)
     {
         try { Changed?.Invoke(); }
-        catch (Exception e) { Log.Write($"foreground hook error: {e}"); }
+        catch (Exception e) { Log.Write($"foreground hook error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 }
