@@ -141,6 +141,7 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
                 if (r.Args?.TryGetValue("theme", out var th) == true) features.Add(new("prefers-color-scheme", th is "dark" or "light" ? th : ""));
                 await web.View!.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia",
                     JsonSerializer.Serialize(new EmulatedMedia(features), TestJson.Default.EmulatedMedia));
+                await Eval("window.sahar && window.sahar.relook ? (window.sahar.relook(), true) : false");
                 return new PipeReply(true);
             }
             case "eval":
