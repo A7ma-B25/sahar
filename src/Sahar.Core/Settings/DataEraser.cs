@@ -35,4 +35,27 @@ public static class DataEraser
         }
         return removed;
     }
+
+    /// <summary>The activities' local data (0.13): screen time (usage), the shelf's saved images and list, the lyrics
+    /// cache; in <c>%LOCALAPPDATA%\Sahar</c>, next to the log, which stays. Returns how many entries went.</summary>
+    public static int EraseActivityData(string localFolder)
+    {
+        int removed = 0;
+        foreach (var name in ActivityEntries)
+        {
+            var path = Path.Combine(localFolder, name);
+            try
+            {
+                if (Directory.Exists(path)) { Directory.Delete(path, recursive: true); removed++; }
+                else if (File.Exists(path)) { File.Delete(path); removed++; }
+            }
+            catch (Exception)
+            {
+                // In use: it stays.
+            }
+        }
+        return removed;
+    }
+
+    public static IReadOnlyList<string> ActivityEntries { get; } = ["usage", "Shelf", "lyrics", "shelf.json"];
 }

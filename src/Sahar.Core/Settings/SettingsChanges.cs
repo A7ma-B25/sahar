@@ -3,7 +3,7 @@ namespace Sahar.Core.Settings;
 /// <summary>
 /// What changed between two settings, by group (plan 0.10c Task 2): the engine's settings reload applies only these
 /// and logs their names (never values). Groups, in order: size, activity, address (name, gender), menu (items, header,
-/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran.
+/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran, activities (0.13).
 /// </summary>
 public static class SettingsChanges
 {
@@ -24,6 +24,10 @@ public static class SettingsChanges
             || a.WeatherLongitude != b.WeatherLongitude) list.Add("weather");
         if (a.MenuShortcut != b.MenuShortcut) list.Add("shortcut");
         if (a.QuranReciter != b.QuranReciter) list.Add("quran");
+        if (a.ActMusic != b.ActMusic || a.ActWeather != b.ActWeather || a.ActClaude != b.ActClaude || a.ActShelf != b.ActShelf
+            || a.ActSystem != b.ActSystem || a.ActMicCam != b.ActMicCam || a.ActCopy != b.ActCopy || a.ActAway != b.ActAway
+            || a.ActScreenTime != b.ActScreenTime || a.LyricsEnabled != b.LyricsEnabled || a.LyricsConsented != b.LyricsConsented
+            || a.MusicPausedKeep != b.MusicPausedKeep || a.ShelfScreenshots != b.ShelfScreenshots) list.Add("activities");
         return list;
     }
 

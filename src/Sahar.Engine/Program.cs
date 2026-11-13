@@ -37,6 +37,8 @@ internal static class Program
             int code = new App(EngineOptions.Parse(args)).Run();
             if (App.EraseRequested)
                 Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseAll(Sahar.Core.Settings.CleanStart.RoamingFolder, Sahar.Core.Settings.CleanStart.MarkerName)} items removed");
+            if (App.EraseRequested)
+                Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseActivityData(Log.Folder)} activity entries removed");   // screen time, shelf, lyrics (0.13)
             Log.Write($"exit {code}");
             return code;
         }

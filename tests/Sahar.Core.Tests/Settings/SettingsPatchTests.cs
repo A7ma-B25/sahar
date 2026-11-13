@@ -37,6 +37,19 @@ public class SettingsPatchTests
         ("prayerReminderOn", "false"),
         ("prayerReminderMinutes", "15"),
         ("quranReciter", "\"ar.husary\""),
+        ("actMusic", "false"),
+        ("actWeather", "false"),
+        ("actClaude", "false"),
+        ("actShelf", "false"),
+        ("actSystem", "false"),
+        ("actMicCam", "false"),
+        ("actCopy", "false"),
+        ("actAway", "false"),
+        ("actScreenTime", "true"),
+        ("lyricsEnabled", "true"),
+        ("lyricsConsented", "true"),
+        ("musicPausedKeep", "\"hour\""),
+        ("shelfScreenshots", "false"),
     ];
 
     public static TheoryData<string, string> Valid
@@ -148,5 +161,58 @@ public class SettingsPatchTests
         var before = new SaharSettings();
         Assert.Equal(before, Apply(key, "true", out var error, before));
         Assert.Equal("bad-key", error);
+    }
+
+    [Fact]
+    public void Patch_ActivityKeys_LandInTheirFields()
+    {
+        Assert.False(Apply("actClaude", "false", out _).ActClaude);
+        Assert.True(Apply("actScreenTime", "true", out _).ActScreenTime);
+        Assert.True(Apply("lyricsConsented", "true", out _).LyricsConsented);
+        Assert.False(Apply("shelfScreenshots", "false", out _).ShelfScreenshots);
+        Assert.Equal(Sahar.Core.Activities.PausedKeep.Always, Apply("musicPausedKeep", "\"always\"", out _).MusicPausedKeep);
+    }
+
+    [Theory]
+    [InlineData("musicPausedKeep", "\"forever\"")]
+    [InlineData("musicPausedKeep", "2")]
+    [InlineData("actMusic", "\"no\"")]
+    [InlineData("lyricsEnabled", "1")]
+    public void Patch_ActivityKeys_BadValues(string key, string json)
+    {
+        Apply(key, json, out var error);
+        Assert.Equal(SettingsPatch.BadValue, error);
+    }
+
+    [Fact]
+    public void Patch_NoClaudeAnswerKeys() =>
+        // Owner ruling 3 (2026-11-13): notify only, so there is nothing to answer from Sahar and no wait to set.
+        Assert.DoesNotContain(SettingsPatch.Keys, k => k.Contains("Answer") || k.Contains("Wait"));
+
+    [Fact]
+    public void Patch_Weather_PrayerCityIsEnough()
+    {
+        // Owner ruling 4: the weather falls back to the prayer place.
+        var prayerOnly = new SaharSettings { PrayerCity = "دمشق", PrayerLatitude = 33.5, PrayerLongitude = 36.3 };
+        Assert.True(Apply("weatherEnabled", "true", out var error, prayerOnly).WeatherEnabled);
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void Defaults_AllOnButScreenTimeAndLyrics()
+    {
+        var s = new SaharSettings();
+        Assert.True(s.ActMusic && s.ActWeather && s.ActClaude && s.ActShelf && s.ActSystem && s.ActMicCam && s.ActCopy && s.ActAway && s.ShelfScreenshots);
+        Assert.False(s.ActScreenTime || s.LyricsEnabled || s.LyricsConsented);
+        Assert.Equal(Sahar.Core.Activities.PausedKeep.TenMinutes, s.MusicPausedKeep);
+    }
+
+    [Fact]
+    public void OldFile_KeepsActivityDefaults()
+    {
+        var s = SettingsStore.Load("settings.json", _ => """{"version":1,"size":"Large"}""");
+        Assert.True(s.ActMusic && s.ActAway && s.ShelfScreenshots);
+        Assert.False(s.ActScreenTime);
+        Assert.Equal(Sahar.Core.Activities.PausedKeep.TenMinutes, s.MusicPausedKeep);
     }
 }

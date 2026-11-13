@@ -49,4 +49,13 @@ public class SettingsChangesTests
         Assert.Equal(["prayer"], SettingsChanges.Between(D, D with { PrayerReminderOn = false }));
         Assert.Equal(["size", "menu"], SettingsChanges.Between(D, D with { Size = SaharSize.Small, MenuHeader = MenuHeader.None }));
     }
+
+    [Fact]
+    public void Changes_ActivitiesGroup()
+    {
+        var a = new SaharSettings();
+        Assert.Equal(["activities"], SettingsChanges.Between(a, a with { ActCopy = false }));
+        Assert.Equal(["activities"], SettingsChanges.Between(a, a with { LyricsEnabled = true, MusicPausedKeep = Sahar.Core.Activities.PausedKeep.Hour }));
+        Assert.Equal(["activities"], SettingsChanges.Between(a, a with { ShelfScreenshots = false }));
+    }
 }

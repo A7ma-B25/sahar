@@ -37,4 +37,15 @@ public sealed class DataEraserTests : IDisposable
         Assert.Equal(1, DataEraser.EraseAll(_dir, CleanStart.MarkerName));
         Assert.Equal([CleanStart.MarkerName], Directory.EnumerateFileSystemEntries(_dir).Select(Path.GetFileName));
     }
+
+    [Fact]
+    public void EraseActivityData_RemovesUsageShelfLyrics_KeepsTheLog()
+    {
+        foreach (var d in new[] { "usage", "Shelf", "lyrics" })
+            File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(_dir, d)).FullName, "x"), "x");
+        File.WriteAllText(Path.Combine(_dir, "shelf.json"), "[]");
+        File.WriteAllText(Path.Combine(_dir, "engine.log"), "log");
+        Assert.Equal(4, DataEraser.EraseActivityData(_dir));
+        Assert.Equal(["engine.log"], Directory.EnumerateFileSystemEntries(_dir).Select(Path.GetFileName));
+    }
 }

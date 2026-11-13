@@ -1,3 +1,4 @@
+using Sahar.Core.Activities;
 using Sahar.Core.Prayer;
 
 namespace Sahar.Core.Settings;
@@ -78,4 +79,20 @@ public sealed record SaharSettings
     /// <summary>The global shortcut that opens the card with the caret in the chat (spec §5).</summary>
     public string MenuShortcut { get; set; } = "Ctrl+Alt+S";
     public Appearance Appearance { get; set; } = Appearance.System;
+    /// <summary>0.13 «النشاطات»: what she carries (all on but screen time).</summary>
+    public bool ActMusic { get; set; } = true;
+    public bool ActWeather { get; set; } = true;
+    public bool ActClaude { get; set; } = true;
+    public bool ActShelf { get; set; } = true;
+    public bool ActSystem { get; set; } = true;
+    public bool ActMicCam { get; set; } = true;
+    public bool ActCopy { get; set; } = true;
+    public bool ActAway { get; set; } = true;
+    public bool ActScreenTime { get; set; }
+    /// <summary>Lyrics from lrclib.net: off until you turn them on, and only after you said yes once (spec 0.13 §2).</summary>
+    public bool LyricsEnabled { get; set; }
+    public bool LyricsConsented { get; set; }
+    public PausedKeep MusicPausedKeep { get; set; } = PausedKeep.TenMinutes;
+    /// <summary>New screenshots land on her shelf too.</summary>
+    public bool ShelfScreenshots { get; set; } = true;
 }

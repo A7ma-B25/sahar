@@ -23,6 +23,8 @@ public static class SettingsPatch
         "userName", "userGender", "size", "activity", "awarenessEnabled", "autoMood", "playsAlone", "weatherEnabled",
         "innerStars", "menuItems", "menuHeader", "menuOpen", "menuPlace", "menuShortcut", "appearance", "language",
         "prayerMethod", "prayerHanafiAsr", "prayerReminderOn", "prayerReminderMinutes", "quranReciter",
+        "actMusic", "actWeather", "actClaude", "actShelf", "actSystem", "actMicCam", "actCopy", "actAway", "actScreenTime",
+        "lyricsEnabled", "lyricsConsented", "musicPausedKeep", "shelfScreenshots",
     ];
 
     public static SaharSettings Apply(SaharSettings s, string key, JsonElement value, out string? error)
@@ -53,6 +55,19 @@ public static class SettingsPatch
                 ? s with { PrayerReminderMinutes = n } : null,
             "quranReciter" => value.ValueKind == JsonValueKind.String && Sahar.Core.Quran.Quran.Reciters.Any(r => r.Id == value.GetString())
                 ? s with { QuranReciter = value.GetString()! } : null,
+            "actMusic" => Bool(value) is { } a1 ? s with { ActMusic = a1 } : null,
+            "actWeather" => Bool(value) is { } a2 ? s with { ActWeather = a2 } : null,
+            "actClaude" => Bool(value) is { } a3 ? s with { ActClaude = a3 } : null,
+            "actShelf" => Bool(value) is { } a4 ? s with { ActShelf = a4 } : null,
+            "actSystem" => Bool(value) is { } a5 ? s with { ActSystem = a5 } : null,
+            "actMicCam" => Bool(value) is { } a6 ? s with { ActMicCam = a6 } : null,
+            "actCopy" => Bool(value) is { } a7 ? s with { ActCopy = a7 } : null,
+            "actAway" => Bool(value) is { } a8 ? s with { ActAway = a8 } : null,
+            "actScreenTime" => Bool(value) is { } a9 ? s with { ActScreenTime = a9 } : null,
+            "lyricsEnabled" => Bool(value) is { } l1 ? s with { LyricsEnabled = l1 } : null,
+            "lyricsConsented" => Bool(value) is { } l2 ? s with { LyricsConsented = l2 } : null,
+            "musicPausedKeep" => Enum<Sahar.Core.Activities.PausedKeep>(value) is { } pk ? s with { MusicPausedKeep = pk } : null,
+            "shelfScreenshots" => Bool(value) is { } sh ? s with { ShelfScreenshots = sh } : null,
             _ => Unknown(out error),
         };
         if (next is null)
@@ -71,7 +86,8 @@ public static class SettingsPatch
 
     private static SaharSettings Weather(SaharSettings s, bool on, out string? error)
     {
-        error = on && (s.WeatherLatitude is null || s.WeatherLongitude is null) ? NeedsCity : null;
+        // Owner ruling 4 (0.13): the prayer place is enough (the weather falls back to it).
+        error = on && Sahar.Core.Activities.WeatherCity.Resolve(s) is null ? NeedsCity : null;
         return s with { WeatherEnabled = on };
     }
 
