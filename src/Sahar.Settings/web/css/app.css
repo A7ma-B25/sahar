@@ -34,7 +34,7 @@ p, .pr { text-wrap: pretty; }
 
 /* ---- layout: the sidebar on the start side, the page beside it ---- */
 .app { display: flex; align-items: stretch; height: 100vh; background: var(--bg); }
-.nav { flex: 0 0 auto; inline-size: clamp(200px, 25vw, 240px); padding: 24px 12px; background: var(--bg); display: flex; flex-direction: column; overflow-y: auto; }
+.nav { flex: 0 0 auto; inline-size: 200px; padding: 24px 12px; background: var(--bg); display: flex; flex-direction: column; overflow-y: auto; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
 .brand-name { font-size: 16px; font-weight: 600; }
 .nav-group { display: flex; flex-direction: column; gap: 2px; margin-block-end: 20px; }
@@ -70,6 +70,7 @@ p, .pr { text-wrap: pretty; }
 .row { min-block-size: 52px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .label-col { display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; flex: 1 1 220px; }
 .row-error { padding: 0 14px 10px; }
+.row-error:has(> :empty) { display: none; }
 
 /* Segmented: a sunken track; the chosen option lifts. */
 .track { display: flex; padding: 3px; border-radius: 12px; background: var(--sunken); }
@@ -86,6 +87,7 @@ p, .pr { text-wrap: pretty; }
   display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: start;
 }
 .switch-text { display: flex; flex-direction: column; gap: 2px; text-align: start; }
+.switch-row .label { line-height: normal; }   /* as the mockup: the row's own label is not given the 1.6 of the others */
 .switch {
   flex: none; inline-size: 40px; block-size: 24px; border-radius: 999px; padding: 3px; display: flex; justify-content: flex-start;
   background: var(--sunken); box-shadow: inset 0 0 0 1px var(--boundary); transition: background-color .18s ease;

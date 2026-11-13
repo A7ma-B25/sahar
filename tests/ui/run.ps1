@@ -3535,6 +3535,31 @@ function Start-SettingsApp([string[]]$Extra = @()) {
     do { $st = SKv 'state'; if ($st.ready -eq 'true') { return $st }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline)
     throw 'the settings page was not ready within 30 s'
 }
+function SClick([string]$sel) {
+    $r = SSend ('{"type":"cmd","name":"click","args":{"sel":' + ($sel | ConvertTo-Json) + '}}')
+    if (-not $r.ok) { throw "no element $sel to click" }
+}
+function SNav([string]$page) {
+    $r = SSend ('{"type":"cmd","name":"nav","args":{"page":"' + $page + '"}}')
+    if (-not $r.ok) { throw "nav $page refused" }
+    Start-Sleep -Milliseconds 400
+}
+function SKey([string]$key, [string]$mods = '') { SOk 'key' ('{"key":"' + $key + '","mods":"' + $mods + '"}') }
+function SType([string]$sel, [string]$text) {
+    $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+    SOk 'type' ('{"sel":' + ($sel | ConvertTo-Json) + ',"text64":"' + $b + '"}')
+}
+function SText([string]$sel) { Js ("(document.querySelector(" + ($sel | ConvertTo-Json) + ")?.textContent ?? '')") }
+function Wait-Until([scriptblock]$cond, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do { if (& $cond) { return }; Start-Sleep -Milliseconds 150 } while ((Get-Date) -lt $deadline)
+    throw "$what (not within $ms ms)"
+}
+function Wait-Settings([string]$pattern, [int]$ms, [string]$what) {
+    Wait-Until { (Settings-Json) -match $pattern } $ms "settings.json: $what"
+}
+function Capture([string]$name) { SOk 'capture' ('{"name":"' + $name + '"}') }
+
 function Stop-SettingsApp {
     if ($script:settingsApp -and -not $script:settingsApp.HasExited) {
         try { SOk 'close' } catch { }
@@ -3627,6 +3652,75 @@ function Stage-Settings {
         if ($second.ExitCode -ne 0) { throw "the second start exited with $($second.ExitCode)" }
         $n = (Settings-Procs).Count
         if ($n -ne 1) { throw "$n settings processes" }
+    }
+    # ---- سحورة and القائمة (Task 6): every control changes her ----
+    Step 'every control on سحورة changes her' {
+        SNav 'sahar'
+        $dpi = [double](Info).dpi
+        $hops = [int](Kv 'debug-soul').hops
+        $before = SText '#preview-caption'
+        SClick '#size-2'
+        Wait-Settings '"size"\s*:\s*"large"' 3000 'size large'
+        Wait-Until { [math]::Abs((State).width - 120 * $dpi) -le 2 } 1500 'her width is not 120 DIP'
+        if ([int](Kv 'debug-soul').hops -le $hops) { throw 'she did not hop' }
+        $after = SText '#preview-caption'
+        if ($after -eq $before -or $after -ne 'هيك بتشوفني أحسن!') { throw "the preview caption is '$after'" }
+        if ([int](Js "+(document.querySelector('#preview-stage svg')?.dataset.hops ?? 0)") -lt 1) { throw 'the preview did not hop' }
+        SClick '#gender-1'
+        Wait-Settings '"userGender"\s*:\s*"female"' 3000 'gender female'
+        Wait-Until { (Js "document.getElementById('name')?.placeholder") -eq 'اكتبي اسمك' } 2000 'the name placeholder does not read «اكتبي اسمك»'
+        SClick '#activity-0'
+        Wait-Settings '"activity"\s*:\s*"calm"' 3000 'activity calm'
+        if ((SText '#activity-line') -ne 'بضل جنبك هادية، وبتحرك قليل.') { throw "activity line: $(SText '#activity-line')" }
+        foreach ($sw in @(@('#sw-comments', 'awarenessEnabled'), @('#sw-mood', 'autoMood'), @('#sw-play', 'playsAlone'), @('#sw-stars', 'innerStars'))) {
+            SClick $sw[0]
+            Wait-Settings ('"' + $sw[1] + '"\s*:\s*false') 3000 "$($sw[1]) off"
+        }
+        if ((Js "document.getElementById('weather-city-row').hidden") -ne $true) { throw 'the city row shows before the weather is on' }
+        SClick '#sw-weather'
+        Wait-Until { (Js "document.getElementById('weather-city-row').hidden") -eq $false } 2000 'weather on without a city did not reveal the city field'
+        if ((Settings-Json) -match '"weatherEnabled"\s*:\s*true') { throw 'weather turned on without a city' }
+        Start-Sleep -Milliseconds 600
+        Capture 'app-sahar-light'
+        Screenshot 'settings-sahar-light.png' | Out-Null
+    }
+    Step 'the menu page changes the card' {
+        SNav 'menu'
+        SClick '#item-play'
+        Wait-Until { (Settings-Json) -match '"menuItems"' -and (Settings-Json) -notmatch '"play"' } 3000 'play is still in menuItems'
+        Start-Sleep -Milliseconds 500
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ((Ids $m) -match '\bplay\b') { throw "the card still has play: $(Ids $m)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+        SClick '#menu-header-2'
+        Wait-Settings '"menuHeader"\s*:\s*"none"' 3000 'header none'
+        Send '{"type":"cmd","name":"timer","args":{"seconds":"300"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ($m.fact -ne 'none') { throw "fact: $($m.fact)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+        SClick '#menu-open-2'
+        Wait-Settings '"menuOpen"\s*:\s*"both"' 3000 'opens with both'
+        SClick '#menu-open-1'
+        Wait-Settings '"menuOpen"\s*:\s*"right"' 3000 'opens with a right-click'
+        SClick '#shortcut-change'
+        SKey 'K' 'ctrl,alt'
+        Wait-Settings '"menuShortcut"\s*:\s*"Ctrl\+Alt\+K"' 3000 'shortcut Ctrl+Alt+K'
+        Wait-Until { (SText '#shortcut-value') -eq 'Ctrl+Alt+K' } 2000 'the kbd does not show Ctrl+Alt+K'
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'hotkey: Ctrl\+Alt\+K') { throw 'the engine did not take Ctrl+Alt+K' }
+        SClick '#shortcut-change'
+        SKey 'C' 'ctrl'
+        Wait-Until { (SText '#shortcut-message') -eq 'هالاختصار بتستعمله البرامج كتير، اختار غيره.' } 2000 "the refusal is not shown ($(SText '#shortcut-message'))"
+        if ((Settings-Json) -notmatch '"menuShortcut"\s*:\s*"Ctrl\+Alt\+K"') { throw 'a refused shortcut changed the file' }
+        Capture 'app-menu-light'
+        Screenshot 'settings-menu-light.png' | Out-Null
+        SClick '#shortcut-change'
+        SKey 'S' 'ctrl,alt'
+        Wait-Settings '"menuShortcut"\s*:\s*"Ctrl\+Alt\+S"' 3000 'shortcut back to Ctrl+Alt+S'
     }
     Step 'it closes completely' {
         $app = Get-Process -Id $script:settingsApp.Id
