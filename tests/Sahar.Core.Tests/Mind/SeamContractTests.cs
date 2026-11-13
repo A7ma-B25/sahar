@@ -114,6 +114,14 @@ public sealed class SeamContractTests
     }
 
     [Fact]
+    public void Parts_StoreTakesEpisodeDays_ShredNeverThrows()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "sahar-seam-" + Guid.NewGuid().ToString("n"));
+        Assert.NotNull(MindParts.Store(dir, () => DateTimeOffset.UnixEpoch, () => new LearnConsent(), () => 7));
+        MindParts.Shred(dir);   // nothing there: no throw
+    }
+
+    [Fact]
     public void Policy_ClassCNeverActs()
     {
         var policy = MindParts.Policy();

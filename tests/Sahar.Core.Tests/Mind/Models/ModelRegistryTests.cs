@@ -125,6 +125,20 @@ public sealed class ModelRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Registry_TwoWriters_NeitherLosesTheOther()
+    {
+        var mind = new ModelRegistry(_dir);      // the Mind's instance
+        var page = new ModelRegistry(_dir);      // the settings app's
+        var added = page.AddHf("o", "r", new string('a', 40), "x-Q4_K_M.gguf", 1, new string('b', 64), null);
+        mind.MarkInstalled(ModelCatalog.DefaultId, Path.Combine(_dir, "a.gguf"));
+        mind.Use(ModelCatalog.DefaultId);
+        var after = new ModelRegistry(_dir);
+        Assert.NotNull(after.Find(added.Id));
+        Assert.Equal(ModelCatalog.DefaultId, after.Active!.Id);
+        Assert.NotNull(page.Find(ModelCatalog.DefaultId) is { Installed: true } ? page.Active : null);
+    }
+
+    [Fact]
     public void Registry_BrokenFile_StartsFresh_KeepsCopy()
     {
         File.WriteAllText(Path.Combine(_dir, "models.json"), "{ nope");

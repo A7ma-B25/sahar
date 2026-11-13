@@ -40,6 +40,8 @@ internal static class Program
                 // 0.13: Claude Code's hooks run the engine next to this app («اربطها»); only when it is really there.
                 EnginePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Sahar.Engine.exe")) is var exe && File.Exists(exe) ? exe : null,
             };
+            // 0.14 «النماذج»: «اختاري ملف» opens Windows' own file dialog for a .gguf.
+            MindBridges.PickGguf = () => Task.FromResult(GgufDialog.Pick(window.Hwnd));
             var web = new WebHost(window, options, bridge);
             window.CloseRequested += () =>
             {

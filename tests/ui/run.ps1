@@ -3881,7 +3881,7 @@ function Stage-Settings {
         SNav 'sahar'
         SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("document.activeElement?.blur(); true")) + '"}')
         $seen = @()
-        foreach ($i in 1..14) {
+        foreach ($i in 1..18) {   # 0.14: four more sidebar entries (her brain's pages) before the page's controls
             SKey 'Tab'
             $f = Text64 (SKv 'state').focus64
             if ($f -eq 'body' -or -not $f) { throw "Tab $i reached the body" }

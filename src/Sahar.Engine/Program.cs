@@ -38,7 +38,12 @@ internal static class Program
             if (App.EraseRequested)
                 Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseAll(Sahar.Core.Settings.CleanStart.RoamingFolder, Sahar.Core.Settings.CleanStart.MarkerName)} items removed");
             if (App.EraseRequested)
-                Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseActivityData(Log.Folder)} activity entries removed");   // screen time, shelf, lyrics (0.13)
+                Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseActivityData(Log.Folder)} activity entries removed");
+            if (App.EraseRequested)
+            {
+                Sahar.Core.Mind.MindParts.Shred(Sahar.Core.Mind.MindPaths.Personal);   // 0.14: her memory of you, wherever it lives
+                Log.Write("erase: mind data shredded");
+            }   // screen time, shelf, lyrics (0.13)
             Log.Write($"exit {code}");
             return code;
         }

@@ -23,22 +23,35 @@ function Stage-MindRuntime {
             Write-Host "    probe: $($probe.Trim())"
             if ($probe -notmatch 'tier=') { throw 'the probe printed nothing' }
         }
-        Step 'mind: the fast path never starts her brain («مؤقت ٥»)' {
+        Step 'mind: the engine at rest, then with the model loaded (spec §3.12: the Mind client adds < 2 MB)' {
             Write-Settings '{ "helloDone": true, "mindEnabled": true, "mindUnloadMinutes": 1 }'
+            $manifest = @{ models = @(@{ id = 'ci-tiny'; name = 'CI tiny'; origin = 'Local'; role = 'ci'; bytes = $pins.ciModel.bytes; sha256 = $pins.ciModel.sha256;
+                file = $pins.ciModel.file; localPath = "$model"; quant = 'Q8_0'; license = 'Gemma'; installed = $true; active = $false; ability = 'Unknown' }); active = 'ci-tiny' }
+            Set-Content -Path (Join-Path $home0 'models\models.json') -Value ($manifest | ConvertTo-Json -Depth 5) -Encoding UTF8
             Start-Engine
+            Start-Sleep -Seconds 20
+            $rest = (State).workingSetBytes
+            Send '{"type":"cmd","name":"mind-warm"}' | Out-Null
+            Wait-Until { (Mind-Procs 'llama-server') -ge 1 -and (Mind-Kv).phase -in 'ready', 'idle' } 120000 'llama-server ready'
+            Start-Sleep -Seconds 5
+            $loaded = (State).workingSetBytes
+            Write-Host ("    engine working set: {0:N1} MB at rest, {1:N1} MB with the model loaded (+{2:N1} MB)" -f ($rest / 1MB), ($loaded / 1MB), (($loaded - $rest) / 1MB))
+            if ($loaded -ge 55MB) { throw "engine working set $($loaded / 1MB) MB with the model loaded" }
+            if ($loaded - $rest -gt 3MB) { throw "the Mind client costs the engine $((($loaded - $rest) / 1MB)) MB" }
+        }
+        Step 'mind: the fast path never reaches her brain («مؤقت ٥»)' {
+            $starts = (Mind-Kv).starts
+            $turns = ([regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'turn: ')).Count
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
             $t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('مؤقت ٥'))
             Send ('{"type":"cmd","name":"menu-chat","args":{"text64":"' + $t + '"}}') | Out-Null
             Start-Sleep -Milliseconds 800
-            $m = Mind-Kv
-            if ($m.starts -ne '0') { throw "the Mind started for a fast-path command (starts=$($m.starts))" }
+            if ((Mind-Kv).starts -ne $starts) { throw 'the Mind was started for a fast-path command' }
+            if (([regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'turn: ')).Count -ne $turns) { throw 'a fast-path command reached the Mind' }
             if ((Kv 'debug-timer').running -ne 'true') { throw 'the timer did not start' }
             Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         }
         Step 'mind: the tiny model loads on the CPU runtime (warm) and answers a quick bench' {
-            $manifest = @{ models = @(@{ id = 'ci-tiny'; name = 'CI tiny'; origin = 'Local'; role = 'ci'; bytes = $pins.ciModel.bytes; sha256 = $pins.ciModel.sha256;
-                file = $pins.ciModel.file; localPath = "$model"; quant = 'Q8_0'; license = 'Gemma'; installed = $true; active = $false; ability = 'Unknown' }); active = 'ci-tiny' }
-            Set-Content -Path (Join-Path $home0 'models\models.json') -Value ($manifest | ConvertTo-Json -Depth 5) -Encoding UTF8
             $sw = [Diagnostics.Stopwatch]::StartNew()
             Send '{"type":"cmd","name":"mind-warm"}' | Out-Null
             Wait-Until { (Mind-Kv).phase -in 'ready', 'idle' -and (Mind-Procs 'llama-server') -ge 1 } 120000 'llama-server ready'
@@ -52,10 +65,29 @@ function Stage-MindRuntime {
             if ([double]$b.Groups[3].Value -le 0) { throw 'no tokens per second: the client read nothing' }
             if ($log0 -match 'runtime: ready') { Write-Host '    (warm logged ready)' }
         }
-        Step 'mind: the engine stays light while the model is loaded' {
-            $i = Info
-            Write-Host "    engine privateMB=$($i.privateMB)"
-            if ([double]$i.privateMB -ge 60) { throw "engine working set $($i.privateMB) MB" }
+        Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
+            Start-SettingsApp | Out-Null
+            SNav 'models'
+            Wait-Until { (Js "document.getElementById('mine-list')?.textContent ?? ''") -match 'CI tiny' } 5000 'the CI model is not under «نماذجك»'
+            SClick '#bench-ci-tiny'
+            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/30' } 300000 'the full bench'
+            Wait-Until { (Js "document.querySelectorAll('#mine-list .m-stat').length") -ge 4 } 8000 'the stat tiles'
+            $b = [regex]::Match((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)')
+            Write-Host "    full bench: dialect $($b.Groups[1].Value)/$($b.Groups[2].Value), tools $($b.Groups[3].Value)/$($b.Groups[4].Value)"
+            if ([int]$b.Groups[3].Value * 5 -lt [int]$b.Groups[4].Value * 4) {
+                Wait-Until { (Js "document.getElementById('mine-list').textContent") -match 'حكي بس' } 5000 'no «حكي بس» badge for a chat-only model'
+            }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Start-Sleep -Milliseconds 600
+                Capture "app-models-ci-$theme"
+                SNav 'brain'
+                Start-Sleep -Milliseconds 600
+                Capture "app-brain-ci-$theme"
+                SNav 'models'
+            }
+            SOk 'emulate' '{"theme":""}'
+            Stop-SettingsApp
         }
         Step 'mind: idle for a minute → llama-server is gone (0 MB at rest)' {
             Wait-Until { (Mind-Procs 'llama-server') -eq 0 } 120000 'llama-server still running after the idle minute'
