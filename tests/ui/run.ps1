@@ -3816,6 +3816,7 @@ function Stage-Settings {
         Write-Settings '{ "helloDone": true, "prayerCity": "حلب", "prayerLatitude": 36.2, "prayerLongitude": 37.16 }'
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
+        [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
         $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
