@@ -3784,6 +3784,29 @@ function Stage-Settings {
         if ((Js "document.getElementById('reciter-ar-husary').getAttribute('aria-checked')") -ne 'true') { throw 'the row is not checked' }
         Capture 'app-listen-light'
     }
+    Step 'activities (0.13): her switches, lyrics, paused music, the weather city, Claude Code' {
+        SNav 'activities'
+        if ((Text64 (SKv 'state').h1_64) -ne 'النشاطات') { throw 'the page is not «النشاطات»' }
+        SClick '#sw-actCopy'
+        Wait-Settings '"actCopy"\s*:\s*false' 3000 'copy off'
+        SClick '#sw-actCopy'
+        Wait-Settings '"actCopy"\s*:\s*true' 3000 'copy back on'
+        SClick '#sw-actScreenTime'
+        Wait-Settings '"actScreenTime"\s*:\s*true' 3000 'screen time on'
+        SClick '#sw-lyricsEnabled'
+        Wait-Settings '"lyricsConsented"\s*:\s*true' 3000 'lyrics on (and consented)'
+        SClick '#music-keep-1'
+        Wait-Settings '"musicPausedKeep"\s*:\s*"hour"' 3000 'paused music kept an hour'
+        $line = SText '#weather-city-line'
+        Write-Host "    weather city line: $line"
+        Wait-Until { (SText '#claude-link') -ne '' } 3000 'the Claude Code row'
+        Write-Host "    claude: $(SText '#claude-link-label') / $(SText '#claude-link')"
+        SClick '#sw-lyricsEnabled'
+        Wait-Settings '"lyricsEnabled"\s*:\s*false' 3000 'lyrics off'
+        SClick '#sw-actScreenTime'
+        Wait-Settings '"actScreenTime"\s*:\s*false' 3000 'screen time off'
+        Capture 'app-activities-light'
+    }
     Step 'general: light, dark and English' {
         SNav 'general'
         Capture 'app-general-light'
@@ -3798,6 +3821,10 @@ function Stage-Settings {
         Write-Host "    caption pixel $($px.R),$($px.G),$($px.B)"
         if ([math]::Abs($px.R - $want.R) -gt 6 -or [math]::Abs($px.G - $want.G) -gt 6 -or [math]::Abs($px.B - $want.B) -gt 6) { throw "the caption is not #18161C" }
         Capture 'app-general-dark'
+        SNav 'activities'
+        Start-Sleep -Milliseconds 400
+        Capture 'app-activities-dark'   # 0.13: the activities page in dark
+        SNav 'general'
         SClick '#appearance-0'
         Wait-Settings '"appearance"\s*:\s*"system"' 3000 'appearance back to Windows'
         SClick '#language-2'
@@ -3979,7 +4006,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 7) { throw "the sidebar has $n entries" }
+        if ($n -ne 8) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
