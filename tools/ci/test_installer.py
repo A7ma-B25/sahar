@@ -80,7 +80,37 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertIn(r"{localappdata}\Sahar", self.iss)
 
 
+    def test_the_app_id_is_the_one_the_engine_reads(self):
+        cs = read("src", "Sahar.Core", "Update", "UpdateRules.cs")
+        app_id = re.search(r'InstallerAppId = "(\{[0-9A-F-]+\})"', cs).group(1)
+        self.assertEqual("{" + app_id, self.directive("AppId"))
+        self.assertIn(app_id + "_is1", self.iss)
+
+    def test_review_a_setup_that_does_not_finish_starts_her_again(self):
+        self.assertIn("--quit --remember", self.iss)
+        self.assertRegex(self.iss, r"procedure DeinitializeSetup\(\);")
+        self.assertIn("QuitByUs and not Finished", self.iss)
+        self.assertIn("CurStep = ssPostInstall then Finished := True", self.iss)
+
+    def test_review_an_older_setup_asks_before_overwriting_default_no(self):
+        self.assertRegex(self.iss, r"function InitializeSetup\(\): Boolean;")
+        self.assertIn("'DisplayVersion'", self.iss)
+        self.assertIn("MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES", self.iss)
+        for lang in ("arabic", "english"):
+            self.assertRegex(self.iss, r"(?m)^" + lang + r"\.Downgrade=.*%1.*%2")
+
+    def test_review_the_icon_and_the_update_downloads(self):
+        self.assertEqual(r"{#IconFile}", self.directive("SetupIconFile"))
+        self.assertIn(r'"..\..\src\Sahar.Engine\assets\sahar.ico"', self.iss)
+        self.assertIn(r'Type: filesandordirs; Name: "{%TEMP}\Sahar-update"', self.iss)
+        self.assertIn(r"<ApplicationIcon>assets\sahar.ico</ApplicationIcon>", read("src", "Sahar.Engine", "Sahar.Engine.csproj"))
+
+
 class BuildScriptTests(unittest.TestCase):
+    def test_review_retries_the_inno_download(self):
+        ps = read("packaging", "installer", "build.ps1")
+        self.assertIn("$try -ge 3", ps)
+
     def test_pins_the_official_inno_setup_and_checks_its_hash(self):
         ps = read("packaging", "installer", "build.ps1")
         self.assertIn("https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe", ps)
@@ -98,10 +128,21 @@ class WorkflowTests(unittest.TestCase):
         yml = read(".github", "workflows", "ui-test.yml")
         self.assertEqual(2, len(re.findall(r"name: installer\n", yml)), "uploaded by build, downloaded by ui")
 
+    def test_review_only_main_signs_and_publishes(self):
+        yml = read(".github", "workflows", "test-build.yml")
+        sign = re.search(r"- name: Sign the update manifest[\s\S]*?(?=\n      - )", yml).group(0)
+        self.assertIn("SAHAR_UPDATE_KEY: ${{ secrets.SAHAR_UPDATE_KEY }}", sign)
+        self.assertIn("if ($env:GITHUB_REF -ne 'refs/heads/main') { throw", sign)
+        self.assertIn("packaging/installer/manifest.ps1", sign)
+        publish = re.search(r"- name: Publish the \"test-build\" pre-release[\s\S]*", yml).group(0)
+        self.assertIn("if ($env:GITHUB_REF -ne 'refs/heads/main') { throw", publish)
+        self.assertNotIn("SAHAR_UPDATE_KEY", yml.replace(sign, ""))   # the key reaches the signing step only
+
     def test_release_carries_setup_and_checksum_beside_the_zip(self):
         yml = read(".github", "workflows", "test-build.yml")
         create = re.search(r"gh release create test-build[^\n]*", yml).group(0)
-        for f in ("Sahar-$env:SAHAR_VERSION-test-win-x64.zip", "Sahar-Setup-$env:SAHAR_VERSION.exe", "Sahar-Setup-$env:SAHAR_VERSION.exe.sha256"):
+        for f in ("Sahar-$env:SAHAR_VERSION-test-win-x64.zip", "Sahar-Setup-$env:SAHAR_VERSION.exe", "Sahar-Setup-$env:SAHAR_VERSION.exe.sha256",
+                  "artifacts/installer/Sahar-update.json", "artifacts/installer/Sahar-update.json.sig"):
             self.assertIn(f, create)
 
 

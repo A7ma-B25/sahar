@@ -3434,10 +3434,12 @@ function Stage-Face {
     [Mouse]::Move([int]($Work.Width / 2), [int]($Work.Height / 2))   # the next stage starts with the pointer where a fresh runner has it
 }
 
-# ---- installer + update (owner roadmap: installer + auto-update) ----
+# ---- installer + update (owner roadmap: installer + auto-update; review fixes 2026-11-13) ----
 # The real Sahar-Setup-<version>.exe on this runner: install, upgrade over a running Sahar, start-with-Windows on/off,
-# the in-app update against a local fake of the GitHub API (python's static server on 127.0.0.1; never GitHub), and
-# uninstall. The runner's profile is throwaway, so it installs where a user's would: %LocalAppData%\Programs\Sahar.
+# a setup that cannot finish (she comes back), an older setup over a newer one (asks; silent stops), the in-app update
+# against a local fake of GitHub's release downloads (tests/ui/fake_github.py on 127.0.0.1; never GitHub) signed with a
+# throwaway key, a portable Sahar (the wizard, then "where I live now"), the icon, and uninstall. The runner's profile
+# is throwaway, so it installs where a user's would: %LocalAppData%\Programs\Sahar.
 $AppId = '{B24750DD-9A27-4894-8A97-D099CBA9B19C}'
 $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\Sahar'
 $InstalledExe = Join-Path $InstallDir 'Sahar.Engine.exe'
@@ -3447,27 +3449,36 @@ $StartMenuLink = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\�
 $Roaming = Join-Path $env:APPDATA 'Sahar'
 $LocalData = Join-Path $env:LOCALAPPDATA 'Sahar'
 $EngineLog = Join-Path $LocalData 'engine.log'
+$MoveMarker = Join-Path $LocalData 'moved-to-installer.txt'
+$UpdateTemp = Join-Path ([System.IO.Path]::GetTempPath()) 'Sahar-update'
+
+Add-Type -Namespace SaharIcons -Name Shell -MemberDefinition @'
+[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint n);
+'@
 
 function Sahars { @(Get-Process Sahar.Engine -ErrorAction SilentlyContinue) }
 
-function Run-Setup([string[]]$Extra = @(), [string]$Exe = $script:setupExe, [string]$Name = 'setup') {
+function Run-Setup([string[]]$Extra = @(), [string]$Exe = $script:setupExe, [string]$Name = 'setup', [switch]$Fail) {
     $log = Join-Path $Out "$Name.log"
     $p = Start-Process -FilePath $Exe -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/LOG=`"$log`"") + $Extra) -PassThru
     # The process only (Start-Process -Wait could wait for the Sahar it starts).
     if (-not $p.WaitForExit(180000)) { throw "$Name did not finish in 3 minutes" }
-    if ($p.ExitCode -ne 0) { throw "$Name exit code $($p.ExitCode) (see $Name.log)" }
+    Write-Host "    $Name exit code $($p.ExitCode)"
+    if ($Fail) { if ($p.ExitCode -eq 0) { throw "$Name succeeded, expected it to stop" } }
+    elseif ($p.ExitCode -ne 0) { throw "$Name exit code $($p.ExitCode) (see $Name.log)" }
+    $p.ExitCode
 }
 
-function Wait-Sahar([string]$what, [int]$notPid = 0, [int]$seconds = 30) {
+function Wait-Sahar([string]$what, [int]$notPid = 0, [int]$seconds = 30, [string]$From = $InstalledExe) {
     $deadline = (Get-Date).AddSeconds($seconds)
     while ((Get-Date) -lt $deadline) {
-        $p = Sahars | Where-Object { $_.Id -ne $notPid -and $_.Path -eq $InstalledExe } | Select-Object -First 1
+        $p = Sahars | Where-Object { $_.Id -ne $notPid -and $_.Path -eq $From } | Select-Object -First 1
         if ($p -and (Test-Path '\\.\pipe\sahar')) {
-            if ((Send '{"type":"cmd","name":"state"}').ok) { return $p }
+            try { if ((Send '{"type":"cmd","name":"state"}').ok) { return $p } } catch { }
         }
         Start-Sleep -Milliseconds 300
     }
-    throw "${what}: no Sahar running from $InstalledExe within $seconds s"
+    throw "${what}: no Sahar running from $From within $seconds s"
 }
 
 function Wait-Gone([int]$id, [int]$seconds, [string]$what) {
@@ -3477,6 +3488,12 @@ function Wait-Gone([int]$id, [int]$seconds, [string]$what) {
         Start-Sleep -Milliseconds 200
     }
     throw "${what}: process $id still running after $seconds s"
+}
+
+function Quit-Installed {
+    if (-not (Sahars)) { return }
+    $q = Start-Process -FilePath $InstalledExe -ArgumentList '--quit' -PassThru
+    if (-not $q.WaitForExit(30000) -or $q.ExitCode -ne 0) { throw "--quit failed ($($q.ExitCode))" }
 }
 
 function Log-Since([int]$lines) { (Get-Content $EngineLog -Encoding utf8 | Select-Object -Skip $lines) -join "`n" }
@@ -3503,6 +3520,11 @@ function Wait-Update([scriptblock]$cond, [int]$seconds, [string]$what) {
     throw "$what (last: $(($u.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' '))"
 }
 
+function Wizard-Title {
+    (Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' -and $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle
+}
+function Close-Wizards { Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' } | ForEach-Object { $_.Kill() } }
+
 function Stage-Install {
     $version = (Select-Xml -Path "$PSScriptRoot\..\..\Directory.Build.props" -XPath '//Version').Node.InnerText
     $script:setupExe = Join-Path (Resolve-Path $Setup).Path "Sahar-Setup-$version.exe"
@@ -3528,7 +3550,7 @@ function Stage-Install {
     }
 
     Step 'silent install: files, Start-menu shortcut, uninstall entry, start with Windows, and she starts' {
-        Run-Setup -Name 'setup-install'
+        Run-Setup -Name 'setup-install' | Out-Null
         $script:installed = Wait-Sahar 'after the install'
         foreach ($f in 'Sahar.Engine.exe', 'README-test-build.txt', 'unins000.exe') {
             if (-not (Test-Path (Join-Path $InstallDir $f))) { throw "$f not in $InstallDir" }
@@ -3539,7 +3561,7 @@ function Stage-Install {
         $target = $folder.ParseName((Split-Path $StartMenuLink -Leaf)).GetLink.Path
         if ($target -ne $InstalledExe) { throw "the shortcut points at '$target'" }
         $u = Get-ItemProperty $UninstallKey
-        Write-Host "    uninstall entry: $($u.DisplayName) $($u.DisplayVersion) at $($u.InstallLocation)"
+        Write-Host "    uninstall entry: $($u.DisplayName) $($u.DisplayVersion) at $($u.InstallLocation), icon $($u.DisplayIcon)"
         if ($u.DisplayVersion -ne $version -or $u.DisplayName -notmatch 'Sahar' -or $u.InstallLocation.TrimEnd('\') -ne $InstallDir) { throw 'uninstall entry is wrong' }
         if (-not $u.UninstallString) { throw 'no UninstallString' }
         $run = (Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar
@@ -3547,10 +3569,18 @@ function Stage-Install {
         Assert-DataKept 'after the install'
     }
 
+    Step 'the app icon is in the exe (shortcut, Settings → Apps) and in the setup' {
+        foreach ($f in $InstalledExe, $script:setupExe) {
+            $n = [SaharIcons.Shell]::ExtractIconEx($f, -1, $null, $null, 0)
+            Write-Host "    $(Split-Path $f -Leaf): $n icon(s)"
+            if ($n -lt 1) { throw "$f has no icon" }
+        }
+    }
+
     Step 'upgrade over a running Sahar: she is asked to quit (no kill), comes back, settings and log kept' {
         $old = (Wait-Sahar 'before the upgrade').Id
         $before = Log-Lines
-        Run-Setup -Name 'setup-upgrade'
+        Run-Setup -Name 'setup-upgrade' | Out-Null
         Wait-Gone $old 5 'the old Sahar'
         $script:installed = Wait-Sahar 'after the upgrade' -notPid $old
         $since = Log-Since $before
@@ -3560,15 +3590,34 @@ function Stage-Install {
     }
 
     Step 'start with Windows off removes the Run value; on brings it back' {
-        Run-Setup @('/MERGETASKS="!startup"') -Name 'setup-startup-off'
+        Run-Setup @('/MERGETASKS="!startup"') -Name 'setup-startup-off' | Out-Null
         if ($null -ne (Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar) { throw 'Run value still there with the task off' }
-        Run-Setup @('/MERGETASKS="startup"') -Name 'setup-startup-on'
+        Run-Setup @('/MERGETASKS="startup"') -Name 'setup-startup-on' | Out-Null
         if ((Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar -ne "`"$InstalledExe`"") { throw 'Run value not back with the task on' }
         $script:installed = Wait-Sahar 'after the task changes'
     }
 
+    Step 'a silent setup that cannot finish (a file in use) starts her again' {
+        $old = (Wait-Sahar 'before the stuck setup').Id
+        $held = [System.IO.File]::Open((Join-Path $InstallDir 'README-test-build.txt'), 'Open', 'Read', 'Read')
+        try { Run-Setup -Name 'setup-stuck' -Fail | Out-Null }
+        finally { $held.Dispose() }
+        Wait-Gone $old 5 'the Sahar the setup closed'
+        $script:installed = Wait-Sahar 'after the stuck setup' -notPid $old
+        if ((Get-Content (Join-Path $Out 'setup-stuck.log') -Raw) -notmatch 'starting Sahar again') { throw 'the setup log does not say it started her again' }
+    }
+
+    Step 'an older setup over a newer install asks first; silent, it stops and leaves her alone' {
+        $id = (Wait-Sahar 'before the downgrade').Id
+        Set-ItemProperty $UninstallKey -Name DisplayVersion -Value '99.0.0'
+        try { Run-Setup -Name 'setup-downgrade' -Fail | Out-Null }
+        finally { Set-ItemProperty $UninstallKey -Name DisplayVersion -Value $version }
+        if (-not (Get-Process -Id $id -ErrorAction SilentlyContinue)) { throw 'the downgrade closed her' }
+        if ((Get-Content (Join-Path $Out 'setup-downgrade.log') -Raw) -notmatch 'is newer than') { throw 'the setup log does not name the newer install' }
+    }
+
     Step '--quit ends a running Sahar gracefully (exit 0)' {
-        $id = $script:installed.Id
+        $id = (Wait-Sahar 'before --quit').Id
         $before = Log-Lines
         $q = Start-Process -FilePath $InstalledExe -ArgumentList '--quit' -PassThru
         if (-not $q.WaitForExit(30000)) { throw '--quit did not return' }
@@ -3579,44 +3628,57 @@ function Stage-Install {
         if (-not $q2.WaitForExit(10000) -or $q2.ExitCode -ne 0) { throw '--quit with no Sahar running is not exit 0' }
     }
 
-    # The fake GitHub API: the release JSON at its API path, a "newer" setup (this one renamed) and its .sha256.
+    # The fake GitHub: a "newer" setup (this one renamed) and its manifest, signed with a throwaway key whose public
+    # half the test-mode engine is given (--update-key); the real key never signs anything here.
     $port = Get-Random -Minimum 41000 -Maximum 49000
     $api = "http://127.0.0.1:$port"
-    $fake = Join-Path $Out 'fake-api'
+    $fake = Join-Path $Out 'fake-github'
+    $fakeLog = Join-Path $Out 'fake-github.log'
     $newName = 'Sahar-Setup-99.0.0.exe'
-    $good = (Get-FileHash $script:setupExe -Algorithm SHA256).Hash.ToLowerInvariant()
-    Step 'fake API up (python http.server on 127.0.0.1)' {
-        $tags = Join-Path $fake 'repos\A7ma-B25\sahar\releases\tags'
-        New-Item -ItemType Directory -Force -Path $tags | Out-Null
-        Copy-Item $script:setupExe (Join-Path $fake $newName) -Force
-        Set-Content (Join-Path $fake "$newName.sha256") ("0" * 64 + "  $newName`n") -NoNewline -Encoding ascii   # wrong at first
-        $size = (Get-Item $script:setupExe).Length
-        $json = '{"tag_name":"test-build","draft":false,"prerelease":true,"assets":[' +
-            '{"name":"Sahar-99.0.0-test-win-x64.zip","browser_download_url":"' + $api + '/nothing.zip","size":1},' +
-            '{"name":"' + $newName + '","browser_download_url":"' + $api + '/' + $newName + '","size":' + $size + '},' +
-            '{"name":"' + $newName + '.sha256","browser_download_url":"' + $api + '/' + $newName + '.sha256","size":90}]}'
-        Set-Content (Join-Path $tags 'test-build') $json -NoNewline -Encoding utf8NoBOM
-        $script:server = Start-Process -FilePath python -ArgumentList '-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', "`"$fake`"" -PassThru `
-            -RedirectStandardError (Join-Path $Out 'fake-api.log')
+    $keyFile = Join-Path $Out 'update-test-key.txt'
+    $testKey = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+    $otherKey = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+    function Serve-Setup([string]$from, [switch]$Tamper, [System.Security.Cryptography.ECDsa]$Key = $testKey) {
+        Copy-Item $from (Join-Path $fake $newName) -Force
+        $env:SAHAR_UPDATE_KEY = $Key.ExportPkcs8PrivateKeyPem()
+        try { & "$PSScriptRoot\..\..\packaging\installer\manifest.ps1" -Version 99.0.0 -Setup (Join-Path $fake $newName) -Out $fake | Out-Null }
+        finally { Remove-Item Env:SAHAR_UPDATE_KEY }
+        if ($Tamper) { Add-Content (Join-Path $fake $newName) 'x' }   # served bytes no longer match the signed hash
+    }
+    function Engine-Test([string]$from = $InstalledExe) {
+        $script:engine = Start-Process -FilePath $from -ArgumentList '--test-mode', '--capturable', '--update-host', $api, '--update-key', $keyFile -PassThru
+        Wait-Pipe 10
+    }
+    function Ask-Again {
+        Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
+        Wait-Update { param($u) $u.status -eq 'asked' -and $u.step -eq 'Ask' } 25 'the tray item did not ask' | Out-Null
+    }
+
+    Step 'fake GitHub up (tests/ui/fake_github.py on 127.0.0.1), signed with a throwaway key' {
+        New-Item -ItemType Directory -Force -Path $fake | Out-Null
+        Set-Content $keyFile ([Convert]::ToBase64String($testKey.ExportSubjectPublicKeyInfo())) -NoNewline -Encoding ascii
+        Serve-Setup $script:setupExe
+        $script:server = Start-Process -FilePath python -ArgumentList '-I', "`"$PSScriptRoot\fake_github.py`"", '--port', $port, '--root', "`"$fake`"", '--log', "`"$fakeLog`"" -PassThru
         $deadline = (Get-Date).AddSeconds(15)
         while ($true) {
-            try { Invoke-WebRequest "$api/repos/A7ma-B25/sahar/releases/tags/test-build" -UseBasicParsing -TimeoutSec 2 | Out-Null; break }
-            catch { if ((Get-Date) -gt $deadline) { throw "fake API not up: $_" }; Start-Sleep -Milliseconds 300 }
+            try { Invoke-WebRequest "$api/A7ma-B25/sahar/releases/download/test-build/Sahar-update.json" -UseBasicParsing -TimeoutSec 2 | Out-Null; break }
+            catch { if ((Get-Date) -gt $deadline) { throw "fake GitHub not up: $_" }; Start-Sleep -Milliseconds 300 }
         }
     }
 
-    Step 'test mode without --update-api never checks' {
+    Step 'test mode without --update-host never checks' {
         $script:engine = Start-Process -FilePath $InstalledExe -ArgumentList '--test-mode', '--capturable' -PassThru
         Wait-Pipe 10
         $r = Send '{"type":"cmd","name":"update-check","args":{"manual":"true"}}'
-        if ($r.ok) { throw 'update-check answered ok without a fake API' }
-        if ((Update-State).reachable -ne 'false') { throw 'reachable without a fake API' }
+        if ($r.ok) { throw 'update-check answered ok without a fake GitHub' }
+        if ((Update-State).reachable -ne 'false') { throw 'reachable without a fake GitHub' }
         Stop-Engine
     }
 
-    Step 'a newer version: she asks in her bubble, later snoozes a day, the tray check asks anyway' {
-        $script:engine = Start-Process -FilePath $InstalledExe -ArgumentList '--test-mode', '--capturable', '--update-api', $api -PassThru
-        Wait-Pipe 10
+    Step 'a newer signed version: she asks in her bubble, later snoozes a day (no request), the tray asks anyway' {
+        Engine-Test
+        if ((Kv 'debug-tray-icon').resource -ne 'true') { throw 'the tray shows the drawn fallback, not the app icon' }
+        if ((Update-State).installed -ne 'true') { throw 'the installed Sahar thinks she is portable' }
         Send '{"type":"cmd","name":"update-check","args":{"manual":"false"}}' | Out-Null
         $u = Wait-Update { param($u) $u.status -eq 'asked' } 25 'no question asked'
         if ($u.offer -ne '99.0.0' -or $u.step -ne 'Ask') { throw "offer $($u.offer) step $($u.step)" }
@@ -3630,42 +3692,110 @@ function Stage-Install {
         if ((Get-Content $settingsPath -Raw) -notmatch '"updateAskAfter"') { throw 'askAfter not saved' }
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"later"}}' | Out-Null
         if ((Kv 'debug-list').open -ne 'false') { throw 'the choice stayed open after later' }
+        $requests = @(Get-Content $fakeLog).Count
         Send '{"type":"cmd","name":"update-check","args":{"manual":"false"}}' | Out-Null
-        Wait-Update { param($u) $u.status -eq 'idle' -and $u.step -eq 'Snoozed' } 25 'a background check within the day was not snoozed' | Out-Null
+        Wait-Update { param($u) $u.status -eq 'idle' -and $u.step -eq 'Snoozed' } 10 'a background check within the day was not snoozed' | Out-Null
+        if (@(Get-Content $fakeLog).Count -ne $requests) { throw 'a snoozed check still made a request' }
         if ((Kv 'debug-list').open -ne 'false') { throw 'asked again within the day' }
-        Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
-        Wait-Update { param($u) $u.status -eq 'asked' -and $u.step -eq 'Ask' } 25 'the tray item did not ask' | Out-Null
+        Ask-Again
     }
 
-    Step 'yes with a wrong .sha256: nothing runs, she stays' {
+    Step 'a manifest signed by another key: refused, nothing offered' {
+        Serve-Setup $script:setupExe -Key $otherKey
+        $before = Log-Lines
+        Send '{"type":"cmd","name":"update-check","args":{"manual":"true"}}' | Out-Null
+        Wait-Update { param($u) $u.status -eq 'failed' } 25 'a wrongly signed manifest was not refused' | Out-Null
+        if ((Log-Since $before) -notmatch 'manifest refused') { throw 'no "manifest refused" in the log' }
+        Serve-Setup $script:setupExe
+    }
+
+    Step 'yes with a setup that is not the signed one: nothing runs, nothing kept, she stays' {
+        Serve-Setup $script:setupExe -Tamper
+        Ask-Again
         $before = Log-Lines
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
         Wait-Update { param($u) $u.status -eq 'failed' } 60 'the bad download did not fail' | Out-Null
-        if ((Log-Since $before) -notmatch 'update: checksum mismatch') { throw 'no checksum mismatch in the log' }
+        if ((Log-Since $before) -notmatch 'update: download failed \(checksum mismatch') { throw 'no checksum mismatch in the log' }
         if ($script:engine.HasExited) { throw 'she quit on a bad checksum' }
-        if (Test-Path (Join-Path ([System.IO.Path]::GetTempPath()) "Sahar-update\$newName")) { throw 'the unverified setup was kept' }
+        if (@(Get-ChildItem $UpdateTemp -Recurse -File -ErrorAction SilentlyContinue).Count) { throw "the unverified download was kept: $((Get-ChildItem $UpdateTemp -Recurse -File).FullName -join ', ')" }
     }
 
-    Step 'yes with the right .sha256: verified setup runs silently, she quits gracefully and comes back' {
-        Set-Content (Join-Path $fake "$newName.sha256") "$good  $newName`n" -NoNewline -Encoding ascii
+    Step 'a setup that fails while she is here: she says so and stays' {
+        Serve-Setup "$env:SystemRoot\System32\where.exe"   # signed, verified, and exits 2 on the setup's flags
+        Ask-Again
+        Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
+        $u = Wait-Update { param($u) $u.status -eq 'failed' -and $u.setupExit -ne 'none' } 60 'the failed setup was not noticed'
+        if ($u.setupExit -eq '0') { throw 'setup exit 0' }
+        if ($script:engine.HasExited) { throw 'she vanished with a failed setup' }
+        $said = Text64 (Kv 'debug-comment').text64
+        Write-Host "    she said: $said"
+        if ($said -notmatch 'ما زبط التحديث') { throw "her bubble says '$said'" }
+    }
+
+    Step 'yes with the signed setup: it closes her (she does not quit by herself), installs, and she comes back' {
+        Serve-Setup $script:setupExe
+        Ask-Again
         $old = $script:engine.Id
         $before = Log-Lines
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
         Wait-Gone $old 60 'the updating Sahar'
         $script:installed = Wait-Sahar 'after the update' -notPid $old -seconds 120
         $since = Log-Since $before
-        foreach ($want in 'update: 99.0.0 downloaded and verified', 'update: installing 99.0.0') {
+        foreach ($want in 'update: 99.0.0 downloaded and verified', 'update: installing 99.0.0 (silent)') {
             if ($since -notmatch [regex]::Escape($want)) { throw "no '$want' in the log:`n$since" }
         }
         if ($since -notmatch '(?m) exit 0\s*$') { throw "the updating run did not end with exit 0:`n$since" }
-        $setupLog = Join-Path ([System.IO.Path]::GetTempPath()) 'Sahar-update\setup.log'
-        if (Test-Path $setupLog) { Copy-Item $setupLog (Join-Path $Out 'setup-update.log') -Force } else { throw 'the update ran no setup (no setup.log)' }
+        $setupLog = Get-ChildItem $UpdateTemp -Recurse -Filter setup.log | Select-Object -First 1
+        if ($setupLog) { Copy-Item $setupLog.FullName (Join-Path $Out 'setup-update.log') -Force } else { throw 'the update ran no setup (no setup.log)' }
+        if ((Get-Content $setupLog.FullName -Raw) -notmatch '--quit exit code 0') { throw 'the setup did not close her with --quit' }
+        $log = Get-Content $fakeLog
+        if (-not ($log -match "^/assets/$newName -> 200")) { throw 'the setup was not fetched through the redirect' }
+        $agents = $log | ForEach-Object { ($_ -split ' UA=')[1] } | Sort-Object -Unique
+        Write-Host "    User-Agents seen: $($agents -join ', ')"
+        if (@($agents | Where-Object { $_ -notmatch '^(Sahar/' + [regex]::Escape($version) + '|Mozilla/.*PowerShell.*)$' }).Count) { throw "she sent another User-Agent: $agents" }
         Assert-DataKept 'after the update'
+    }
+
+    Step 'portable (a zip folder): the update opens the wizard, she stays until it installs' {
+        Quit-Installed
+        Engine-Test -from $Exe
+        if ((Update-State).installed -ne 'false') { throw 'the zip Sahar thinks she is installed' }
+        Ask-Again
+        Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
+        Wait-Update { param($u) $u.status -eq 'installing' } 60 'no setup started' | Out-Null
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and (Wizard-Title) -notmatch 'تثبيت') { Start-Sleep -Milliseconds 500 }
+        Write-Host "    wizard: $(Wizard-Title)"
+        Screenshot 'update-wizard-portable.png' | Out-Null
+        try {
+            if ((Wizard-Title) -notmatch 'تثبيت') { throw 'no visible wizard for a portable Sahar' }
+            if ($script:engine.HasExited) { throw 'she quit before the wizard installed anything' }
+            if (-not (Test-Path $MoveMarker)) { throw 'no note for the installed her' }
+            $said = Text64 (Kv 'debug-comment').text64
+            if ($said -notmatch 'قائمة ابدأ') { throw "her bubble says '$said'" }
+        }
+        finally { Close-Wizards }
+        Wait-Update { param($u) $u.status -eq 'failed' } 20 'the closed wizard was not noticed' | Out-Null
+        if (Test-Path $MoveMarker) { throw 'the note stayed after the wizard was closed' }
+        Stop-Engine
+    }
+
+    Step 'the installed her says where she lives now (once), after a portable her left for the wizard' {
+        Set-Content $MoveMarker ("portable " + [DateTimeOffset]::Now.ToUnixTimeSeconds()) -NoNewline
+        Engine-Test
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $deadline -and (Test-Path $MoveMarker)) { Start-Sleep -Milliseconds 300 }
+        $said = Text64 (Kv 'debug-comment').text64
+        Write-Host "    she said: $said"
+        if ($said -notmatch 'ساكنة' -or $said -notmatch 'Programs\\Sahar') { throw "her bubble says '$said'" }
+        if (Test-Path $MoveMarker) { throw 'the note was not removed' }
+        Stop-Engine
     }
     if ($script:server -and -not $script:server.HasExited) { $script:server.Kill() }
 
-    Step 'silent uninstall: Sahar asked to quit; files, shortcut, entry, Run value gone; settings and log kept' {
-        $id = $script:installed.Id
+    Step 'silent uninstall: Sahar asked to quit; files, shortcut, entry, Run value, downloads gone; settings and log kept' {
+        $p = Start-Process -FilePath $InstalledExe -PassThru
+        $id = (Wait-Sahar 'before the uninstall').Id
         $p = Start-Process -FilePath (Join-Path $InstallDir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
         if (-not $p.WaitForExit(120000)) { throw 'uninstall did not finish' }
         Wait-Gone $id 30 'Sahar during the uninstall'
@@ -3675,6 +3805,7 @@ function Stage-Install {
         if (Test-Path -LiteralPath $StartMenuLink) { throw 'the Start-menu shortcut is still there' }
         if (Test-Path $UninstallKey) { throw 'the uninstall entry is still there' }
         if ($null -ne (Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar) { throw 'the Run value is still there' }
+        if (Test-Path $UpdateTemp) { throw "$UpdateTemp is still there" }
         if (Sahars) { throw 'a Sahar is still running' }
         Assert-DataKept 'after the uninstall'
         if (@(Get-Content $EngineLog -Encoding utf8)[-1] -notmatch ' exit 0$') { throw 'her last run did not end with exit 0' }
@@ -3687,24 +3818,22 @@ function Stage-Install {
             $title = ''
             while ((Get-Date) -lt $deadline -and $title -notmatch 'تثبيت') {
                 Start-Sleep -Milliseconds 500
-                $title = (Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' -and $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle
+                $title = Wizard-Title
             }
             Write-Host "    wizard title: $title"
             Start-Sleep -Seconds 1
             Screenshot 'installer-ar.png' | Out-Null
             if ($title -notmatch 'تثبيت - سَحَر · Sahar') { throw "the wizard's title is '$title', not Arabic" }
         }
-        finally {
-            # Nothing is installed on its first page: the harness closes it (setup and its wizard process).
-            Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' } | ForEach-Object { $_.Kill() }
-        }
+        finally { Close-Wizards }   # nothing is installed on its first page: the harness closes it
         if (Test-Path $InstallDir) { throw 'the wizard installed something before Next' }
     }
 
     # Leave the runner as the stage found it.
     if ($script:server -and -not $script:server.HasExited) { $script:server.Kill() }
+    Close-Wizards
     Sahars | ForEach-Object { $_.Kill() }
-    Remove-Item (Join-Path $Roaming 'install-marker.txt'), (Join-Path $LocalData 'install-marker.txt') -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $Roaming 'install-marker.txt'), (Join-Path $LocalData 'install-marker.txt'), $MoveMarker -ErrorAction SilentlyContinue
     if (Test-Path $backup) { Copy-Item $backup $settingsPath -Force } else { Remove-Item $settingsPath -ErrorAction SilentlyContinue }
 }
 
