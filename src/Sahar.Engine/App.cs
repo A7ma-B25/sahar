@@ -605,6 +605,19 @@ internal sealed unsafe class App
             menu.SetReply(reply);
             ChatHop();
         });
+        // A newer version (owner roadmap: installer + auto-update): she asks in her bubble; yes runs the verified setup.
+        // Test mode reaches only a fake API given with --update-api, and checks only when the pipe says so.
+        var updateQuit = ui.CreateTimer();
+        updateQuit.IsRepeating = false;
+        updateQuit.Interval = TimeSpan.FromSeconds(1.5);   // her "back in a moment" line is read, then she ends as from the pipe
+        updateQuit.Tick += (_, _) => Native.PostQuitMessage(0);
+        using var updates = new UpdateTool(ui, new Updater(_options.TestMode ? _options.UpdateApi : null), listBubble, () => motion.Body,
+            line => speech.Say(line), () => settings, s => { settings = s; SaveSettings(); },
+            busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
+                listBubble.IsOpen || bubble.IsOpen || Sulking(),
+            quit: () => { menu.Close(); updateQuit.Start(); },
+            automatic: !_options.TestMode, reachable: !_options.TestMode || _options.UpdateApi is not null);
+        tray.CheckUpdate += () => Safe(() => updates.Check(manual: true));
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
         // The PC just started (or a test says so): she flies in and says hello (motion 18).
@@ -809,6 +822,21 @@ internal sealed unsafe class App
                 return new PipeReply(true);
             });
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
+            pipe.Register("update-check", r =>
+            {
+                if (!updates.Reachable) return new PipeReply(false, "no --update-api: test mode never reaches GitHub");
+                updates.Check(manual: r.Args?.TryGetValue("manual", out var m) == true && m == "true");
+                return new PipeReply(true, updates.Describe());
+            });
+            pipe.Register("update-answer", r =>
+            {
+                string? answer = r.Args?.TryGetValue("answer", out var a) == true ? a : null;
+                if (answer is not ("yes" or "later")) return new PipeReply(false, "update-answer needs answer yes or later");
+                listBubble.Close();
+                if (answer == "yes") updates.Install(); else updates.Later();
+                return new PipeReply(true, updates.Describe());
+            });
+            pipe.Register("debug-update", _ => new PipeReply(true, updates.Describe()));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>
             {

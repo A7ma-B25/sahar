@@ -6,14 +6,15 @@ namespace Sahar.Engine;
 /// <param name="DownloadsDir">Test mode only: watch this folder instead of Downloads.</param>
 /// <param name="WeatherStubDir">Test mode only: read geocode.json / forecast.json from here instead of Open-Meteo.</param>
 /// <param name="QuranBase">Test mode only: stream surahs from this base URL instead of the CDN.</param>
+/// <param name="UpdateApi">Test mode only: a fake GitHub API for the update check (without it test mode never checks).</param>
 internal sealed record EngineOptions(bool TestMode, bool Capturable, bool SimulateBoot = false, string? DownloadsDir = null, string? WeatherStubDir = null,
-    string? QuranBase = null)
+    string? QuranBase = null, string? UpdateApi = null)
 {
     public static EngineOptions Parse(string[] args)
     {
         bool test = args.Contains("--test-mode");
         string? After(string flag) { int i = Array.IndexOf(args, flag); return test && i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
         return new(test, args.Contains("--capturable"), test && args.Contains("--simulate-boot"), After("--downloads"), After("--weather-stub"),
-            After("--quran-base"));
+            After("--quran-base"), After("--update-api"));
     }
 }

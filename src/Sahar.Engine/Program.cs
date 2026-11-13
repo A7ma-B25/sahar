@@ -19,6 +19,9 @@ internal static class Program
             return 0;
         }
 
+        // The installer and the uninstaller: ask a running Sahar to quit (her own pipe command) and wait; never a kill.
+        if (args.Contains("--quit")) return Sahar.Engine.Host.QuitRunning.Run();
+
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Sahar.Engine", out bool first);
         if (!first) return ExitAlreadyRunning;
         // The clean version: old test builds' data goes once, before the log opens.
