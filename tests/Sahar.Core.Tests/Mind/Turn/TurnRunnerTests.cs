@@ -307,4 +307,17 @@ public sealed class TurnRunnerTests
         await Run(Chat("احكي انكليزي"));
         Assert.Equal(ToolTemplates.AskedNo, _io.Final.Text);
     }
+
+    [Fact]
+    public async Task Turn_Draft_HasNoTools_NeverCalls()
+    {
+        _llm.Reply(Decision("""[{"tool":"note.save","args":{"text":"x"},"why":"x"}]""", say: "مرحبا يا أحمد، رح اتأخر شوي"));
+        await Run(new MindMsg { T = "turn", Id = "d1", Source = "draft", Text = "اكتبلي رد لأحمد انو رح اتأخر" });
+        Assert.Empty(_io.Of("call"));
+        Assert.DoesNotContain("note.save", _llm.Requests.Single().Messages[0].Content);
+        Assert.Equal(ToolTemplates.BadOutput, _io.Final.Text);   // a tool in a draft is bad output: nothing runs
+        _llm.Reply(Decision(say: "مرحبا يا أحمد، رح اتأخر شوي"));
+        await Run(new MindMsg { T = "turn", Id = "d2", Source = "draft", Text = "اكتبلي رد" });
+        Assert.Equal("مرحبا يا أحمد، رح اتأخر شوي", _io.Final.Text);
+    }
 }

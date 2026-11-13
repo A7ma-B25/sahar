@@ -31,15 +31,15 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
 
     internal sealed record Outcome(string Tool, bool Ok, string Summary, string? Data, bool Read);
 
-    public string Prefix(MindMsg hello) =>
-        PromptBuilder.Prefix(prompts.Persona(hello.Caps?.Voice ?? MindVoice.Complementary, hello.Address ?? new MindAddress(Settings.Gender.Unknown, null)),
-            hello.Tools ?? []);
+    public string Prefix(MindMsg hello, string source = "chat") =>
+        PromptBuilder.Prefix(prompts.Persona(source == "draft" ? MindVoice.Self : hello.Caps?.Voice ?? MindVoice.Complementary,
+            hello.Address ?? new MindAddress(Settings.Gender.Unknown, null)), source == "draft" ? [] : hello.Tools ?? []);
 
     public async Task RunAsync(MindMsg turn, MindMsg hello, ITurnIO io, CancellationToken ct)
     {
         var id = turn.Id ?? "";
         var source = turn.Source ?? "chat";
-        bool chat = source is "chat" or "voice";
+        bool chat = source is "chat" or "voice" or "draft";
         var line = turn.Text ?? "";
         io.Send(new MindMsg { T = "state", Id = id, Phase = "thinking" });
         try
@@ -50,9 +50,10 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                 io.Send(new MindMsg { T = "say", Id = id, Text = text, Mood = "distress", Final = true });
                 return;
             }
-            var registry = MindParts.ToolRegistry(hello.Tools ?? []);
+            // A draft (Ruling 6: «اكتبلي رد بأسلوبي…») is words only: no tool is announced, so nothing can run or send.
+            var registry = MindParts.ToolRegistry(source == "draft" ? [] : hello.Tools ?? []);
             var schema = registry.DecisionSchema();
-            var messages = PromptBuilder.Build(Prefix(hello), _history,
+            var messages = PromptBuilder.Build(Prefix(hello, source), source == "draft" ? [] : _history,
                 chat || source == "initiative" ? prompts.PersonalBlock(line, PromptBuilder.PersonalTokens) : "", turn.Situation, source, line);
             var budget = source == "reflect" ? ReflectBudget : ChatBudget;
             var clock = new Stopwatch();
@@ -85,7 +86,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                 if (Decision.Parse(reply.Text) is not { } d) { invalid = true; break; }
                 say = d.Say;
                 mood = d.Mood;
-                if (chat) Remember(io, id, d.Remember);
+                if (chat && source != "draft") Remember(io, id, d.Remember);
 
                 bool reads = false;
                 foreach (var action in d.Actions.Take(MaxActions))
@@ -112,7 +113,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
             }
 
             var final = Final(say, outcomes, invalid);
-            if (chat) Keep(line, final);
+            if (chat && source != "draft") Keep(line, final);
             io.Send(new MindMsg { T = "say", Id = id, Text = final, Mood = mood, Final = true });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* Esc or a closed card: nothing more */ }

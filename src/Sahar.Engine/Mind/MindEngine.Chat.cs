@@ -28,6 +28,9 @@ internal sealed partial class MindEngine
     public IActivityTools? ActivityTools { get; set; }
     /// <summary>The once-a-day download question when he chats and no model is present (default: stream A's).</summary>
     public Action? OfferDownload { get; set; }
+    /// <summary>«اكتبلي رد بأسلوبي…» (stream B's <c>DraftAsk.Parse(line) is not null</c>, set at integration): such a line
+    /// is a turn with source "draft" (Ruling 6); B shows the draft with «بصوتك» and a copy button. Drafting never sends.</summary>
+    public Func<string, bool>? IsDraftAsk { get; set; }
 
     private EngineTools _tools = null!;
     private IToolRegistry _registry = null!;
@@ -118,7 +121,8 @@ internal sealed partial class MindEngine
     private bool OnChat(ChatCommand c, string text)
     {
         if (_awaitingAnswerSince is not null) { _awaitingAnswerSince = null; _dismissed = 0; }   // he answered her
-        bool free = c.Kind is ChatKind.Unknown or ChatKind.Greeting || (c.Kind == ChatKind.Timer && c.OutOfRange);
+        bool draft = MindReady() && IsDraftAsk?.Invoke(text) == true;
+        bool free = draft || c.Kind is ChatKind.Unknown or ChatKind.Greeting || (c.Kind == ChatKind.Timer && c.OutOfRange);
         if (!free)
         {
             bool hushBefore = Dnd.On;
@@ -137,11 +141,12 @@ internal sealed partial class MindEngine
         }
         var id = "c" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
         if (_chatTurn is { } running) SendMind(new MindMsg { T = "cancel", Id = running });
-        if (!SendMind(new MindMsg { T = "turn", Id = id, Source = "chat", Text = text, Situation = Moment() })) return false;
-        _turns[id] = (ActSource.User, Clip(text, 60), "chat");
+        var source = draft ? "draft" : "chat";
+        if (!SendMind(new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() })) return false;
+        _turns[id] = (ActSource.User, Clip(text, 60), source);
         _chatTurn = id;
         Menu.MindThinking(true);
-        Log.Write("mind: turn chat");
+        Log.Write($"mind: turn {source}");
         return true;
     }
 
@@ -237,6 +242,11 @@ internal sealed partial class MindEngine
                     if (m.Error != "timeout") _chatTurn = null;   // a timeout's line follows
                 }
                 break;
+            case "draft" when m.Id is not null && m.Id == _chatTurn:   // stream B shows it («بصوتك» + copy)
+                _turns.Remove(m.Id);
+                _chatTurn = null;
+                Menu.MindThinking(false);
+                break;
             case "propose":
                 Log.Write($"mind: proposal ({m.Kind})");
                 break;
@@ -280,7 +290,7 @@ internal sealed partial class MindEngine
     {
         var id = m.Id ?? "";
         int n = m.Call ?? 0;
-        if (!_turns.TryGetValue(id, out var turn)) { Reply(id, n, false, "refused", ToolTemplates.Failed); return; }   // not a turn of ours
+        if (!_turns.TryGetValue(id, out var turn) || turn.Kind == "draft") { Reply(id, n, false, "refused", ToolTemplates.Failed); return; }   // not ours, or a draft: words only
         ToolCall call;
         try { call = new ToolCall(m.Tool ?? "", JsonDocument.Parse(m.Data ?? "{}").RootElement.Clone(), m.Why); }
         catch (JsonException) { Reply(id, n, false, "invalid", ToolTemplates.BadOutput); return; }
@@ -411,6 +421,7 @@ internal sealed partial class MindEngine
     /// <summary>Each minute: if the gate opens and her brain is there, she may say something (often nothing).</summary>
     private string Initiative(bool force)
     {
+        if (!force && !MindReady()) return _lastGate = "no-mind";   // nothing to ask without her brain
         var v = _gate.Check(GateInputs());
         _lastGate = v.Open ? "open" : v.ClosedBy ?? "closed";
         if (!v.Open && !force) return _lastGate;
