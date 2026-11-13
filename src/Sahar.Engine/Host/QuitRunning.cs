@@ -7,6 +7,8 @@ namespace Sahar.Engine.Host;
 /// <c>Sahar.Engine.exe --quit</c>, for the installer and the uninstaller: asks a running Sahar to quit with her own
 /// pipe command (she saves and ends as from the tray), then waits for her to be gone. Never kills her.
 /// Exit 0: she is not running (any more); 4: she is still running after the wait.
+/// <c>--remember &lt;file&gt;</c>: first writes the running Sahar's exe path there (UTF-8 with BOM), so a setup that
+/// does not finish can start the same Sahar again.
 /// </summary>
 internal static class QuitRunning
 {
@@ -14,9 +16,10 @@ internal static class QuitRunning
     private const string EngineMutex = @"Local\Sahar.Engine";
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(20);
 
-    public static int Run()
+    public static int Run(string? rememberFile = null)
     {
         if (!Running()) return 0;
+        if (rememberFile is not null) Remember(rememberFile);
         var deadline = DateTime.UtcNow + Wait;
         bool asked = false;
         while (!asked && DateTime.UtcNow < deadline && Running())
@@ -26,6 +29,25 @@ internal static class QuitRunning
         }
         while (Running() && DateTime.UtcNow < deadline) Thread.Sleep(200);
         return Running() ? StillRunning : 0;
+    }
+
+    private static void Remember(string file)
+    {
+        try
+        {
+            int self = Environment.ProcessId;
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("Sahar.Engine"))
+                using (p)
+                {
+                    if (p.Id == self) continue;
+                    string? path = null;
+                    try { path = p.MainModule?.FileName; } catch (Exception) { }
+                    if (path is null) continue;
+                    File.WriteAllText(file, path, new UTF8Encoding(true));
+                    return;
+                }
+        }
+        catch (Exception) { }
     }
 
     private static bool Ask()
