@@ -3558,6 +3558,8 @@ function Wait-Until([scriptblock]$cond, [int]$ms, [string]$what) {
 function Wait-Settings([string]$pattern, [int]$ms, [string]$what) {
     Wait-Until { (Settings-Json) -match $pattern } $ms "settings.json: $what"
 }
+# A field of settings.json, parsed (the file escapes '+' and Arabic as \uXXXX).
+function Setting([string]$name) { try { (Settings-Json | ConvertFrom-Json).$name } catch { $null } }
 function Capture([string]$name) { SOk 'capture' ('{"name":"' + $name + '"}') }
 
 function Stop-SettingsApp {
@@ -3708,19 +3710,122 @@ function Stage-Settings {
         Wait-Settings '"menuOpen"\s*:\s*"right"' 3000 'opens with a right-click'
         SClick '#shortcut-change'
         SKey 'K' 'ctrl,alt'
-        Wait-Settings '"menuShortcut"\s*:\s*"Ctrl\+Alt\+K"' 3000 'shortcut Ctrl+Alt+K'
+        Wait-Until { (Setting 'menuShortcut') -eq 'Ctrl+Alt+K' } 3000 'settings.json: shortcut Ctrl+Alt+K'
         Wait-Until { (SText '#shortcut-value') -eq 'Ctrl+Alt+K' } 2000 'the kbd does not show Ctrl+Alt+K'
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -notmatch 'hotkey: Ctrl\+Alt\+K') { throw 'the engine did not take Ctrl+Alt+K' }
         SClick '#shortcut-change'
         SKey 'C' 'ctrl'
         Wait-Until { (SText '#shortcut-message') -eq 'هالاختصار بتستعمله البرامج كتير، اختار غيره.' } 2000 "the refusal is not shown ($(SText '#shortcut-message'))"
-        if ((Settings-Json) -notmatch '"menuShortcut"\s*:\s*"Ctrl\+Alt\+K"') { throw 'a refused shortcut changed the file' }
+        if ((Setting 'menuShortcut') -ne 'Ctrl+Alt+K') { throw 'a refused shortcut changed the file' }
         Capture 'app-menu-light'
         Screenshot 'settings-menu-light.png' | Out-Null
         SClick '#shortcut-change'
         SKey 'S' 'ctrl,alt'
-        Wait-Settings '"menuShortcut"\s*:\s*"Ctrl\+Alt\+S"' 3000 'shortcut back to Ctrl+Alt+S'
+        Wait-Until { (Setting 'menuShortcut') -eq 'Ctrl+Alt+S' } 3000 'settings.json: shortcut back to Ctrl+Alt+S'
+    }
+    # ---- الصلاة، الاستماع، عام، الخصوصية (Task 7) ----
+    Step 'prayer: city, method, Asr and reminder' {
+        # She searches cities through the engine's geocoder: a stub that knows Aleppo.
+        $script:sx = Join-Path $env:TEMP 'sahar-settings-stub'
+        New-Item -ItemType Directory -Force -Path $script:sx | Out-Null
+        '{"results":[{"name":"حلب","latitude":36.2,"longitude":37.16}]}' | Set-Content (Join-Path $script:sx 'geocode.json') -Encoding UTF8
+        Stop-Engine
+        Start-Engine @('--weather-stub', $script:sx)
+        SNav 'prayer'
+        SType '#prayer-city' 'حلب'
+        SKey 'Enter'
+        Wait-Settings '"prayerLatitude"\s*:\s*36\.2' 5000 'Aleppo saved'
+        Wait-Until { [int](Js "document.querySelectorAll('#prayer-today .time-cell').length") -eq 5 } 3000 'the today card has no five cells'
+        $cells = Js "[...document.querySelectorAll('#prayer-today .time-at')].map(e => e.textContent).join(' ')"
+        Write-Host "    times: $cells"
+        if ($cells -notmatch '^[٠-٩:\s]+$') { throw "times are not Arabic-Indic: $cells" }
+        $next = SText '#prayer-next'
+        if ($next -notmatch 'بعد\s*[٠-٩]+:[٠-٩]+') { throw "next: $next" }
+        if ((SText '#prayer-today .row .label') -ne 'الصلاة الجاية') { throw 'no «الصلاة الجاية» row' }
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("(() => { const s = document.getElementById('prayer-method'); s.value = 'muslimWorldLeague'; s.dispatchEvent(new Event('change')); return true; })()")) + '"}')
+        Wait-Settings '"prayerMethod"\s*:\s*"muslimWorldLeague"' 3000 'method muslimWorldLeague'
+        SClick '#prayer-asr-1'
+        Wait-Settings '"prayerHanafiAsr"\s*:\s*true' 3000 'Hanafi Asr'
+        SClick '#prayer-minutes-2'
+        Wait-Settings '"prayerReminderMinutes"\s*:\s*15' 3000 'reminder 15 minutes'
+        Capture 'app-prayer-light'
+        SClick '#sw-remind'
+        Wait-Settings '"prayerReminderOn"\s*:\s*false' 3000 'reminder off'
+        if ((Js "document.getElementById('prayer-minutes-row').hidden") -ne $true) { throw 'the minutes row still shows' }
+        SClick '#sw-remind'
+        Wait-Settings '"prayerReminderOn"\s*:\s*true' 3000 'reminder back on'
+        $p = Kv 'debug-prayer'
+        if ($p.on -ne 'true') { throw 'the engine has no prayer times after the reload' }
+    }
+    Step 'listening: the reciter' {
+        SNav 'listen'
+        SClick '#reciter-ar-husary'
+        Wait-Settings '"quranReciter"\s*:\s*"ar.husary"' 3000 'reciter ar.husary'
+        if ((Js "document.getElementById('reciter-ar-husary').getAttribute('aria-checked')") -ne 'true') { throw 'the row is not checked' }
+        Capture 'app-listen-light'
+    }
+    Step 'general: light, dark and English' {
+        SNav 'general'
+        Capture 'app-general-light'
+        SClick '#appearance-2'
+        Wait-Settings '"appearance"\s*:\s*"dark"' 3000 'appearance dark'
+        Wait-Until { (SKv 'state').theme -eq 'dark' } 2000 'the page is not dark'
+        Start-Sleep -Milliseconds 800
+        $st = SKv 'state'
+        $shot = Screenshot 'settings-general-dark.png'
+        $px = Pixel $shot ([int]$st.winX + [int]([int]$st.winW * 0.6)) ([int]$st.winY + 12)
+        $want = [System.Drawing.ColorTranslator]::FromHtml('#18161C')
+        Write-Host "    caption pixel $($px.R),$($px.G),$($px.B)"
+        if ([math]::Abs($px.R - $want.R) -gt 6 -or [math]::Abs($px.G - $want.G) -gt 6 -or [math]::Abs($px.B - $want.B) -gt 6) { throw "the caption is not #18161C" }
+        Capture 'app-general-dark'
+        SClick '#appearance-0'
+        Wait-Settings '"appearance"\s*:\s*"system"' 3000 'appearance back to Windows'
+        SClick '#language-2'
+        Wait-Settings '"language"\s*:\s*"english"' 3000 'English'
+        Wait-Until { (SKv 'state').dir -eq 'ltr' } 2000 'the page is not left-to-right'
+        if ([double](Js "document.querySelector('.nav').getBoundingClientRect().left") -gt 5) { throw 'the sidebar is not on the left' }
+        if ((Text64 (SKv 'state').h1_64) -ne 'General') { throw 'the title is not English' }
+        Start-Sleep -Milliseconds 500
+        Screenshot 'settings-en.png' | Out-Null
+        Capture 'app-general-en'
+        SClick '#language-0'
+        Wait-Settings '"language"\s*:\s*"auto"' 3000 'language back to Auto'
+        Wait-Until { (SKv 'state').dir -eq 'rtl' } 2000 'the page is not right-to-left again'
+    }
+    Step 'privacy: clear and erase' {
+        SNav 'privacy'
+        Capture 'app-privacy-light'
+        Set-Clipboard -Value 'sahar settings test'
+        Wait-Until { (Clip-Count) -ge 1 } 5000 'nothing copied'
+        SClick '#clip-ask'
+        if ((SText '#clip .label') -ne 'أكيد؟') { throw 'no «أكيد؟»' }
+        SClick '#clip-yes'
+        Wait-Until { (Clip-Count) -eq 0 } 3000 'the clipboard history is not empty'
+        Wait-Until { (SText '#clip-status') -eq 'مسحته. الحافظة فاضية هلق.' } 2000 'no «مسحته»'
+        $old = (Get-Process -Name 'Sahar.Engine').Id
+        SClick '#erase-ask'
+        if ((SText '#erase .desc') -notmatch 'رح انسى كل شي') { throw 'the erase question is missing' }
+        SClick '#erase-yes'
+        Wait-Until { -not (Get-Process -Id $old -ErrorAction SilentlyContinue) } 8000 'the engine did not quit'
+        Wait-Until { $p = @(Get-Process -Name 'Sahar.Engine' -ErrorAction SilentlyContinue); $p.Count -eq 1 -and $p[0].Id -ne $old -and (Test-Path '\\.\pipe\sahar') } 10000 'the engine was not started again'
+        $json = Settings-Json
+        if ($json -match '"userGender"\s*:\s*"female"' -or $json -match '"prayerLatitude"') { throw "settings survived the erase: $json" }
+        Wait-Until { (SText '#erase-status') -eq 'مسحت كل شي. رح نتعرّف من جديد.' } 8000 'no «مسحت كل شي»'
+        if (-not (Test-Path (Join-Path $env:APPDATA 'Sahar\data-version'))) { throw 'the clean-start marker went too' }
+        $script:engine = Get-Process -Name 'Sahar.Engine' | Select-Object -First 1
+    }
+    Step 'hidden pages stay hidden' {
+        foreach ($page in 'sounds', 'claude') {
+            $r = SSend ('{"type":"cmd","name":"nav","args":{"page":"' + $page + '"}}')
+            if ($r.ok) { throw "the hidden page '$page' opened" }
+        }
+        $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
+        if ($n -ne 7) { throw "the sidebar has $n entries" }
+        if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
+        SNav 'about'
+        if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
+        Capture 'app-about-light'
     }
     Step 'it closes completely' {
         $app = Get-Process -Id $script:settingsApp.Id
@@ -3748,6 +3853,7 @@ function Stage-Settings {
     }
     Stop-SettingsApp
     Stop-Engine
+    Get-Process -Name 'Sahar.Engine' -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Kill() } catch { } }
     $slog = Join-Path $env:LOCALAPPDATA 'Sahar\settings.log'
     if (Test-Path $slog) { Copy-Item $slog (Join-Path $Out 'settings.log') -Force }
     if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }

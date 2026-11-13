@@ -164,6 +164,8 @@ onPush(async (msg) => {
   if (!typing) render();
 });
 darkQuery.addEventListener('change', () => { applyLook(); });
+// عام changed light/dark or the language: the whole page follows (a pure mirror for English).
+window.addEventListener('sahar-look', () => { applyLook(); render(); });
 motionQuery.addEventListener('change', () => render());
 
 await load();

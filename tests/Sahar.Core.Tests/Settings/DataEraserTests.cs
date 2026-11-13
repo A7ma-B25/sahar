@@ -26,4 +26,15 @@ public sealed class DataEraserTests : IDisposable
 
     [Fact]
     public void EraseAll_MissingFolder_IsZero() => Assert.Equal(0, DataEraser.EraseAll(Path.Combine(_dir, "nope")));
+
+    /// <summary>The clean-start marker is not her data: without it her next start would also empty the local folder
+    /// (logs and the settings app's WebView2 folder, in use while the app restarts her).</summary>
+    [Fact]
+    public void EraseAll_KeepsWhatItIsAskedToKeep()
+    {
+        File.WriteAllText(Path.Combine(_dir, CleanStart.MarkerName), "2");
+        File.WriteAllText(Path.Combine(_dir, "notes.json"), "[]");
+        Assert.Equal(1, DataEraser.EraseAll(_dir, CleanStart.MarkerName));
+        Assert.Equal([CleanStart.MarkerName], Directory.EnumerateFileSystemEntries(_dir).Select(Path.GetFileName));
+    }
 }

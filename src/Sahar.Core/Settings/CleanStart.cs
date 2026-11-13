@@ -8,7 +8,9 @@ public static class CleanStart
 {
     /// <summary>Raise this only when old data must be wiped again.</summary>
     public const int DataVersion = 2;
-    private const string Marker = "data-version";
+    /// <summary>The file marking the data folder as this version's (never erased by «امسح كل شي عني»).</summary>
+    public const string MarkerName = "data-version";
+    private const string Marker = MarkerName;
 
     public static string RoamingFolder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Sahar");
