@@ -232,3 +232,57 @@ def tile(bg, title, sub, svg, dark=False, h=262, num=None):
     return (f'<figure style="position: relative; margin: 0; height: {h}px; border-radius: 22px; background: {bg}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; overflow: hidden">{badge}'
             f'{svg}<figcaption style="font-size: 15px; font-weight: 600; color: {c1}; text-align: center; padding: 0 8px">{title}</figcaption><span style="font-size: 12px; color: {c2}; text-align: center; padding: 0 12px; line-height: 1.5">{sub}</span></figure>')
 
+
+# ---- 0.12: the settings page's living preview (plan 0.10c Task 5) — her Calm rig with ids and no SMIL; the page's
+# sahar-motion.js moves it with the engine's maths. Built from the parts above (never retyped values).
+_SMIL = re.compile(r'<(animate|animateTransform|animateMotion|set)\b[^>]*/>')
+
+def still(fragment):
+    """A fragment with its SMIL animations taken out."""
+    return _SMIL.sub('', fragment)
+
+def preview_svg():
+    c = MOODS['calm']; inner, mid = WASH_STOPS['calm']; w = WASH
+    stops = ''.join(f'<stop offset="{o}" stop-color="{col}" stop-opacity="{a}"/>' for o, col, a in zip(w['offsets'], (inner, mid, c['bot']), w['opacities']))
+    defs = ('<defs>'
+            f'<radialGradient id="pBody" cx="38%" cy="26%" r="90%"><stop offset="0" stop-color="{c["top"]}"/><stop offset="0.55" stop-color="{c["mid"]}"/><stop offset="1" stop-color="{c["bot"]}"/></radialGradient>'
+            f'<radialGradient id="pHalo"><stop offset="0" stop-color="{c["glow"]}" stop-opacity="0.75"/><stop offset="1" stop-color="{c["glow"]}" stop-opacity="0"/></radialGradient>'
+            '<linearGradient id="pLeaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C4ECC2"/><stop offset="1" stop-color="#6FB683"/></linearGradient>'
+            '<radialGradient id="pMoon" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#FFF6D8"/><stop offset="1" stop-color="#F2C86A"/></radialGradient>'
+            f'<radialGradient id="pNight" cx="{w["gradCx"]*100:g}%" cy="{w["gradCy"]*100:g}%" r="{w["gradR"]*100:g}%">{stops}</radialGradient>'
+            f'<clipPath id="pClip"><path d="{BODY}"/></clipPath>'
+            '<filter id="pBlur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>'
+            '<filter id="pGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="6"/></filter>'
+            '</defs>')
+    halo = f'<circle id="halo" cx="150" cy="150" r="120" fill="url(#pHalo)" opacity="0.58"/>'
+    shadow = '<ellipse id="shadow" cx="150" cy="268" rx="62" ry="8" fill="#1E2350" opacity="0.16"/>'
+    orbit = f'<ellipse id="orbit" cx="150" cy="150" rx="112" ry="26" fill="none" stroke="{c["glow"]}" stroke-width="1.2" stroke-dasharray="2 6" opacity="0.55" transform="rotate(-10 150 150)"/>'
+    stars = ('<g id="stars-out">' + ''.join(
+        f'<path class="star" d="{STAR_D}" fill="#FFE7A8" stroke="{STAR_EDGE}" stroke-width="{STAR_EDGE_W}" stroke-linejoin="round" '
+        f'transform="translate({x} {y}) scale({s})" data-period="{d}" data-begin="{b}"/>' for x, y, s, d, b in OUTER_STARS) + '</g>')
+    moon = ('<g id="moon"><circle r="20" fill="#FFE7A8" opacity="0.35" filter="url(#pGlow)"/><circle r="11" fill="url(#pMoon)"/>'
+            '<circle cx="-3" cy="-2" r="2.2" fill="#E8B85A" opacity="0.6"/><circle cx="4" cy="3" r="1.5" fill="#E8B85A" opacity="0.6"/>'
+            '<path d="M-4 1 q1.5 1.5 3 0 M2 1 q1.5 1.5 3 0" fill="none" stroke="#8A6A2A" stroke-width="1" stroke-linecap="round"/></g>')
+    leaf = ('<g id="leaf">'
+            '<path d="M120 60 C 120 48, 121 38, 124 28" fill="none" stroke="#5E9E70" stroke-width="4" stroke-linecap="round"/>'
+            '<path d="M123 38 C 106 40, 94 30, 92 16 C 108 14, 120 24, 123 38 Z" fill="url(#pLeaf)"/><path d="M123 38 C 112 34, 102 26, 96 18" fill="none" stroke="#8CC795" stroke-width="1.2"/>'
+            '<path d="M124 32 C 138 30, 150 20, 152 8 C 136 8, 126 18, 124 32 Z" fill="url(#pLeaf)"/>'
+            f'<circle cx="124" cy="27" r="9" fill="{c["bud"]}" opacity="0.5" filter="url(#pGlow)"/>'
+            f'<circle cx="124" cy="27" r="4" fill="{c["bud"]}"/><circle cx="123" cy="26" r="1.4" fill="#FFFFFF"/></g>')
+    night = ('<g id="night" clip-path="url(#pClip)">'
+             f'<ellipse cx="{w["cx"]}" cy="{w["cy"]}" rx="{w["rx"]}" ry="{w["ry"]}" fill="url(#pNight)"/>'
+             + ''.join(f'<path class="istar" d="{INNER_STAR_D}" fill="#FFFFFF" transform="translate({x} {y}) scale({k})" data-x="{x}" data-y="{y}" data-scale="{k}" data-period="{d}" data-begin="{b}"/>'
+                       for x, y, k, d, b in INNER_STARS)
+             + ''.join(f'<circle class="idot" cx="{x}" cy="{y}" r="{r}" fill="#FFFFFF" data-period="{d}" data-begin="{b}"/>' for x, y, r, d, b in INNER_DOTS)
+             + '</g>')
+    blush = (f'<g id="blush"><ellipse cx="78" cy="142" rx="12" ry="6.5" fill="{c["blush"]}" filter="url(#pBlur)"/>'
+             f'<ellipse cx="162" cy="142" rx="12" ry="6.5" fill="{c["blush"]}" filter="url(#pBlur)"/></g>')
+    body = (f'<g id="body"><path d="{BODY}" fill="url(#pBody)"/>{night}'
+            f'<g fill="none" stroke="{c["bot"]}" stroke-width="1.8" stroke-linecap="round" opacity="0.4"><path d="M120 62 q-9 3 -16 10"/><path d="M120 62 q9 3 16 10"/></g>'
+            '<path d="M58 104 C 70 78, 92 66, 112 64" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" opacity="0.75"/>'
+            f'{blush}'
+            f'<g id="eyes">{still(eyes("open"))}</g><g id="eyes-joy" display="none">{eyes("joy")}</g>'
+            f'<g id="mouth">{mouth("smile")}</g><g id="mouth-joy" display="none">{mouth("joy")}</g></g>')
+    char = f'<g id="float"><g transform="translate(30 30)"><g id="squash">{leaf}{body}</g></g></g>'
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300" overflow="visible">'
+            f'{defs}{halo}{shadow}{orbit}<g id="moon-back"></g>{stars}{char}<g id="moon-front">{moon}</g></svg>\n')
