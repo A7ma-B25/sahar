@@ -1,6 +1,7 @@
 // عن سحر (owner ruling 2026-11-13; mockup PSettingsAbout): who she is, her version, and who helped her.
 import { h, title, sub, section, group } from '../controls.js';
 import { mount } from '../sahar-preview.js';
+import '../strings/mind-runtime.js';
 
 let face = null;
 export function leave() {
@@ -22,6 +23,7 @@ export async function render({ S, tx, reduced }) {
     sub(tx('aboutSub')),
     group(id),
     section(tx('helpers')),
-    group(credit(tx('fontLabel'), 'Rubik · SIL Open Font License'), credit(tx('iconsLabel'), 'Phosphor · MIT')),
+    group(credit(tx('fontLabel'), 'Rubik · SIL Open Font License'), credit(tx('iconsLabel'), 'Phosphor · MIT'),
+      credit(tx('aboutRuntime'), 'llama.cpp b12207 · MIT'), credit(tx('aboutModels'), 'Gemma 4 · Jais 3 · Apache 2.0')),
   ];
 }
