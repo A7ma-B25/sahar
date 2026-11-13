@@ -55,3 +55,34 @@ internal static unsafe partial class ActNative
         return n > 0 ? new string(b, 0, n) : "";
     }
 }
+
+internal static unsafe partial class ActCom
+{
+    [LibraryImport("ole32.dll")]
+    public static partial int CoCreateInstance(Guid* clsid, nint outer, uint context, Guid* iid, nint* obj);
+
+    [LibraryImport("user32.dll", EntryPoint = "InternalGetWindowText")]
+    public static partial int InternalGetWindowText(nint hwnd, char* text, int max);
+
+    [LibraryImport("shell32.dll")]
+    public static partial int SHGetKnownFolderPath(Guid* id, uint flags, nint token, char** path);
+
+    [LibraryImport("ole32.dll")]
+    public static partial void CoTaskMemFree(void* p);
+
+    /// <summary>A window's title without sending it a message (a hung app can't block us).</summary>
+    public static string Title(nint hwnd)
+    {
+        char* b = stackalloc char[256];
+        int n = InternalGetWindowText(hwnd, b, 256);
+        return n > 0 ? new string(b, 0, n) : "";
+    }
+
+    public static string? KnownFolder(Guid id)
+    {
+        char* p;
+        if (SHGetKnownFolderPath(&id, 0, 0, &p) != 0) return null;
+        try { return new string(p); }
+        finally { CoTaskMemFree(p); }
+    }
+}

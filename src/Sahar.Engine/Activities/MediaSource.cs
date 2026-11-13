@@ -147,7 +147,7 @@ internal sealed class MediaSource
         if (state != _logged) { _logged = state; Log.Write($"music: session {state}"); }
         if (_song?.Key != _lyricsFor) { _lines = []; _lyricsFor = null; if (_lyricsView != LyricsView.Asking) _lyricsView = LyricsView.Off; }
         Show();
-        if (Playing != wasPlaying) PlayingChanged?.Invoke();
+        PlayingChanged?.Invoke();   // playing, or a new cover (her halo): the listeners check what changed
     }
 
     private void Show()

@@ -4063,7 +4063,9 @@ function Stage-Activities {
             Start-Sleep -Milliseconds 400
             foreach ($k in $kinds) {
                 Act 'activity-clear' | Out-Null
+                if ($k -eq 'time') { Act 'activity-sim' '{"kind":"weather"}' | Out-Null }   # screen time never hangs alone: the wheel brings it
                 $a = Act 'activity-sim' ('{"kind":"' + $k + '"}')
+                if ($k -eq 'time') { Act 'activity-wheel' '{"steps":"1"}' | Out-Null }
                 Start-Sleep -Milliseconds 500
                 $a = Acts
                 if ($a.tagShown -ne 'true') { throw "${k}: no tag ($($a.front))" }
@@ -4175,6 +4177,35 @@ function Stage-Activities {
         Act 'activity-sim' '{"kind":"music"}' | Out-Null
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         foreach ($s in @('SENTINELFILE', 'SENTINELCMD', 'SENTINELPROJECT', 'نسّم')) { if ($log -match $s) { throw "engine.log holds '$s'" } }
+    }
+    Step 'her expressions: the music sway, the halo from the cover, the leaf like an umbrella' {
+        $e = Kva 'activity-expr' '{"music":"true","cover":"#E07A3A","rain":"true"}'
+        if ($e.sway -ne 'music' -or $e.droop -ne '14' -or $e.halo -eq 'mood') { throw "sway $($e.sway) droop $($e.droop) halo $($e.halo)" }
+        Start-Sleep -Milliseconds 900
+        $st = State
+        $shot = Screenshot 'act-expressions.png'
+        Crop-Rect $shot ([int]$st.x - 60) ([int]$st.y - 70) ([int]$st.width + 120) ([int]$st.height + 110) (Join-Path $Out 'app-expressions-light.png')
+        $e = Kva 'activity-expr' '{}'
+        if ($e.sway -ne 'soft' -or $e.droop -ne '0' -or $e.halo -ne 'mood') { throw 'the expressions did not end' }
+    }
+    Step 'weather falls back to the prayer place (owner ruling 4): its alerts and the day on her tag' {
+        Stop-Engine
+        $wx = Join-Path $env:TEMP 'sahar-act-weather'
+        Remove-Item $wx -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $wx | Out-Null
+        '{"current":{"temperature_2m":24,"weather_code":0},"hourly":{"temperature_2m":[24,25,26],"weather_code":[0,0,1],"precipitation_probability":[0,0,10],"wind_gusts_10m":[20,65,70]},"daily":{"temperature_2m_max":[26],"temperature_2m_min":[12]}}' | Set-Content (Join-Path $wx 'forecast.json')
+        '{"hourly":{"european_aqi":[30]}}' | Set-Content (Join-Path $wx 'air.json')
+        Write-Settings '{ "helloDone": true, "weatherEnabled": true, "prayerCity": "SENTINELCITY", "prayerLatitude": 33.51, "prayerLongitude": 36.29 }'
+        Start-Engine @('--weather-stub', $wx)
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body ([int]($Work.Width * 0.5)) ([int]($Work.Height * 0.3)) | Out-Null
+        Wait-Until { (Acts).front -eq 'WeatherAlert' } 5000 'the wind alert' | Out-Null
+        $c = Send '{"type":"cmd","name":"debug-comment"}'
+        Write-Host "    bubble: $([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(((($c.error -split ' ') | Where-Object { $_ -like 'text64=*' }) -replace 'text64=',''))))"
+        Start-Sleep -Milliseconds 6500
+        if ((Acts).front -ne 'WeatherToday') { throw "after the alert: $((Acts).front)" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'SENTINELCITY') { throw 'engine.log holds the city' }
     }
     Stop-Engine
     Step 'the hook with no engine: exit 0, nothing printed, quickly' {

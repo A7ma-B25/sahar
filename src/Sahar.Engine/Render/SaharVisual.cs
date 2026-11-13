@@ -369,11 +369,25 @@ internal sealed class SaharVisual
         _dot.DrawCurrent(dc => PartRenderer.Dot(dc, Scale));
     }
 
+    /// <summary>0.13 §1.5: with music her halo takes the cover's colour (already lightened and softened); null: her mood's.</summary>
+    public void SetHaloTint(Rgba? glow)
+    {
+        if (glow == _haloTint) return;
+        _haloTint = glow;
+        var colors = Palette.Get(_mood);
+        var g = _haloTint;
+        Swap(_halo, TimeSpan.FromMilliseconds(400), dc => PartRenderer.Halo(dc, Scale, g is { } t ? colors with { Glow = t } : colors));
+    }
+
+    public Rgba? HaloTint => _haloTint;
+    private Rgba? _haloTint;
+
     private void DrawMood(TimeSpan fade)
     {
         var mood = _mood;
         var colors = Palette.Get(mood);
-        Swap(_halo, fade, dc => PartRenderer.Halo(dc, Scale, colors));
+        var tint = _haloTint;
+        Swap(_halo, fade, dc => PartRenderer.Halo(dc, Scale, tint is { } t ? colors with { Glow = t } : colors));
         Swap(_orbit, fade, dc => PartRenderer.Orbit(dc, Scale, colors));
         Swap(_moon, fade, dc => PartRenderer.Moon(dc, Scale, mood, colors));
         Swap(_bodyA, fade, dc => PartRenderer.Shapes(dc, Scale, _rig, colors, _rig.Parts["body"]));

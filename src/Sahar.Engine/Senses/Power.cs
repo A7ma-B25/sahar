@@ -14,16 +14,22 @@ internal sealed unsafe class Power
 
     public Power(Action<EventKind> post) => _post = post;
 
+    /// <summary>0.13: the battery for her card and moments — percent, charging, low now, plugged in now.</summary>
+    public event Action<int, bool, bool, bool>? Changed;
+
     /// <summary>Call at start and on WM_POWERBROADCAST.</summary>
     public void Check()
     {
         SYSTEM_POWER_STATUS s;
         if (Native.GetSystemPowerStatus(&s) == 0 || (s.BatteryFlag & NoBattery) != 0 || s.BatteryLifePercent == 255) return;
         bool charging = s.ACLineStatus == 1;
-        if (_charging == false && charging) _post(EventKind.BatteryCharging);
+        bool plugged = _charging == false && charging;
+        if (plugged) _post(EventKind.BatteryCharging);
         _charging = charging;
         bool low = !charging && s.BatteryLifePercent < LowPercent;
-        if (low && !_lowSent) _post(EventKind.BatteryLow);
+        bool lowNow = low && !_lowSent;
+        if (lowNow) _post(EventKind.BatteryLow);
         _lowSent = low;
+        Changed?.Invoke(s.BatteryLifePercent, charging, lowNow, plugged);
     }
 }

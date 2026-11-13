@@ -58,6 +58,7 @@ internal sealed class SoulLayer
         Props = _c.CreatePropertySet();
         Props.InsertScalar("t", 0f);
         Props.InsertScalar("kick", 0f);
+        Props.InsertScalar("droop", 0f);   // 0.13: rain coming — her leaf droops a little, like an umbrella
     }
 
     /// <summary>"t" (the 25.2 s clock) and "kick" (the leaf's kick after a hop).</summary>
@@ -147,7 +148,7 @@ internal sealed class SoulLayer
         StartClock();
 
         // The leaf: lag behind the float, the hop's kick, and a little counter-lean (it reads the lean container).
-        var leaf = Expr($"{F(SoulMath.LeafDeg)} * Sin(p.t * {F(w)} - {F(SoulMath.LeafLag)}) + p.kick - {F(SoulMath.LeafLeanDeg / SoulMath.LeanDeg)} * ln.RotationAngleInDegrees");
+        var leaf = Expr($"{F(SoulMath.LeafDeg)} * Sin(p.t * {F(w)} - {F(SoulMath.LeafLag)}) + p.kick + p.droop - {F(SoulMath.LeafLeanDeg / SoulMath.LeanDeg)} * ln.RotationAngleInDegrees");
         leaf.SetReferenceParameter("ln", _v.Lean);
         _v.Leaf.StartAnimation("RotationAngleInDegrees", leaf);
 
@@ -199,7 +200,35 @@ internal sealed class SoulLayer
         _v.Float.StartAnimation("Offset.Y", Expr($"{F(-SoulMath.FloatUnits * s)} * Sin(p.t * {F(w)})"));
         var sy = $"(1 + {F(SoulMath.FollowAmp)} * Cos(p.t * {F(w)}) + {F(SoulMath.BreathAmp)} * Sin(p.t * {F(b)}))";
         _v.Float.StartAnimation("Scale", Expr($"Vector3(1 / {sy}, {sy}, 1)"));
-        _v.Float.StartAnimation("RotationAngleInDegrees", Expr($"{F(SoulMath.SwayDeg)} * Sin(p.t * {F(w / 2)})"));
+        _v.Float.StartAnimation("RotationAngleInDegrees", MusicSway
+            ? Expr($"{F(MusicSwayDeg)} * Sin(p.t * {F(2 * Math.PI / MusicSwayPeriod)})")
+            : Expr($"{F(SoulMath.SwayDeg)} * Sin(p.t * {F(w / 2)})"));
+    }
+
+    /// <summary>0.13 §1.5: with music she sways gently at a calm fixed rhythm (GSMTC gives no tempo): 2.1 s, so the
+    /// 25.2 s clock holds 12 whole sways and never jumps; ±3°. Reduced motion: none.</summary>
+    public const double MusicSwayPeriod = 2.1, MusicSwayDeg = 3;
+    public bool MusicSway { get; private set; }
+
+    public void SetMusicSway(bool on)
+    {
+        if (on == MusicSway) return;
+        MusicSway = on;
+        if (!Reduced && Floating) StartFloat(_v.Scale, 2 * Math.PI / SoulMath.FloatPeriod, 2 * Math.PI / SoulMath.BreathPeriod);
+    }
+
+    /// <summary>Rain coming: the leaf droops (degrees, eased); 0 lifts it again.</summary>
+    public float Droop { get; private set; }
+
+    public void SetDroop(float degrees)
+    {
+        if (degrees == Droop) return;
+        Droop = degrees;
+        if (Reduced) { Props.InsertScalar("droop", degrees); return; }
+        var a = _c.CreateScalarKeyFrameAnimation();
+        a.InsertKeyFrame(1f, degrees);
+        a.Duration = TimeSpan.FromMilliseconds(900);
+        Props.StartAnimation("droop", a);
     }
 
     private void RestFloat()
@@ -325,7 +354,7 @@ internal sealed class SoulLayer
     }
 
     public string Describe() => FormattableString.Invariant(
-        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} happy={B(Happy)} reduced={B(Reduced)} hops={Hops} hopSets={HopSetsBuilt} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00}");
+        $"floating={B(Floating && !Reduced)} hopping={B(Hopping)} happy={B(Happy)} reduced={B(Reduced)} hops={Hops} hopSets={HopSetsBuilt} lookX={LookTarget.X:0.00} lookY={LookTarget.Y:0.00} lean={LeanTarget:0.00} sway={(MusicSway ? "music" : "soft")} droop={Droop:0}");
 
     private void StartBlink()
     {

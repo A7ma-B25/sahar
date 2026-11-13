@@ -174,6 +174,17 @@ public class ActivityStackTests
     [Fact]
     public void Empty_NoView() => Assert.Null(new ActivityStack().View(T0));
 
+    [Fact]
+    public void Empty_TrueUntilSomethingComes()
+    {
+        var s = new ActivityStack();
+        Assert.True(s.Empty);
+        s.Set(A("a", ActivityKind.Copy), T0);
+        Assert.False(s.Empty);
+        s.Remove("a");
+        Assert.True(s.Empty);
+    }
+
     [Theory]
     [InlineData(false, false, false, false, true)]
     [InlineData(true, false, false, false, false)]

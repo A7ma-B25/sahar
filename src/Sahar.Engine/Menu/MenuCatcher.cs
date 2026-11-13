@@ -19,6 +19,8 @@ internal sealed class MenuCatcher : IWindowHandler
 
     public Action<Vector2>? Clicked { get; set; }
     public Action<Vector2>? Moved { get; set; }
+    /// <summary>The left button went down (0.13: the shelf's tiles can be dragged out of the activity card).</summary>
+    public Action<Vector2>? Down { get; set; }
     public Action? Dismissed { get; set; }
     /// <summary>Another app became active: close without taking the focus back from it.</summary>
     public Action? Deactivated { get; set; }
@@ -85,6 +87,8 @@ internal sealed class MenuCatcher : IWindowHandler
         switch (msg)
         {
             case Native.WM_LBUTTONDOWN:
+                Down?.Invoke(Screen(lParam));
+                return 0;
             case Native.WM_RBUTTONDOWN:
                 return 0;
             case Native.WM_LBUTTONUP:

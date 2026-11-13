@@ -503,6 +503,35 @@ internal sealed unsafe class App
         var claudeSource = new ClaudeSource(acts, director.Post);
         var weatherSource = new WeatherSource(acts, weather, () => settings, director.Post);
         var mediaSource = new MediaSource(ui, acts, () => settings, Save, Path.Combine(Log.Folder, "lyrics"));
+        // Her expressions for activities (0.13 §1.5): music sways her and tints her halo with the cover; rain droops her
+        // leaf; back from away she hops.
+        void Expressions()
+        {
+            bool music = mediaSource.Playing && settings.ActMusic;
+            soul.SetMusicSway(music);
+            sahar.SetHaloTint(music && mediaSource.Colour is { } c ? Sahar.Core.Activities.MediaNow.HaloTint(c) : null);
+            soul.SetDroop(weatherSource.RainSoon && settings.ActWeather ? 14f : 0f);
+        }
+        mediaSource.PlayingChanged += () => Safe(Expressions);
+        weatherSource.Changed += () => Safe(Expressions);
+        acts.Welcomed += () => Safe(() => { if (!soul.Hop(1f)) soul.HappyFace(); });
+        var systemSource = new SystemSource(ui, acts, cameraMic);
+        var copySource = new CopySource(ui, acts);
+        bool sessionLocked = false;
+        tray.SessionLocked += locked => sessionLocked = locked;
+        using var screenTime = new ScreenTimeSource(ui, acts, Path.Combine(Log.Folder, "usage"), () => settings, () => idle.Away, () => sessionLocked,
+            () => media.VideoPlaying);
+        using var shelfSource = new ShelfSource(ui, acts, Path.Combine(Log.Folder, "shelf.json"), () => settings, line => speech.Say(line),
+            () => { motion.Squish(); }, clipboard);
+        {
+            // Files dropped on her land on her shelf (WM_DROPFILES on her input window; the rest goes on as before).
+            var inputHandler = input.Handler;
+            ActNative.DragAcceptFiles(input.Hwnd, 1);
+            input.Handler = (h, m, w, l) => m == ActNative.WM_DROPFILES ? Run(() => shelfSource.Drop((nint)w)) : inputHandler?.Invoke(h, m, w, l);
+            static nint? Run(Action a) { Safe(a); return 0; }
+        }
+        power.Changed += (pct, charging, low, plugged) => Safe(() => systemSource.Battery(pct, charging, low, plugged));
+        power.Check();
         tray.SessionLocked += locked => Safe(() => { if (!locked) weather.Stale(); });
         tray.SessionLocked += locked => Safe(() => acts.Locked(locked));
         host.DeviceLost += () => Safe(acts.DeviceLost);
@@ -731,7 +760,7 @@ internal sealed unsafe class App
                         break;
                     case "weather": ApplyWeather(next); break;
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
-                    case "activities": acts.SettingsChanged(); break;
+                    case "activities": acts.SettingsChanged(); Expressions(); break;
                 }
             }
             Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
@@ -831,6 +860,15 @@ internal sealed unsafe class App
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
             ActivityPipe.Register(pipe, acts, claudeSource, () => monitors);
+            // Her activity expressions on demand (0.13 §1.5): the sway, the halo's cover colour, the drooping leaf.
+            pipe.Register("activity-expr", r =>
+            {
+                bool On(string k) => r.Args?.TryGetValue(k, out var v) == true && v == "true";
+                soul.SetMusicSway(On("music"));
+                sahar.SetHaloTint(r.Args?.TryGetValue("cover", out var c) == true ? Sahar.Core.Activities.MediaNow.HaloTint(Sahar.Core.Art.Rgba.Parse(c)) : null);
+                soul.SetDroop(On("rain") ? 14f : 0f);
+                return new PipeReply(true, soul.Describe() + $" halo={sahar.HaloTint?.ToString() ?? "mood"}");
+            });
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             // Her size for pixel checks (0.11 face stage): a bigger body makes an eye tens of pixels, so two faces show.
             pipe.Register("debug-size", r =>

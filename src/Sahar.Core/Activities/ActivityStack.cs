@@ -30,6 +30,9 @@ public sealed class ActivityStack
 
     public bool Has(string id) => _items.ContainsKey(id);
 
+    /// <summary>Nothing at all (no allocation: the engine's tick checks it every second).</summary>
+    public bool Empty => _items.Count == 0;
+
     /// <summary>The user brought this one forward (a bead click, the wheel).</summary>
     public void Pick(string id, DateTimeOffset now)
     {

@@ -34,6 +34,20 @@ internal sealed class ActivityCard : IDisposable
     public RectF Rect => _card;
     public event Action<string>? Pressed;
     public event Action<bool>? OpenChanged;
+    /// <summary>A shelf tile pulled out of the card (pressed and moved more than 6 px).</summary>
+    public event Action<string>? DragOut;
+    private string? _downId;
+    private Vector2 _downAt;
+    private bool _dragged;
+
+    private void Drag(Vector2 p)
+    {
+        if (_downId is not { } id || _dragged || !id.StartsWith("tile-", StringComparison.Ordinal) || Native.GetKeyState(0x01) >= 0) return;
+        if (Vector2.Distance(p, _downAt) < 6 * _dpi) return;
+        _dragged = true;
+        _downId = null;
+        DragOut?.Invoke(id);
+    }
 
     public ActivityCard(Host.CompositionHost host, bool capturable)
     {
@@ -41,7 +55,8 @@ internal sealed class ActivityCard : IDisposable
         _catcher = new MenuCatcher(capturable)
         {
             Clicked = p => Safe(() => Click(p)),
-            Moved = p => Safe(() => Hover(p)),
+            Moved = p => Safe(() => { Hover(p); Drag(p); }),
+            Down = p => Safe(() => { _downId = Hit(p); _downAt = p; _dragged = false; }),
             Dismissed = () => Safe(Close),
             Deactivated = () => Safe(Close),
             KeyPressed = k => Safe(() => { if (k == MenuKey.Escape) Close(); }),
@@ -131,6 +146,7 @@ internal sealed class ActivityCard : IDisposable
 
     private void Click(Vector2 p)
     {
+        if (_dragged) { _dragged = false; return; }
         if (Hit(p) is { } id)
         {
             _visual.SetHover(_hits[id], true, 10);

@@ -185,6 +185,7 @@ internal sealed class ActivityHub : IDisposable
 
     private void Tick()
     {
+        if (_stack.Empty && !_shown && !_card.IsOpen && _awayUntil is null) return;
         if (_awayUntil is { } until && DateTimeOffset.Now >= until) { _awayUntil = null; _stack.Remove("away"); }
         Refresh();
         if (_card.IsOpen && _cardFor is { } id && _cards.TryGetValue(id, out var make) && make() is { } data) _card.Update(data);
@@ -195,6 +196,7 @@ internal sealed class ActivityHub : IDisposable
     /// <summary>Re-reads the stack and shows, moves or hides the tag.</summary>
     public void Refresh()
     {
+        if (_stack.Empty && !_shown && _view is null) return;   // at rest: nothing to do, nothing allocated
         var now = DateTimeOffset.Now;
         _view = _stack.View(now);
         bool show = _view is not null && ActivityStack.TagShown(_card.IsOpen, MenuOpen(), Hidden(), Dragged());
