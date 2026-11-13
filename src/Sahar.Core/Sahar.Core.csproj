@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="assets\**\*.json" LogicalName="Sahar.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="assets\mind\*.jsonl" LogicalName="Sahar.%(Filename)%(Extension)" />
     <!-- 0.14: the runtime and CI-model pins, one file for the build scripts and the app (tools/mind/pins.json). -->
     <EmbeddedResource Include="..\..\tools\mind\pins.json" LogicalName="Sahar.mind-pins.json" />
   </ItemGroup>

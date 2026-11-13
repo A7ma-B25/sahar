@@ -1,0 +1,60 @@
+{"id": "d01", "kind": "dialect", "text": "كيفك اليوم؟"}
+{"id": "d02", "kind": "dialect", "text": "شو عم تعملي هلق؟"}
+{"id": "d03", "kind": "dialect", "text": "تعبان شوي من الشغل"}
+{"id": "d04", "kind": "dialect", "text": "احكيلي نكتة صغيرة"}
+{"id": "d05", "kind": "dialect", "text": "شو رأيك نشرب قهوة؟"}
+{"id": "d06", "kind": "dialect", "text": "ما نمت منيح مبارح"}
+{"id": "d07", "kind": "dialect", "text": "شو أحسن شي بتحبيه؟"}
+{"id": "d08", "kind": "dialect", "text": "بكرا عندي امتحان"}
+{"id": "d09", "kind": "dialect", "text": "زهقت من الدراسة"}
+{"id": "d10", "kind": "dialect", "text": "شو بتنصحيني آكل؟"}
+{"id": "d11", "kind": "dialect", "text": "الجو حلو اليوم"}
+{"id": "d12", "kind": "dialect", "text": "ليش ما عم تحكي؟"}
+{"id": "d13", "kind": "dialect", "text": "وين كنتي؟"}
+{"id": "d14", "kind": "dialect", "text": "بدي ركّز ساعة"}
+{"id": "d15", "kind": "dialect", "text": "خلصت المشروع أخيراً"}
+{"id": "d16", "kind": "dialect", "text": "شو يعني صبر؟"}
+{"id": "d17", "kind": "dialect", "text": "عندي اجتماع بعد شوي"}
+{"id": "d18", "kind": "dialect", "text": "حاسس حالي ضايع"}
+{"id": "d19", "kind": "dialect", "text": "قوليلي شي يفرّحني"}
+{"id": "d20", "kind": "dialect", "text": "مين انتي؟"}
+{"id": "d21", "kind": "dialect", "text": "شو بتعرفي تعملي؟"}
+{"id": "d22", "kind": "dialect", "text": "بحب الموسيقى الهادية"}
+{"id": "d23", "kind": "dialect", "text": "صحيت بكير اليوم"}
+{"id": "d24", "kind": "dialect", "text": "بدي اطلع مشوار"}
+{"id": "d25", "kind": "dialect", "text": "نسيت شو كنت بدي قول"}
+{"id": "d26", "kind": "dialect", "text": "شكراً إلك"}
+{"id": "d27", "kind": "dialect", "text": "تصبحي على خير"}
+{"id": "d28", "kind": "dialect", "text": "صباح الخير"}
+{"id": "d29", "kind": "dialect", "text": "كيف بقدر نظّم وقتي؟"}
+{"id": "d30", "kind": "dialect", "text": "Hi Sahar, how are you?"}
+{"id": "t01", "kind": "tool", "text": "شغليلي مؤقت ربع ساعة", "tool": "timer.start", "args": {"minutes": 15}}
+{"id": "t02", "kind": "tool", "text": "مؤقت ٥ دقايق", "tool": "timer.start", "args": {"minutes": 5}}
+{"id": "t03", "kind": "tool", "text": "بدي ركز نص ساعة", "tool": "timer.start", "args": {"minutes": 30}}
+{"id": "t04", "kind": "tool", "text": "حطيلي تايمر ساعة", "tool": "timer.start", "args": {"minutes": 60}}
+{"id": "t05", "kind": "tool", "text": "timer for 10 minutes please", "tool": "timer.start", "args": {"minutes": 10}}
+{"id": "t06", "kind": "tool", "text": "وقفي المؤقت", "tool": "timer.cancel", "args": {}}
+{"id": "t07", "kind": "tool", "text": "الغي التايمر", "tool": "timer.cancel", "args": {}}
+{"id": "t08", "kind": "tool", "text": "سجليلي اشتري خبز", "tool": "note.save", "args": {"text": "اشتري خبز"}}
+{"id": "t09", "kind": "tool", "text": "اكتبي ملاحظة: اتصل بأحمد", "tool": "note.save", "args": {"text": "اتصل بأحمد"}}
+{"id": "t10", "kind": "tool", "text": "note: call mom", "tool": "note.save", "args": {"text": "call mom"}}
+{"id": "t11", "kind": "tool", "text": "اسكتي شوي", "tool": "hush.on", "args": {}}
+{"id": "t12", "kind": "tool", "text": "اسكتي ساعة", "tool": "hush.on", "args": {"minutes": 60}}
+{"id": "t13", "kind": "tool", "text": "خلص فيكي تحكي", "tool": "hush.off", "args": {}}
+{"id": "t14", "kind": "tool", "text": "يلا نلعب الحقني", "tool": "game.start", "args": {"game": "chase"}}
+{"id": "t15", "kind": "tool", "text": "بدي ألعب غميضة", "tool": "game.start", "args": {"game": "hide"}}
+{"id": "t16", "kind": "tool", "text": "نلعب بالطابة؟", "tool": "game.start", "args": {"game": "ball"}}
+{"id": "t17", "kind": "tool", "text": "لقط النجوم", "tool": "game.start", "args": {"game": "stars"}}
+{"id": "t18", "kind": "tool", "text": "ارقصيلي", "tool": "move.play", "args": {"move": "dance"}}
+{"id": "t19", "kind": "tool", "text": "تمطي شوي", "tool": "move.play", "args": {"move": "stretch"}}
+{"id": "t20", "kind": "tool", "text": "نطي", "tool": "move.play", "args": {"move": "hop"}}
+{"id": "t21", "kind": "tool", "text": "وقفي الأغنية", "tool": "music.control", "args": {"op": "pause"}}
+{"id": "t22", "kind": "tool", "text": "الأغنية الجاية", "tool": "music.control", "args": {"op": "next"}}
+{"id": "t23", "kind": "tool", "text": "رجعي الأغنية اللي قبل", "tool": "music.control", "args": {"op": "prev"}}
+{"id": "t24", "kind": "tool", "text": "أيمت الصلاة الجاية؟", "tool": "prayer.next", "args": {}}
+{"id": "t25", "kind": "tool", "text": "قديش باقي للمغرب؟", "tool": "prayer.next", "args": {}}
+{"id": "t26", "kind": "tool", "text": "روحي نامي ساعة", "tool": "sleep.hide", "args": {"minutes": 60}}
+{"id": "t27", "kind": "tool", "text": "اختفي ربع ساعة", "tool": "sleep.hide", "args": {"minutes": 15}}
+{"id": "t28", "kind": "tool", "text": "شو عم اسمع؟", "tool": "music.now", "args": {}}
+{"id": "t29", "kind": "tool", "text": "ذكريني بعد عشر دقايق اشرب مي", "tool": "reminder.set", "args": {"inMinutes": 10, "text": "اشرب مي"}}
+{"id": "t30", "kind": "tool", "text": "ذكريني بعد ساعة بالاجتماع", "tool": "reminder.set", "args": {"inMinutes": 60, "text": "الاجتماع"}}
