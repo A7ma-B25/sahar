@@ -48,6 +48,8 @@ internal sealed partial class MindEngine
     public required CameraMic CameraMic { get; init; }
     public required ActivityHub Activities { get; init; }
     public required Action<string, bool> Express { get; init; }
+    /// <summary>Time since his last key (typing hard closes the initiative gate).</summary>
+    public Func<TimeSpan> SinceKeyboard { get; init; } = () => TimeSpan.MaxValue;
 
     /// <summary>Set by stream A: sends a line to the Mind (starting it if needed); false when there is no Mind.</summary>
     public Func<MindMsg, bool> Send { get; set; } = _ => false;
