@@ -7,6 +7,9 @@ namespace Sahar.Engine.Tools;
 /// <summary>Quick note (spec §7.1): a typing bubble with the last three notes under it; Enter saves on this PC.</summary>
 internal sealed class NoteTool(TextBubble bubble, NotesStore store, Func<RectF> body, Action<string, bool> express)
 {
+    /// <summary>0.14: the store, for the Mind's note tool and its undo.</summary>
+    public NotesStore Store => store;
+
     /// <summary>Saves a note typed in her chat row («ملاحظة …»); false when it was not kept.</summary>
     public bool Save(string text)
     {

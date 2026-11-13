@@ -48,7 +48,11 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
     public const string Unreadable = "unreadable";
 
     /// <summary>The pages shown (plan Ruling 1: الأصوات and Claude Code stay hidden until they work).</summary>
-    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "general", "privacy", "about"];
+    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"];
+
+    /// <summary>0.13: the engine's exe (Claude Code's hooks run it) and Claude Code's settings file.</summary>
+    public string? EnginePath { get; init; }
+    public string ClaudeSettingsPath { get; init; } = Activities.ClaudeLinkFile.DefaultPath;
 
     private static readonly Prayer.Prayer[] Five =
         [Prayer.Prayer.Fajr, Prayer.Prayer.Dhuhr, Prayer.Prayer.Asr, Prayer.Prayer.Maghrib, Prayer.Prayer.Isha];
@@ -74,6 +78,10 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
                 "clipboard-clear" => Reply(id, "clipboard-clear", w => { }, await engine.ClearClipboardAsync()),
                 "erase" => Reply(id, "erase", w => { }, await engine.EraseAllAsync()),
                 "reset" => await Reset(id),
+                "claude-status" => Claude(id, "claude-status", null),
+                "claude-link" => Claude(id, "claude-link", j => Activities.ClaudeLink.Install(j, EnginePath!)),
+                "claude-unlink" => Claude(id, "claude-unlink", j => Activities.ClaudeLink.Remove(j, EnginePath!)),
+                "weather-prayer" => await WeatherPrayer(id),
                 _ when type.StartsWith("mind-", StringComparison.Ordinal) => await Mind(id, type, req),
                 _ => Reply(id, "error", w => Fail(w, "bad-type")),
             };
@@ -171,6 +179,29 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
             w.WriteString("name", p.Name);
             Value(w, saved!);
         }, true);
+    }
+
+    /// <summary>«اربطها / افصلها» (0.13 §2 Install): Claude Code's settings.json, backed up, ours only; the status is
+    /// read from the file, never stored.</summary>
+    private string Claude(long? id, string type, Func<string?, Activities.LinkResult>? change)
+    {
+        if (EnginePath is null) return Reply(id, type, w => Fail(w, "no-engine"));
+        if (change is not null)
+        {
+            var r = Activities.ClaudeLinkFile.Apply(ClaudeSettingsPath, change);
+            if (!r.Ok) return Reply(id, type, w => Fail(w, r.Error ?? "invalid"));
+        }
+        bool linked = Activities.ClaudeLinkFile.Linked(ClaudeSettingsPath, EnginePath);
+        return Reply(id, type, w => w.WriteBoolean("linked", linked), true);
+    }
+
+    /// <summary>The weather goes back to the prayer place (owner ruling 4): its own city is forgotten.</summary>
+    private async Task<string> WeatherPrayer(long? id)
+    {
+        if (!SettingsStore.TryUpdate(settingsPath, s => s with { WeatherCity = null, WeatherLatitude = null, WeatherLongitude = null }, out var saved))
+            return Reply(id, "weather-prayer", w => Fail(w, Unreadable));
+        await engine.ReloadAsync();
+        return Reply(id, "weather-prayer", w => Value(w, saved!), true);
     }
 
     private async Task<string> Locate(long? id)

@@ -1,0 +1,22 @@
+/* 0.14 SEAM: the parts the four Mind pages share (mockups «الإصدار 14 — الذكاء»), on the Porcelain tokens only.
+   Each stream adds its own rules in css/mind-<stream>.css. */
+.m-card { border-radius: 16px; background: var(--surface); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.m-soft { border-radius: 12px; background: var(--accent-soft); color: var(--accent-ink); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.m-item { min-block-size: 56px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.m-text { display: flex; flex-direction: column; gap: 4px; min-inline-size: 0; flex: 1 1 260px; }
+.m-meta { font-size: 13px; line-height: 1.5; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.m-icon { flex: none; inline-size: 36px; block-size: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--sunken); color: var(--ink); }
+.m-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.m-chip { display: inline-flex; align-items: center; block-size: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: var(--sunken); color: var(--text-2); }
+.m-chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
+.m-chip.moon { background: var(--sunken); color: var(--moon); }
+.m-bar { block-size: 6px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
+.m-bar > span { display: block; block-size: 100%; border-radius: 999px; background: var(--moon); transition: inline-size .3s cubic-bezier(.3, .7, .2, 1); }
+.m-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.m-stat { border-radius: 10px; background: var(--sunken); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.m-stat-num { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.m-stat-label { font-size: 12px; color: var(--text-2); }
+.m-sep { block-size: 1px; margin: 0 14px; background: var(--sunken); }
+.m-icon-btn { inline-size: 34px; block-size: 34px; border: 0; border-radius: 10px; background: transparent; color: var(--text-2); display: grid; place-items: center; }
+.m-danger-label { font-size: 15px; font-weight: 500; line-height: 1.6; color: var(--error); }
+@media (prefers-reduced-motion: reduce) { .m-bar > span { transition: none; } }
