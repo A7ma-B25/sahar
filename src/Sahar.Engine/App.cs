@@ -29,7 +29,9 @@ namespace Sahar.Engine;
 /// <summary>Wires the windows, the compositor and the pipe together and runs the message loop.</summary>
 internal sealed unsafe class App
 {
-    private const float BodyDip = 80f;   // Medium; Task 12 reads it from settings
+    /// <summary>«امسح كل شي عني» (the settings app's erase-all): set before the engine quits; Program erases her data
+    /// folder once everything is disposed (so nothing writes it back).</summary>
+    public static bool EraseRequested { get; private set; }
 
     private readonly EngineOptions _options;
     private readonly StateReporter _state = new();
@@ -60,7 +62,8 @@ internal sealed unsafe class App
             catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }
         }
         // Overlay coordinates are screen pixels (Origin 0,0): the stage shifts the composition root by the window's place.
-        var sahar = new SaharVisual(host, Rig.Load(), BodyDip, dpi / 96f) { Origin = Vector2.Zero };
+        // Her saved size (small 48, medium 80, large 120 DIP; 0.12: it was always medium before).
+        var sahar = new SaharVisual(host, Rig.Load(), (float)settings.Size, dpi / 96f) { Origin = Vector2.Zero };
         sahar.Position = StartPosition(sahar, work);
         sahar.SetInnerStars(settings.InnerStars);
         // Her soul (0.10a): float, sway, leaf lag, hop, look and blink on the compositor; her original loops beside it.
@@ -625,7 +628,109 @@ internal sealed unsafe class App
         }
         overlay.DisplayChanged += () => Safe(OnDisplayChanged);
 
+        // A new size keeps her body centre where it is (as a DPI change does in MoveTo).
+        void ApplySize(float dip)
+        {
+            var b = sahar.BodyRect;
+            var centre = new Vector2((b.Left + b.Right) / 2f, (b.Top + b.Bottom) / 2f);
+            sahar.SetSize(dip, sahar.DpiScale);
+            var units = SaharVisual.BodyUnits;
+            MoveTo(centre - new Vector2(units.X + units.Width / 2, units.Y + units.Height / 2) * sahar.Scale);
+        }
+        // The shortcut: a new one replaces the old only when it can be registered; otherwise the old one stays.
+        string TryShortcut(string? text, out string? reason)
+        {
+            var check = Shortcuts.Check(text);
+            if (!check.Ok) { reason = check.Reason; Log.Write("hotkey: invalid"); return "invalid"; }   // never the text
+            if (hotkey.Current == check.Value) { reason = null; return "ok"; }
+            var old = hotkey.Current;
+            if (hotkey.TryRegister(check.Value, out reason)) return "ok";
+            if (old is { } o) hotkey.TryRegister(o, out _);
+            return "taken";
+        }
+        // The settings app saved something (0.12): read the file and apply what changed, then she hops.
+        (IReadOnlyList<string> Applied, string Hotkey) ReloadSettings(bool askHello)
+        {
+            SaharSettings next;
+            try { next = SettingsStore.Load(SettingsStore.DefaultPath); }
+            catch (Exception e)
+            {
+                Log.Write($"settings: reload failed ({e.GetType().Name})");
+                return ([], "same");
+            }
+            var old = settings;
+            settings = next;
+            var changed = SettingsChanges.Between(old, next);
+            string hk = "same";
+            foreach (var group in changed)
+            {
+                switch (group)
+                {
+                    case "size": ApplySize((float)next.Size); break;
+                    case "activity":
+                        tray.Activity = next.Activity;
+                        lifeDirector.Level = next.Activity;
+                        break;
+                    case "address":
+                        Address.You = next.UserGender;
+                        Address.Name = next.UserName;
+                        break;
+                    case "menu": menu.Reload(next, _ => true); break;
+                    case "stars": sahar.SetInnerStars(next.InnerStars); break;
+                    case "prayer": prayer.Reload(); break;
+                    case "weather":
+                        if (next.WeatherEnabled && next.WeatherLatitude is { } lat && next.WeatherLongitude is { } lon)
+                        {
+                            weather.Use(new GeoResult(next.WeatherCity, lat, lon));
+                            tray.WeatherCity = next.WeatherCity;
+                        }
+                        else
+                        {
+                            weather.TurnOff();
+                            tray.WeatherCity = null;
+                        }
+                        break;
+                    case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
+                }
+            }
+            Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
+            if (askHello && !next.HelloDone) StartHello();   // «نبلّش من جديد»: she asks your name again (owner ruling 2026-11-13)
+            if (!soul.Hop(1f)) soul.HappyFace();
+            return (changed, hk);
+        }
+        static string B64(string text) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text));
+
         using var pipe = new PipeServer(ui);
+        // The settings app's commands (0.12): production, not test-only. Replies carry key=value data in the error slot.
+        pipe.Register("settings-reload", r =>
+        {
+            var (applied, hk) = ReloadSettings(r.Args?.TryGetValue("hello", out var h) == true && h == "ask");
+            return new PipeReply(true, $"applied={string.Join(',', applied)} hotkey={hk}", _state.Snapshot());
+        });
+        pipe.RegisterAsync("city-search", r =>
+        {
+            var text = r.Args?.TryGetValue("text64", out var t) == true ? System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)) : "";
+            return weather.FindAsync(text).ContinueWith(task =>
+            {
+                var (place, error) = task.IsCompletedSuccessfully ? task.Result : (null, "ما في نت هلق، جرّب بعدين");
+                Log.Write(place is null ? "settings: city not found" : "settings: city found");   // never the text
+                return place is { } p
+                    ? new PipeReply(true, FormattableString.Invariant($"ok=true name64={B64(p.Name ?? text.Trim())} lat={p.Latitude:R} lon={p.Longitude:R}"))
+                    : new PipeReply(true, $"ok=false reason64={B64(error ?? "ما لقيت هالمدينة")}");
+            }, TaskScheduler.Default);
+        });
+        pipe.Register("shortcut-try", r =>
+        {
+            var result = TryShortcut(r.Args?.TryGetValue("value", out var v) == true ? v : null, out var reason);
+            return new PipeReply(true, result == "ok" ? "ok=true" : $"ok=false reason64={B64(reason ?? Shortcuts.Taken)}");
+        });
+        pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true, "ok=true"); });
+        pipe.Register("erase-all", _ => new PipeReply(true, "ok=true"), afterReply: () =>
+        {
+            Log.Write("erase: all her data, then quit");
+            EraseRequested = true;
+            Native.PostQuitMessage(0);
+        });
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));
         pipe.Register("quit", _ => new PipeReply(true), afterReply: () => Native.PostQuitMessage(0));
         pipe.Register("pose", r =>
@@ -735,7 +840,6 @@ internal sealed unsafe class App
                 return new PipeReply(true, $"count={items.Count} first={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(first))}");
             });
             pipe.Register("clipboard-pick", r => new PipeReply(clipboardTool.Pick((int)Arg(r, "index"))));
-            pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true); });
             pipe.Register("debug-cameramic", r =>
             {
                 cameraMic.Simulate(r.Args?.TryGetValue("on", out var on) == true && on == "true");

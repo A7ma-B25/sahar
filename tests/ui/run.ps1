@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -3433,6 +3433,120 @@ function Stage-Face {
     [Mouse]::Move([int]($Work.Width / 2), [int]($Work.Height / 2))   # the next stage starts with the pointer where a fresh runner has it
 }
 
+# ---- 0.12: the settings app, and the engine applying settings live (plan 0.10c) ----
+$script:SettingsFile = Join-Path $env:APPDATA 'Sahar\settings.json'
+function Write-Settings([string]$json) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $script:SettingsFile) | Out-Null
+    Set-Content -Path $script:SettingsFile -Value $json -Encoding UTF8
+}
+function Settings-Json { if (Test-Path $script:SettingsFile) { Get-Content $script:SettingsFile -Raw } else { '' } }
+function Reload-Settings([string]$extra = '') {
+    $r = Send ('{"type":"cmd","name":"settings-reload"' + $extra + '}')
+    if (-not $r.ok) { throw "settings-reload not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+function Kva([string]$cmd, [string]$argsJson) {
+    $r = Send ('{"type":"cmd","name":"' + $cmd + '","args":' + $argsJson + '}')
+    if (-not $r.ok) { throw "$cmd not ok: $($r.error)" }
+    $h = @{}
+    foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $h
+}
+function Hold-Hotkey([int]$vk) {
+    # A helper process that registers Ctrl+Alt+<vk> for a minute (as the menu stage's step).
+    $marker = Join-Path $env:TEMP "sahar-hotkey-holder-$vk.txt"
+    Remove-Item $marker -ErrorAction SilentlyContinue
+    $script = Join-Path $env:TEMP "sahar-hotkey-holder-$vk.ps1"
+    Set-Content -Path $script -Encoding UTF8 -Value @"
+Add-Type -TypeDefinition 'public static class HK { [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool RegisterHotKey(System.IntPtr h, int id, uint m, uint vk); }'
+`$ok = [HK]::RegisterHotKey([System.IntPtr]::Zero, 7, 3, $vk)
+Set-Content -Path '$marker' -Value `$ok
+Start-Sleep -Seconds 60
+"@
+    $holder = Start-Process -FilePath 'pwsh' -PassThru -ArgumentList '-NoProfile', '-File', $script
+    $deadline = (Get-Date).AddSeconds(20)
+    $held = ''
+    while (-not $held -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 200
+        if (Test-Path $marker) { $held = "$(Get-Content $marker -Raw -ErrorAction SilentlyContinue)".Trim() }
+    }
+    if ($held -ne 'True') { $holder.Kill(); throw "the helper could not take the hotkey ($held)" }
+    $holder
+}
+
+function Stage-Settings {
+    $kept = Settings-Json
+    Step 'she starts at her saved size' {
+        Write-Settings '{ "helloDone": true, "size": "large" }'
+        Start-Engine
+        $dpi = [double](Info).dpi
+        $w = (State).width
+        Write-Host "    width $w at dpi $dpi"
+        if ([math]::Abs($w - 120 * $dpi) -gt 2) { throw "width $w, want $(120 * $dpi)" }
+    }
+    Step 'a reload resizes her and she hops' {
+        Pose-Body 700 400 | Out-Null
+        Start-Sleep -Milliseconds 300
+        $before = Body-Centre
+        $hops = [int](Kv 'debug-soul').hops
+        Write-Settings '{ "helloDone": true, "size": "small" }'
+        $r = Reload-Settings
+        if ($r.applied -notmatch 'size') { throw "applied: $($r.applied)" }
+        $dpi = [double](Info).dpi
+        $w = (State).width
+        if ([math]::Abs($w - 48 * $dpi) -gt 2) { throw "width $w, want $(48 * $dpi)" }
+        if ([int](Kv 'debug-soul').hops -le $hops) { throw 'she did not hop' }
+        Start-Sleep -Milliseconds 1500
+        $after = Body-Centre
+        $moved = [math]::Sqrt([math]::Pow($after[0] - $before[0], 2) + [math]::Pow($after[1] - $before[1], 2))
+        Write-Host "    body centre moved $moved px"
+        if ($moved -ge 3) { throw "her body centre moved $moved px" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'settings: reloaded \(size\)') { throw 'the log does not name the group' }
+    }
+    Step 'a reload changes the menu' {
+        Write-Settings '{ "helloDone": true, "size": "small", "menuItems": ["play"] }'
+        $r = Reload-Settings
+        if ($r.applied -ne 'menu') { throw "applied: $($r.applied)" }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        $m = Wait-Menu 'true' 1000 'card open'
+        if ((Ids $m) -ne 'play') { throw "buttons: $(Ids $m)" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 1000 'card closed' | Out-Null
+    }
+    Step 'a taken shortcut keeps the old one' {
+        $holder = Hold-Hotkey 0x4B
+        try {
+            $r = Kva 'shortcut-try' '{"value":"Ctrl+Alt+K"}'
+            if ($r.ok -ne 'false') { throw "shortcut-try: ok=$($r.ok)" }
+            if ((Text64 $r.reason64) -notmatch 'برنامج تاني') { throw "reason: $(Text64 $r.reason64)" }
+            Start-Sleep -Milliseconds 400
+            [System.Windows.Forms.SendKeys]::SendWait('^%s')
+            Wait-Menu 'true' 2000 'card open by the old Ctrl+Alt+S' | Out-Null
+            [System.Windows.Forms.SendKeys]::SendWait('^%s')
+            Wait-Menu 'false' 1000 'card closed by the shortcut' | Out-Null
+        }
+        finally { if (-not $holder.HasExited) { $holder.Kill() } }
+        $ok = Kva 'shortcut-try' '{"value":"Ctrl+Alt+K"}'
+        if ($ok.ok -ne 'true') { throw 'a free Ctrl+Alt+K was refused' }
+        $back = Kva 'shortcut-try' '{"value":"Ctrl+Alt+S"}'
+        if ($back.ok -ne 'true') { throw 'Ctrl+Alt+S could not come back' }
+    }
+    Step 'clipboard-clear empties her history' {
+        Set-Clipboard -Value 'salam sahar'
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Clip-Count) -lt 1 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        if ((Clip-Count) -lt 1) { throw 'nothing copied to clear' }
+        $r = Kv 'clipboard-clear'
+        if ($r.ok -ne 'true') { throw 'clipboard-clear' }
+        if ((Clip-Count) -ne 0) { throw "count $(Clip-Count) after clearing" }
+    }
+    Stop-Engine
+    if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -3450,6 +3564,7 @@ try {
             'games' { Stage-Games }
             'shell' { Stage-Shell }
             'face' { Stage-Face }
+            'settings' { Stage-Settings }
         }
     }
 }

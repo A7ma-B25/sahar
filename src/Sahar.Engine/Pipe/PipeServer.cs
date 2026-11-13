@@ -15,10 +15,12 @@ internal sealed class PipeServer : IDisposable
     public const string Name = "sahar";
     private const int MaxInstances = 4;
     private static readonly TimeSpan HandlerTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan AsyncTimeout = TimeSpan.FromSeconds(10);
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly DispatcherQueue _ui;
     private readonly Dictionary<string, (Func<PipeRequest, PipeReply> Handle, Action? After)> _commands = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<PipeRequest, Task<PipeReply>>> _async = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _stop = new();
     private Func<PipeRequest, PipeReply>? _onEvent;
 
@@ -27,6 +29,10 @@ internal sealed class PipeServer : IDisposable
     /// <summary>Handles <c>{"type":"cmd","name":cmd}</c>. <paramref name="afterReply"/> runs on the UI thread once the reply is sent.</summary>
     public void Register(string cmd, Func<PipeRequest, PipeReply> handler, Action? afterReply = null) =>
         _commands[cmd] = (handler, afterReply);
+
+    /// <summary>A command whose answer takes time (the settings app's city search): <paramref name="handler"/> is started
+    /// on the UI thread and awaited off it, up to 10 s.</summary>
+    public void RegisterAsync(string cmd, Func<PipeRequest, Task<PipeReply>> handler) => _async[cmd] = handler;
 
     /// <summary>Handles every <c>{"type":"event",...}</c> request.</summary>
     public void OnEvent(Func<PipeRequest, PipeReply> handler) => _onEvent = handler;
@@ -104,6 +110,8 @@ internal sealed class PipeServer : IDisposable
             return (new PipeReply(false, e.Message), null);
         }
 
+        if (request.Type == "cmd" && _async.TryGetValue(request.Name, out var slow)) return (await HandleAsync(request, slow), null);
+
         Func<PipeRequest, PipeReply>? handle;
         Action? after = null;
         if (request.Type == "event") handle = _onEvent;
@@ -129,6 +137,31 @@ internal sealed class PipeServer : IDisposable
         catch (TimeoutException)
         {
             return (new PipeReply(false, $"'{request.Name}' timed out"), null);
+        }
+    }
+
+    private async Task<PipeReply> HandleAsync(PipeRequest request, Func<PipeRequest, Task<PipeReply>> handler)
+    {
+        var started = new TaskCompletionSource<Task<PipeReply>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool queued = _ui.TryEnqueue(() =>
+        {
+            try { started.SetResult(handler(request)); }
+            catch (Exception e) { started.SetException(e); }
+        });
+        if (!queued) return new PipeReply(false, "engine is shutting down");
+        try
+        {
+            var work = await started.Task.WaitAsync(HandlerTimeout, _stop.Token);
+            return await work.WaitAsync(AsyncTimeout, _stop.Token);
+        }
+        catch (TimeoutException)
+        {
+            return new PipeReply(false, $"'{request.Name}' timed out");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Log.Write($"pipe handler '{request.Name}' failed: {e.GetType().Name}");
+            return new PipeReply(false, e.GetType().Name);
         }
     }
 

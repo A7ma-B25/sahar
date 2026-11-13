@@ -4,9 +4,10 @@ from ui_groups import ALL, plan
 
 
 class UiGroupsTests(unittest.TestCase):
-    def test_all_is_four_groups_covering_every_stage_once(self):
+    def test_all_is_five_groups_covering_every_stage_once(self):
         groups = plan("all")
-        self.assertEqual(4, len(groups))
+        self.assertEqual(5, len(groups))
+        self.assertIn({"name": "settings", "stages": "settings"}, groups)   # 0.12: the settings app has its own job
         stages = [s for g in groups for s in g["stages"].split(",")]
         self.assertEqual(sorted(ALL), sorted(stages))
         self.assertEqual(len(stages), len(set(stages)))

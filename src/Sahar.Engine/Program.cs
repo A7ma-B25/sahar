@@ -33,6 +33,8 @@ internal static class Program
         try
         {
             int code = new App(EngineOptions.Parse(args)).Run();
+            if (App.EraseRequested)
+                Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseAll(Sahar.Core.Settings.CleanStart.RoamingFolder)} items removed");
             Log.Write($"exit {code}");
             return code;
         }
