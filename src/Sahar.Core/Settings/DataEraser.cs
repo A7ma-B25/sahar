@@ -1,12 +1,19 @@
 namespace Sahar.Core.Settings;
 
 /// <summary>«امسح كل شي عني» (plan 0.10c Ruling 9): deletes everything inside her data folder (settings, notes,
-/// clipboard, life), not the folder itself. Files in use stay; never throws.</summary>
+/// clipboard, life, and since 0.14 the Mind's <c>mind\</c>), not the folder itself. Files in use stay; never throws.</summary>
 public static class DataEraser
 {
+    /// <summary>The Mind's personal folder inside her data folder (spec 0.14 §7.8).</summary>
+    public const string MindFolder = "mind";
+
     /// <summary>The number of files and folders found directly inside <paramref name="folder"/> and removed; entries
     /// named in <paramref name="keep"/> stay.</summary>
-    public static int EraseAll(string folder, params string[] keep)
+    public static int EraseAll(string folder, params string[] keep) => EraseAll(folder, null, keep);
+
+    /// <summary>As above; <c>mind\</c> is crypto-shredded first (its key, then its files), each step named to
+    /// <paramref name="deleting"/> (tests).</summary>
+    public static int EraseAll(string folder, Action<string>? deleting, params string[] keep)
     {
         List<string> entries;
         try
@@ -24,6 +31,12 @@ public static class DataEraser
             if (keep.Contains(Path.GetFileName(entry), StringComparer.OrdinalIgnoreCase)) continue;
             try
             {
+                if (Directory.Exists(entry) && string.Equals(Path.GetFileName(entry), MindFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    // The key goes first: whatever stays behind (a file in use) can never be opened again.
+                    Sahar.Core.Mind.Memory.SecretBox.Shred(entry, deleting);
+                    if (!Directory.Exists(entry)) { removed++; continue; }
+                }
                 if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
                 else File.Delete(entry);
                 removed++;
