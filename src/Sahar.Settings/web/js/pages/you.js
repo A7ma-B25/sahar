@@ -1,6 +1,6 @@
 // «شو فهمت عنك» (plan 0.14 Task B4; mockup PSettingsYou, docs/design/brain/30-*): what she proposes (صح / عدّلي / لا),
 // what he confirmed (edit, delete), how he talks (import a chat he previews first, examples he writes), what she
-// remembers and for how long, and «انسي كل شي». Every source shows its kind and date, never his words from it.
+// remembers and for how long, and «انسي كل شي». Items travel as "item" ("id" is the bridge's request id). Every source shows its kind and date, never his words from it.
 // Its words live in strings/mind-memory.js; the shared parts in mind-ui.js; its own rules in css/mind-memory.css.
 import { h, title, sub, section, group, row, segmented, switchRow, note, pri, ghost, dng, select } from '../controls.js';
 import { chip, chips, meta, hand, HAND } from '../mind-ui.js';
@@ -62,7 +62,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
 
   function editor(item, idPrefix) {
     const field = h('input', { class: 'input mm-field', id: `${idPrefix}-field`, type: 'text', value: item.text, 'aria-label': tx('youEditLabel'), autocomplete: 'off', spellcheck: 'false' });
-    const save = () => field.value.trim() && act('mind-profile-edit', { id: item.id, text: field.value.trim() });
+    const save = () => field.value.trim() && act('mind-profile-edit', { item: item.id, text: field.value.trim() });
     field.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') save();
       if (e.key === 'Escape') { state.editing = null; redraw(); }
@@ -87,9 +87,9 @@ export async function render({ S, tx, set, ask, render: rerender }) {
         chips(meta(howOften(p)), chip(tx('youConf')[CONF[p.confidence] ?? 0]), privateChip),
         p.sensitive !== 'none' ? meta(tx('youPrivateAsk')) : null,
         h('span', { class: 'btn-row' },
-          pri(tx('youYes'), () => act('mind-profile-confirm', { id: p.id }), { id: `${id}-yes` }),
+          pri(tx('youYes'), () => act('mind-profile-confirm', { item: p.id }), { id: `${id}-yes` }),
           ghost(tx('youEdit'), () => { state.editing = p.id; redraw(); }, { id: `${id}-edit` }),
-          ghost(tx('youNo'), () => act('mind-profile-reject', { id: p.id }), { id: `${id}-no` })),
+          ghost(tx('youNo'), () => act('mind-profile-reject', { item: p.id }), { id: `${id}-no` })),
       ];
     proposed.append(h('div', { class: 'm-soft', id, 'data-id': p.id }, ...body));
   });
@@ -110,7 +110,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
         h('span', { class: 'label', text: c.text }),
         chips(chip(tx('youCats')[CATS.indexOf(c.category)] ?? '', 'accent'), c.sensitive !== 'none' ? chip('🔒 ' + tx('youPrivate'), 'moon') : null, meta(metaLine))),
       h('button', { class: 'm-icon-btn hv', type: 'button', id: `${id}-edit`, 'aria-label': tx('youEdit'), onclick: () => { state.editing = c.id; redraw(); } }, hand(HAND.pencil)),
-      h('button', { class: 'm-icon-btn hv', type: 'button', id: `${id}-del`, 'aria-label': tx('youDelete'), onclick: () => act('mind-profile-delete', { id: c.id }) }, hand(HAND.trash))));
+      h('button', { class: 'm-icon-btn hv', type: 'button', id: `${id}-del`, 'aria-label': tx('youDelete'), onclick: () => act('mind-profile-delete', { item: c.id }) }, hand(HAND.trash))));
   });
 
   // ---- طريقتك بالحكي ----

@@ -76,6 +76,17 @@ public sealed class BridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task Item_IsNotTheRequestId()
+    {
+        // The page's request() puts its own numeric "id" on every message: the item travels as "item".
+        SettingsStore.Save(SettingsPath, new SaharSettings { MindLearnChats = true });
+        var a = Store().Propose("بتحب الشاي", ProfileCategory.Likes, new ItemSource(LearnSource.Chats, _now), Sensitivity.None)!;
+        var (ok, body) = await Ask("mind-profile-confirm", "{\"id\":7,\"type\":\"mind-profile-confirm\",\"item\":\"" + a.Id + "\"}");
+        Assert.True(ok);
+        Assert.Equal(1, body.GetProperty("confirmed").GetArrayLength());
+    }
+
+    [Fact]
     public async Task Profile_ConfirmRejectRoundTrip()
     {
         SettingsStore.Save(SettingsPath, new SaharSettings { MindLearnChats = true });
@@ -93,23 +104,23 @@ public sealed class BridgeTests : IDisposable
         Assert.False(first.GetProperty("sources")[0].TryGetProperty("snippet", out _));   // the page shows kind and date, never words
         Assert.True(body.GetProperty("consent").GetProperty("chats").GetBoolean());
 
-        (ok, body) = await Ask("mind-profile-confirm", J(new() { ["id"] = a.Id }));
+        (ok, body) = await Ask("mind-profile-confirm", J(new() { ["item"] = a.Id }));
         Assert.True(ok);
         Assert.Equal("style", body.GetProperty("confirmed")[0].GetProperty("category").GetString());
-        (ok, body) = await Ask("mind-profile-reject", J(new() { ["id"] = b.Id }));
+        (ok, body) = await Ask("mind-profile-reject", J(new() { ["item"] = b.Id }));
         Assert.True(ok);
         Assert.Equal(0, body.GetProperty("proposed").GetArrayLength());
         Assert.Null(store.Propose("بتحب نكتة بعد الشغل", ProfileCategory.WhatHelps, new ItemSource(LearnSource.Chats, _now), Sensitivity.None));
 
-        (ok, body) = await Ask("mind-profile-edit", J(new() { ["id"] = a.Id, ["text"] = "الصبح بتحب الجواب قصير كتير" }));
+        (ok, body) = await Ask("mind-profile-edit", J(new() { ["item"] = a.Id, ["text"] = "الصبح بتحب الجواب قصير كتير" }));
         Assert.True(ok);
         Assert.Equal("edited", body.GetProperty("confirmed")[0].GetProperty("status").GetString());
-        (ok, _) = await Ask("mind-profile-edit", J(new() { ["id"] = a.Id, ["text"] = "  " }));
+        (ok, _) = await Ask("mind-profile-edit", J(new() { ["item"] = a.Id, ["text"] = "  " }));
         Assert.False(ok);
-        (ok, body) = await Ask("mind-profile-delete", J(new() { ["id"] = a.Id }));
+        (ok, body) = await Ask("mind-profile-delete", J(new() { ["item"] = a.Id }));
         Assert.True(ok);
         Assert.Equal(0, body.GetProperty("confirmed").GetArrayLength());
-        (ok, body) = await Ask("mind-profile-confirm", J(new() { ["id"] = "nope" }));
+        (ok, body) = await Ask("mind-profile-confirm", J(new() { ["item"] = "nope" }));
         Assert.False(ok);
         Assert.Equal("not-found", body.GetProperty("error").GetString());
     }
@@ -173,7 +184,7 @@ public sealed class BridgeTests : IDisposable
         (ok, body) = await Ask("mind-export");
         Assert.True(ok);
         Assert.Contains("سامر", body.GetProperty("json").GetString());
-        (ok, body) = await Ask("mind-memory-delete", J(new() { ["id"] = id }));
+        (ok, body) = await Ask("mind-memory-delete", J(new() { ["item"] = id }));
         Assert.True(ok);
         Assert.Equal(0, body.GetProperty("memories").GetArrayLength());
         (ok, _) = await Ask("mind-memory-add", J(new() { ["text"] = "", ["kind"] = "fact" }));

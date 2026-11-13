@@ -33,7 +33,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
         t.Add("mind-memory-delete", r =>
         {
             var store = Store();
-            return Task.FromResult(store.DeleteMemory(Str(r, "id") ?? "")
+            return Task.FromResult(store.DeleteMemory(Str(r, "item") ?? "")
                 ? new MindBridgeReply(true, w => Memories(w, store, null)) : MindBridgeReply.Fail("not-found"));
         });
         t.Add("mind-style", _ => Ok(w => Style(w, Store().Style())));
@@ -58,7 +58,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
 
     private Task<MindBridgeReply> Item(JsonElement r, Func<MindStore, string, string?, bool> change, bool needsText = false)
     {
-        var id = Str(r, "id");
+        var id = Str(r, "item");   // never "id": that is the page's request id
         var text = Str(r, "text");
         if (string.IsNullOrEmpty(id)) return Fail("bad-request");
         if (needsText && string.IsNullOrWhiteSpace(text)) return Fail("bad-text");

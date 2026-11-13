@@ -94,7 +94,7 @@ function Stage-MindMemory {
             if (-not (Exists '#prop-0') -or -not (Exists '#prop-1')) { throw 'two proposals are not shown' }
             if (-not (Exists '#conf-2')) { throw 'three confirmed items are not shown' }
             if ((SText '#prop-0') -notmatch 'نص نص') { throw "confidence chip: $(SText '#prop-0')" }
-            Capture "app-you-$theme"
+            Capture "mind-you-$theme"   # the settings stage tour writes app-you-* (empty store) later
         }
         SOk 'emulate' '{"theme":""}'
     }
@@ -138,5 +138,10 @@ function Stage-MindMemory {
             }
         }
         if (-not ((Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw) -match 'mind: forgot everything')) { throw 'no forget line in the log' }
+    }
+    Step 'mind (memory): leave nothing running for the next stage' {
+        Stop-SettingsApp
+        Stop-Engine
+        Wait-Until { -not (Test-Path '\\.\pipe\sahar') } 5000 'the engine pipe is still there'
     }
 }
