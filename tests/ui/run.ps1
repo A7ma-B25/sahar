@@ -3529,11 +3529,14 @@ function Stage-Install {
 
     Step 'silent install: files, Start-menu shortcut, uninstall entry, start with Windows, and she starts' {
         Run-Setup -Name 'setup-install'
+        $script:installed = Wait-Sahar 'after the install'
         foreach ($f in 'Sahar.Engine.exe', 'README-test-build.txt', 'unins000.exe') {
             if (-not (Test-Path (Join-Path $InstallDir $f))) { throw "$f not in $InstallDir" }
         }
         if (-not (Test-Path -LiteralPath $StartMenuLink)) { throw "no Start-menu shortcut $StartMenuLink" }
-        $target = (New-Object -ComObject WScript.Shell).CreateShortcut($StartMenuLink).TargetPath
+        # Shell.Application reads the link as Unicode (WScript.Shell's CreateShortcut gives '' for an Arabic name).
+        $folder = (New-Object -ComObject Shell.Application).NameSpace((Split-Path $StartMenuLink))
+        $target = $folder.ParseName((Split-Path $StartMenuLink -Leaf)).GetLink.Path
         if ($target -ne $InstalledExe) { throw "the shortcut points at '$target'" }
         $u = Get-ItemProperty $UninstallKey
         Write-Host "    uninstall entry: $($u.DisplayName) $($u.DisplayVersion) at $($u.InstallLocation)"
@@ -3541,12 +3544,11 @@ function Stage-Install {
         if (-not $u.UninstallString) { throw 'no UninstallString' }
         $run = (Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar
         if ($run -ne "`"$InstalledExe`"") { throw "Run value is '$run'" }
-        $script:installed = Wait-Sahar 'after the install'
         Assert-DataKept 'after the install'
     }
 
     Step 'upgrade over a running Sahar: she is asked to quit (no kill), comes back, settings and log kept' {
-        $old = $script:installed.Id
+        $old = (Wait-Sahar 'before the upgrade').Id
         $before = Log-Lines
         Run-Setup -Name 'setup-upgrade'
         Wait-Gone $old 5 'the old Sahar'
