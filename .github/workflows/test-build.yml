@@ -40,7 +40,7 @@ jobs:
   windows:
     needs: core
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40   # every stage in one job (~21 min before the install stage) + the installer
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

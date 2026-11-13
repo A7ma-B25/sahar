@@ -3680,6 +3680,27 @@ function Stage-Install {
         if (@(Get-Content $EngineLog -Encoding utf8)[-1] -notmatch ' exit 0$') { throw 'her last run did not end with exit 0' }
     }
 
+    Step 'the wizard speaks Arabic (installer-ar.png for the owner)' {
+        $p = Start-Process -FilePath $script:setupExe -PassThru
+        try {
+            $deadline = (Get-Date).AddSeconds(30)
+            $title = ''
+            while ((Get-Date) -lt $deadline -and $title -notmatch 'تثبيت') {
+                Start-Sleep -Milliseconds 500
+                $title = (Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' -and $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle
+            }
+            Write-Host "    wizard title: $title"
+            Start-Sleep -Seconds 1
+            Screenshot 'installer-ar.png' | Out-Null
+            if ($title -notmatch 'تثبيت - سَحَر · Sahar') { throw "the wizard's title is '$title', not Arabic" }
+        }
+        finally {
+            # Nothing is installed on its first page: the harness closes it (setup and its wizard process).
+            Get-Process | Where-Object { $_.ProcessName -like 'Sahar-Setup*' } | ForEach-Object { $_.Kill() }
+        }
+        if (Test-Path $InstallDir) { throw 'the wizard installed something before Next' }
+    }
+
     # Leave the runner as the stage found it.
     if ($script:server -and -not $script:server.HasExited) { $script:server.Kill() }
     Sahars | ForEach-Object { $_.Kill() }
