@@ -124,6 +124,9 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
                 var dir = options.SnapshotDir ?? Path.GetTempPath();
                 Directory.CreateDirectory(dir);
                 window.ForceFront();
+                // A screenshot waits for the next frame, and a still page paints none (CI 43483915569: the animated
+                // سحورة and الصلاة pages captured, the still ones timed out): an invisible dot asks for one frame.
+                await Eval("(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;background:rgba(0,0,0,.004);pointer-events:none'; document.body.append(d); setTimeout(() => d.remove(), 200); return true; })()");
                 // DevTools' screenshot forces a frame even when the window is behind another (CapturePreview waits for
                 // the next painted frame, which never comes while the window is covered: CI run 43480934329).
                 var json = await web.View!.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", """{"format":"png"}""");

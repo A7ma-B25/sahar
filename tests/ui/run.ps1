@@ -3560,7 +3560,24 @@ function Wait-Settings([string]$pattern, [int]$ms, [string]$what) {
 }
 # A field of settings.json, parsed (the file escapes '+' and Arabic as \uXXXX).
 function Setting([string]$name) { try { (Settings-Json | ConvertFrom-Json).$name } catch { $null } }
-function Capture([string]$name) { SOk 'capture' ('{"name":"' + $name + '"}') }
+# The page as the owner sees it (app-*.png): WebView2's own picture; if it does not come, the window cut from the screen.
+function Capture([string]$name) {
+    try { SOk 'capture' ('{"name":"' + $name + '"}'); return }
+    catch { Write-Host "    capture through WebView2 failed ($_); cutting the window from the screen" }
+    SOk 'front'
+    Start-Sleep -Milliseconds 400
+    $st = SKv 'state'
+    $full = Screenshot "$name-screen.png"
+    $src = [System.Drawing.Bitmap]::new($full)
+    try {
+        $x = [math]::Max(0, [int]$st.winX + 8); $y = [math]::Max(0, [int]$st.winY); $w = [math]::Min([int]$st.winW - 16, $src.Width - $x); $h = [math]::Min([int]$st.winH - 8, $src.Height - $y)
+        $dst = $src.Clone([System.Drawing.Rectangle]::new($x, $y, $w, $h), $src.PixelFormat)
+        $dst.Save((Join-Path $Out "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+        $dst.Dispose()
+    }
+    finally { $src.Dispose() }
+    Remove-Item $full -ErrorAction SilentlyContinue
+}
 
 function Stop-SettingsApp {
     if ($script:settingsApp -and -not $script:settingsApp.HasExited) {
