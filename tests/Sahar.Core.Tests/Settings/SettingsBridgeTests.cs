@@ -65,7 +65,7 @@ public sealed class SettingsBridgeTests : IDisposable
         var caps = r.GetProperty("caps");
         Assert.True(caps.GetProperty("engine").GetBoolean());
         Assert.False(caps.GetProperty("broken").GetBoolean());
-        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "general", "privacy", "about"],
+        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"],
             caps.GetProperty("pages").EnumerateArray().Select(p => p.GetString()!));
         Assert.Equal(6, caps.GetProperty("reciters").GetArrayLength());
         Assert.Equal("ar.alafasy", caps.GetProperty("reciters")[0].GetProperty("id").GetString());
@@ -280,5 +280,68 @@ public sealed class SettingsBridgeTests : IDisposable
         var r = await Ask("not json");
         Assert.False(r.GetProperty("ok").GetBoolean());
         Assert.Equal("bad-request", r.GetProperty("error").GetString());
+    }
+
+    // ---- 0.13 «النشاطات» ----
+
+    private SettingsBridge ActBridge() => new(PathOf, _engine, _locator, () => _now)
+    {
+        EnginePath = @"C:\Apps\Sahar\Sahar.Engine.exe",
+        ClaudeSettingsPath = Path.Combine(_dir, ".claude", "settings.json"),
+    };
+
+    private async Task<JsonElement> ActAsk(string json) => JsonDocument.Parse(await ActBridge().HandleAsync(json)).RootElement.Clone();
+
+    [Fact]
+    public void Pages_ActivitiesAfterListening() =>
+        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"], SettingsBridge.Pages);   // 0.14: her brain's four after the menu
+
+    [Fact]
+    public async Task Claude_LinkStatusUnlink()
+    {
+        var status = await ActAsk("""{"id":1,"type":"claude-status"}""");
+        Assert.False(status.GetProperty("linked").GetBoolean());
+        var linked = await ActAsk("""{"id":2,"type":"claude-link"}""");
+        Assert.True(linked.GetProperty("ok").GetBoolean());
+        Assert.True(linked.GetProperty("linked").GetBoolean());
+        Assert.True(ClaudeLinkFileLinked());
+        var unlinked = await ActAsk("""{"id":3,"type":"claude-unlink"}""");
+        Assert.True(unlinked.GetProperty("ok").GetBoolean());
+        Assert.False(unlinked.GetProperty("linked").GetBoolean());
+        Assert.False(ClaudeLinkFileLinked());
+    }
+
+    private bool ClaudeLinkFileLinked() =>
+        Sahar.Core.Activities.ClaudeLinkFile.Linked(Path.Combine(_dir, ".claude", "settings.json"), @"C:\Apps\Sahar\Sahar.Engine.exe");
+
+    [Fact]
+    public async Task Claude_Link_UnreadableFile_Refused()
+    {
+        Directory.CreateDirectory(Path.Combine(_dir, ".claude"));
+        File.WriteAllText(Path.Combine(_dir, ".claude", "settings.json"), "{oops");
+        var r = await ActAsk("""{"id":1,"type":"claude-link"}""");
+        Assert.False(r.GetProperty("ok").GetBoolean());
+        Assert.Equal("invalid", r.GetProperty("error").GetString());
+        Assert.Equal("{oops", File.ReadAllText(Path.Combine(_dir, ".claude", "settings.json")));
+    }
+
+    [Fact]
+    public async Task Claude_NoEnginePath_Refused()
+    {
+        var r = JsonDocument.Parse(await Bridge().HandleAsync("""{"id":1,"type":"claude-link"}""")).RootElement;
+        Assert.False(r.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task WeatherPrayer_ClearsTheWeathersOwnCity()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { WeatherCity = "حلب", WeatherLatitude = 36.2, WeatherLongitude = 37.1, WeatherEnabled = true });
+        var r = await ActAsk("""{"id":1,"type":"weather-prayer"}""");
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        var s = SettingsStore.Load(PathOf);
+        Assert.Null(s.WeatherCity);
+        Assert.Null(s.WeatherLatitude);
+        Assert.True(s.WeatherEnabled);
+        Assert.True(_engine.Reloads > 0);
     }
 }

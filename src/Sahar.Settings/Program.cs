@@ -35,7 +35,11 @@ internal static class Program
             SynchronizationContext.SetSynchronizationContext(ui);
             var window = new HostWindow(ui);
             var engine = new EngineLink(options.TestMode);
-            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now);
+            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now)
+            {
+                // 0.13: Claude Code's hooks run the engine next to this app («اربطها»); only when it is really there.
+                EnginePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Sahar.Engine.exe")) is var exe && File.Exists(exe) ? exe : null,
+            };
             var web = new WebHost(window, options, bridge);
             window.CloseRequested += () =>
             {

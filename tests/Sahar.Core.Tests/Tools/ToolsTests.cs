@@ -104,6 +104,18 @@ public class NotesStoreTests : IDisposable
     }
 
     [Fact]
+    public void NotesStore_Remove_NewestExactMatch_Saved()
+    {
+        var s = new NotesStore(PathFor);
+        s.Add("خبز", T0);
+        s.Add("خبز", T0.AddMinutes(1));
+        Assert.False(s.Remove("خبز", T0.AddMinutes(5)));   // not that time
+        Assert.True(s.Remove("خبز", T0.AddMinutes(1)));
+        Assert.Equal([T0], new NotesStore(PathFor).Latest(5).Select(n => n.At));
+        Assert.False(s.Remove("خبز", T0.AddMinutes(1)));   // already gone
+    }
+
+    [Fact]
     public void NotesStore_SurvivesRestart()
     {
         new NotesStore(PathFor).Add("اشتري خبز", T0);

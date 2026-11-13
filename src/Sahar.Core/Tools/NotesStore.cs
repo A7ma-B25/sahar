@@ -54,6 +54,18 @@ public sealed class NotesStore
         return true;
     }
 
+    /// <summary>0.14 (undo «امسحيها»): removes the newest note with exactly this text and time; true when one went.
+    /// Never touches an unreadable file.</summary>
+    public bool Remove(string text, DateTimeOffset at)
+    {
+        if (_unread) return false;
+        int i = _notes.FindLastIndex(n => n.Text == text && n.At == at);
+        if (i < 0) return false;
+        _notes.RemoveAt(i);
+        Save();
+        return true;
+    }
+
     /// <summary>One line: every run of whitespace becomes one space; trimmed; cut at 500 characters (not inside a surrogate pair).</summary>
     private static string Clean(string text)
     {

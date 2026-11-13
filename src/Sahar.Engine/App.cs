@@ -817,7 +817,7 @@ internal sealed unsafe class App
             Ui = ui, Pipe = pipe, TestMode = _options.TestMode, Settings = () => settings, Save = Save, Menu = menu, Speech = speech,
             Bubble = bubble, ListBubble = listBubble, Timer = timerTool, Dnd = dndTool, Notes = notes, Director = director,
             Games = games, Motion = motion, Soul = soul, Prayer = prayer, Music = music, Quran = quran, Media = media, Idle = idle,
-            CameraMic = cameraMic, Activities = acts, Express = Express,
+            CameraMic = cameraMic, Activities = acts, Express = Express, SinceKeyboard = () => tray.SinceKeyboard,
         };
         mind.Attach();
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));
