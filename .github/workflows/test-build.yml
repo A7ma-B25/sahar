@@ -53,6 +53,15 @@ jobs:
         run: npm i -g agent-desktop@1.2.0
       - name: Publish engine (Native AOT)
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+      - name: Version
+        shell: pwsh
+        run: |
+          $v = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+          "SAHAR_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+      # Sahar-Setup-<version>.exe and its .sha256 (the in-app update checks it): pinned official Inno Setup.
+      - name: Installer
+        shell: pwsh
+        run: ./packaging/installer/build.ps1 -Version $env:SAHAR_VERSION
       # Publishing a commit that already passed every UI stage (a successful "ui-test all" run on the same SHA):
       # only smoke and gallery run here (the release carries gallery.png). Otherwise every stage, as before.
       - name: A full UI pass on this commit?
@@ -74,11 +83,6 @@ jobs:
         if: steps.prior.outputs.run != ''
         shell: pwsh
         run: ./tests/ui/run.ps1 -Stage smoke,gallery
-      - name: Version
-        shell: pwsh
-        run: |
-          $v = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
-          "SAHAR_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Package
         shell: pwsh
         run: |
@@ -95,6 +99,12 @@ jobs:
           name: Sahar-${{ env.SAHAR_VERSION }}-test-win-x64
           path: artifacts/Sahar-${{ env.SAHAR_VERSION }}-test-win-x64.zip
       - uses: actions/upload-artifact@v4
+        with:
+          name: Sahar-Setup-${{ env.SAHAR_VERSION }}
+          path: |
+            artifacts/installer/Sahar-Setup-${{ env.SAHAR_VERSION }}.exe
+            artifacts/installer/Sahar-Setup-${{ env.SAHAR_VERSION }}.exe.sha256
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ui
@@ -106,6 +116,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete test-build --yes --cleanup-tag 2>$null
-          gh release create test-build "artifacts/Sahar-$env:SAHAR_VERSION-test-win-x64.zip" artifacts/ui/gallery.png --prerelease `
+          gh release create test-build "artifacts/Sahar-$env:SAHAR_VERSION-test-win-x64.zip" "artifacts/installer/Sahar-Setup-$env:SAHAR_VERSION.exe" "artifacts/installer/Sahar-Setup-$env:SAHAR_VERSION.exe.sha256" artifacts/ui/gallery.png --prerelease `
             --target $env:GITHUB_SHA --title "Sahar $env:SAHAR_VERSION test build" `
-            --notes "Portable test build ($env:GITHUB_SHA). Download the zip, extract it, run Sahar.Engine.exe. See README-test-build.txt inside."
+            --notes "Test build ($env:GITHUB_SHA). Install: download Sahar-Setup-$env:SAHAR_VERSION.exe and run it (SmartScreen: More info, Run anyway). Portable: the zip, extract, run Sahar.Engine.exe. The .sha256 is what Sahar's own update check verifies. See README-test-build.txt."
