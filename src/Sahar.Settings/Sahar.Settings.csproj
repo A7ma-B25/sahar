@@ -24,6 +24,9 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="web\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- Rubik (OFL), the engine's own static cuts 400/500/600: one copy in the repo, served from web\fonts. -->
+    <Content Include="..\Sahar.Engine\assets\fonts\Rubik-*.ttf;..\Sahar.Engine\assets\fonts\OFL.txt" Link="web\fonts\%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
   <!-- Core API only (no WinForms/WPF): the package references its WinForms and WPF wrappers; drop them. -->
   <Target Name="SaharDropWebView2Wrappers" BeforeTargets="ResolveAssemblyReferences">

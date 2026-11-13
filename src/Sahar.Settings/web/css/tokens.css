@@ -1,0 +1,45 @@
+/* Porcelain tokens (spec §7) — must equal Sahar.Core.Design.Tokens (TokensCssTests). Opaque and matte: only Sahar
+   carries colour. */
+:root[data-theme=light] {
+  --bg: #F5F4F8;
+  --surface: #FFFFFF;
+  --menu: #FFFFFF;
+  --sunken: #ECEAF2;
+  --hover: #F1EFF6;
+  --pressed: #E8E5F0;
+  --ink: #24212B;
+  --text-2: #5C5867;
+  --text-3: #6B6776;
+  --boundary: #8F8A9B;
+  --accent: #5B47C4;
+  --on-accent: #FFFFFF;
+  --accent-soft: #ECE7FF;
+  --accent-ink: #4636A6;
+  --moon: #7A5A1C;
+  --leaf: #2F7A4A;
+  --error: #C2363B;
+  --warn: #9A5418;
+  --e1: 0 1px 2px rgba(0, 0, 0, .08), 0 8px 24px rgba(0, 0, 0, .12);
+}
+
+:root[data-theme=dark] {
+  --bg: #18161C;
+  --surface: #221F27;
+  --menu: #2A2630;
+  --sunken: #1C1A20;
+  --hover: #353140;
+  --pressed: #3D3848;
+  --ink: #EFECF4;
+  --text-2: #B8B3C2;
+  --text-3: #A29DAD;
+  --boundary: #7D7889;
+  --accent: #B6A9FF;
+  --on-accent: #1C1733;
+  --accent-soft: #3A3354;
+  --accent-ink: #D2C9FF;
+  --moon: #F2C86A;
+  --leaf: #8ED3A0;
+  --error: #FF8A8D;
+  --warn: #F2A06E;
+  --e1: 0 1px 2px rgba(0, 0, 0, .45), 0 12px 32px rgba(0, 0, 0, .5);
+}
