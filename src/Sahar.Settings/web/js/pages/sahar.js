@@ -98,7 +98,7 @@ export async function render({ S, tx, set, ask, render: rerender, reduced }) {
     }
     const r = await save('weatherEnabled', on, on ? tx('sayOn') : tx('sayOff'));
     if (!r.ok) btn.set(!on);
-    else cityRow.hidden = !on;
+    else cityRow.hidden = true;   // saved: she knows the city (on) or does not need it (off)
   }, 'weatherEnabled');
   weather.id = 'sw-weather';
   cityInput.addEventListener('keydown', async (e) => {
