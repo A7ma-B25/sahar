@@ -151,10 +151,13 @@ window.sahar = {
       return a.id || `${a.tagName.toLowerCase()}:${(a.textContent || a.getAttribute('aria-label') || '').trim().slice(0, 40)}`;
     })(),
     broken: S.caps.broken ? 'true' : 'false',
+    visible: document.visibilityState,
   }),
   settings: () => S.value,
   /** What the window does when it comes to the front: ask the host again (the engine may have saved meanwhile). */
   reload: async () => { await load(); applyLook(); await render(); },
+  /** Light/dark and motion asked again (after the test pipe emulates them: no change event comes then). */
+  relook: async () => { applyLook(); await render(); },
 };
 
 onPush(async (msg) => {

@@ -91,7 +91,7 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
                 using var doc = JsonDocument.Parse(JsonSerializer.Deserialize(json, TestJson.Default.String) ?? "{}");
                 var o = doc.RootElement;
                 string S(string k) => o.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()! : "";
-                return new PipeReply(true, head + $" page={S("page")} theme={S("theme")} dir={S("dir")} title64={B64(S("title"))} h1_64={B64(S("h1"))} focus64={B64(S("focus"))} broken={S("broken")}");
+                return new PipeReply(true, head + $" page={S("page")} theme={S("theme")} dir={S("dir")} title64={B64(S("title"))} h1_64={B64(S("h1"))} focus64={B64(S("focus"))} broken={S("broken")} visible={S("visible")}");
             }
             case "nav":
                 return new PipeReply(await Eval($"window.sahar.nav({Js(Arg(r, "page"))})") == "true");
@@ -137,10 +137,11 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
             case "emulate":
             {
                 var features = new List<MediaFeature>();
-                if (r.Args?.TryGetValue("reducedMotion", out var rm) == true) features.Add(new("prefers-reduced-motion", rm == "true" ? "reduce" : ""));
+                if (r.Args?.TryGetValue("reducedMotion", out var rm) == true) features.Add(new("prefers-reduced-motion", rm switch { "true" => "reduce", "false" => "no-preference", _ => "" }));   // the CI runner has Windows animations off
                 if (r.Args?.TryGetValue("theme", out var th) == true) features.Add(new("prefers-color-scheme", th is "dark" or "light" ? th : ""));
                 await web.View!.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia",
                     JsonSerializer.Serialize(new EmulatedMedia(features), TestJson.Default.EmulatedMedia));
+                await Eval("window.sahar && window.sahar.relook ? (window.sahar.relook(), true) : false");
                 return new PipeReply(true);
             }
             case "eval":

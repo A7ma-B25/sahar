@@ -83,9 +83,22 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
         view.Navigate(Origin + "index.html");
     }
 
+    /// <summary>The window is on screen now: the page is told it is visible (it was made while the window was hidden).</summary>
+    public void Shown()
+    {
+        if (_controller is null) return;
+        _controller.IsVisible = false;
+        _controller.IsVisible = true;
+        Fit();
+    }
+
     private void Fit()
     {
         if (_controller is null) return;
+        // Minimised: the page rests (no frames, no timers); restored: it lives again.
+        bool minimised = Native.IsIconic(window.Hwnd);
+        if (_controller.IsVisible == minimised) _controller.IsVisible = !minimised;
+        if (minimised) return;
         var (w, h) = window.ClientSize;
         _controller.Bounds = new System.Drawing.Rectangle(0, 0, w, h);
     }

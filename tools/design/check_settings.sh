@@ -15,5 +15,12 @@ check() {
   if [ "$(printf '%s' "$out" | tr -d ' \n')" != "[]" ]; then fail=1; fi
 }
 check "$ROOT/src/Sahar.Settings/web"
-if [ $# -ge 1 ]; then check "$1"; fi
+if [ $# -ge 1 ]; then
+  # The snapshots link css/*.css relatively: check them beside the page's own stylesheets.
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  cp "$1"/*.html "$tmp"/
+  cp -r "$ROOT/src/Sahar.Settings/web/css" "$tmp"/css
+  check "$tmp"
+fi
 exit $fail
