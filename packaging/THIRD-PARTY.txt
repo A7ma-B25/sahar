@@ -1,0 +1,22 @@
+Sahar ships, unchanged, the llama.cpp server for running her brain on your PC:
+
+  llama.cpp (ggml-org/llama.cpp), release b12207, Windows Vulkan build — in runtime\vulkan
+  MIT License, Copyright (c) 2023-2026 The ggml authors
+  https://github.com/ggml-org/llama.cpp (see LICENSE there)
+  Downloaded from the official release and checked: SHA-256 c8c84eff8b7eae83602d3cf2dd6defe16c47d1011b4a2514905c1817e3a909ca
+  (equal to the digest GitHub publishes for the asset).
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+  documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright
+  notice and this permission notice shall be included in all copies or substantial portions of the Software.
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+  WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+The models are not in this zip: you download the one you choose from Hugging Face inside Sahar, each checked by its
+SHA-256. The recommended ones are Apache-2.0: Gemma 4 E4B / E2B (Google; GGUF by unsloth) and Jais 3 (Inception/MBZUAI;
+GGUF by IFM). The optional CUDA pack (llama.cpp b12207 CUDA 12.4 build + NVIDIA's cudart DLLs, from the same
+official release) is downloaded only when you choose it.

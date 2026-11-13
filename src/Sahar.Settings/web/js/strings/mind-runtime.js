@@ -115,6 +115,8 @@ addStrings({
     benchRunning: 'عم جرّبه… بياخد شي دقيقتين.',
     chatOnlyNote: 'ما بيعرف ينفّذ أوامر: بحكي فيه بس، والأوامر («مؤقت ٥») بتضل متل قبل.',
     keepMemoryNote: 'ذاكرتي وشو فهمت عنك بيضلّوا متل ما هنّي لما تغيّر النموذج.',
+    aboutRuntime: 'عقلي بيشتغل بـ',
+    aboutModels: 'النماذج المقترحة',
   },
   en: {
     brainSub: 'How I think, and what I do by myself. All of it inside your PC.',
@@ -229,5 +231,7 @@ addStrings({
     benchRunning: 'Trying it… takes about two minutes.',
     chatOnlyNote: 'It cannot run commands: I only chat with it, and commands (“timer 5”) work as before.',
     keepMemoryNote: 'My memory and what I understood about you stay the same when you change the model.',
+    aboutRuntime: 'My brain runs on',
+    aboutModels: 'Recommended models',
   },
 });
