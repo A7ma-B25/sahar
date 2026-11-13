@@ -137,7 +137,7 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
             case "emulate":
             {
                 var features = new List<MediaFeature>();
-                if (r.Args?.TryGetValue("reducedMotion", out var rm) == true) features.Add(new("prefers-reduced-motion", rm == "true" ? "reduce" : ""));
+                if (r.Args?.TryGetValue("reducedMotion", out var rm) == true) features.Add(new("prefers-reduced-motion", rm switch { "true" => "reduce", "false" => "no-preference", _ => "" }));   // the CI runner has Windows animations off
                 if (r.Args?.TryGetValue("theme", out var th) == true) features.Add(new("prefers-color-scheme", th is "dark" or "light" ? th : ""));
                 await web.View!.CallDevToolsProtocolMethodAsync("Emulation.setEmulatedMedia",
                     JsonSerializer.Serialize(new EmulatedMedia(features), TestJson.Default.EmulatedMedia));
