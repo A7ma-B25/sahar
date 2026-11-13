@@ -32,3 +32,14 @@ test('i18n: the owner rulings (2026-11-13) — «عن سحر», «نبلّش م�
   assert.equal(strings.ar.resetConfirmTitle, 'أكيد؟');
   assert.equal(strings.ar.resetNo, 'لا');
 });
+
+test('i18n: no key is written twice (a later one would silently win)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../src/Sahar.Settings/web/js/i18n.js', import.meta.url), 'utf8');
+  for (const [from, to] of [['  ar: {', '  en: {'], ['  en: {', null]]) {
+    const block = src.slice(src.indexOf(from), to ? src.indexOf(to) : undefined);
+    const keys = [...block.matchAll(/^    ([A-Za-z0-9_]+):/gm)].map((m) => m[1]);
+    const twice = keys.filter((k, i) => keys.indexOf(k) !== i);
+    assert.deepEqual(twice, [], `${from.trim()} has ${twice}`);
+  }
+});

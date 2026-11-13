@@ -517,6 +517,17 @@ internal sealed unsafe class App
         acts.Welcomed += () => Safe(() => { if (!soul.Hop(1f)) soul.HappyFace(); });
         var systemSource = new SystemSource(ui, acts, cameraMic);
         var copySource = new CopySource(ui, acts);
+        // Her own timer is a thing you wait for (rank 3): «المؤقت» with the time left; a click opens her menu.
+        var timerTag = ui.CreateTimer();
+        timerTag.Interval = TimeSpan.FromSeconds(1);
+        timerTag.Tick += (_, _) => Safe(() =>
+        {
+            if (timerTool.Remaining is { } left)
+                acts.Set(new Sahar.Core.Activities.Activity("timer", Sahar.Core.Activities.ActivityKind.Timer, "المؤقت",
+                    Sahar.Core.Activities.ActivityText.SongTime(left), "hourglass"));
+            else acts.Remove("timer");
+        });
+        timerTag.Start();
         bool sessionLocked = false;
         tray.SessionLocked += locked => sessionLocked = locked;
         using var screenTime = new ScreenTimeSource(ui, acts, Path.Combine(Log.Folder, "usage"), () => settings, () => idle.Away, () => sessionLocked,
