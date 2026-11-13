@@ -74,7 +74,7 @@ internal static unsafe class Win
         }
         catch (Exception e)
         {
-            Log.Write($"wndproc error: {e}");
+            Log.Write($"wndproc error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}");
         }
         return Native.DefWindowProc(hwnd, msg, wParam, lParam);
     }

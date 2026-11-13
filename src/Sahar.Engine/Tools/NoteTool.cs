@@ -30,6 +30,6 @@ internal sealed class NoteTool(TextBubble bubble, NotesStore store, Func<RectF> 
                 else Log.Write("note: saved");
                 express("notification", true);
             }
-            catch (Exception e) { Log.Write($"note error: {e}"); }
+            catch (Exception e) { Log.Write($"note error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         });
 }

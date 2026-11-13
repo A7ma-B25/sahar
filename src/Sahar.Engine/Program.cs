@@ -23,6 +23,8 @@ internal static class Program
 
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Sahar.Engine", out bool first);
         if (!first) return ExitAlreadyRunning;
+        // An erase that could not finish (a file was in use) finishes now, before anything reads her data.
+        var resumed = Sahar.Core.Settings.DataEraser.ResumeIfPending(Sahar.Core.Settings.CleanStart.RoamingFolder, [Sahar.Core.Settings.CleanStart.MarkerName]);
         // The clean version: old test builds' data goes once, before the log opens.
         bool cleaned = Sahar.Core.Settings.CleanStart.Run(Sahar.Core.Settings.CleanStart.RoamingFolder, Log.Folder);
         Log.Start();
@@ -32,19 +34,23 @@ internal static class Program
         if (!Sahar.Core.Diagnostics.LogRules.EndedCleanly(last))
             Log.Write($"previous run ended without exit (last line {Sahar.Core.Diagnostics.LogRules.Timestamp(last!) ?? "?"})");
         if (cleaned) Log.Write("clean start: old data removed");
+        if (resumed is not null) Log.Write($"erase: finished at start ({resumed.Removed} removed, {resumed.Left.Count} still in use)");
         try
         {
             int code = new App(EngineOptions.Parse(args)).Run();
             if (App.EraseRequested)
-                Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseAll(Sahar.Core.Settings.CleanStart.RoamingFolder, Sahar.Core.Settings.CleanStart.MarkerName)} items removed");
-            if (App.EraseRequested)
+            {
+                // A second pass once everything is closed; what is still in use stays marked for her next start.
+                var r = Sahar.Core.Settings.DataEraser.Erase(Sahar.Core.Settings.CleanStart.RoamingFolder, [Sahar.Core.Settings.CleanStart.MarkerName]);
+                Log.Write($"erase: {r.Removed} more removed, {r.Left.Count} left for the next start");
                 Log.Write($"erase: {Sahar.Core.Settings.DataEraser.EraseActivityData(Log.Folder)} activity entries removed");   // screen time, shelf, lyrics (0.13)
+            }
             Log.Write($"exit {code}");
             return code;
         }
         catch (Exception e)
         {
-            Log.Write($"fatal: {e}");
+            Log.Write($"fatal: {Sahar.Core.Diagnostics.LogRules.Describe(e)}");
             return ExitFatal;
         }
         finally

@@ -388,7 +388,7 @@ internal sealed class MenuCard : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"menu error: {e}"); }
+        catch (Exception e) { Log.Write($"menu error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     /// <summary>The GPU device was lost: close; surfaces are redrawn next time.</summary>

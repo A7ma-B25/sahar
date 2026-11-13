@@ -33,12 +33,12 @@ internal sealed class Media
             GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask().ContinueWith(t =>
             {
                 if (t.IsCompletedSuccessfully) ui.TryEnqueue(() => { _manager = t.Result; _timer.Start(); });
-                else Log.Write($"media controls unavailable: {t.Exception?.GetBaseException().Message}");
+                else Log.Write($"media controls unavailable: {(t.Exception?.GetBaseException() is { } be ? Sahar.Core.Diagnostics.LogRules.Kind(be) : "?")}");
             });
         }
         catch (Exception e)
         {
-            Log.Write($"media controls unavailable: {e.Message}");
+            Log.Write($"media controls unavailable: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
         }
     }
 
@@ -61,7 +61,7 @@ internal sealed class Media
         }
         catch (Exception e)
         {
-            Log.Write($"media poll failed: {e.Message}");
+            Log.Write($"media poll failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
         }
         Apply(music, video, browser, browser && BrowserInFront());
     }
@@ -78,7 +78,7 @@ internal sealed class Media
         }
         catch (Exception e)
         {
-            Log.Write($"media session failed: {e.Message}");
+            Log.Write($"media session failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
             return null;
         }
     }

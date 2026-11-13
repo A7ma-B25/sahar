@@ -71,6 +71,8 @@ export const strings = {
     resetNo: 'لا',
     resetDoneTitle: 'رجعت متل أول.',
     resetDoneText: 'هلق كل شي بتغيّره بينحفظ متل العادة.',
+    resetFailTitle: 'ما قدرت ابلّش من جديد هلق.',
+    resetFailText: 'في برنامج تاني ماسك الملف هلق. ما غيّرت شي؛ جرّب كمان شوي.',
 
     saharSub: 'هون بتظبطني متل ما بدك، وأنا بفرجيك فوراً كيف صرت.',
     previewLabel: 'معاينة',
@@ -187,6 +189,8 @@ export const strings = {
     eraseConfirmText: 'رح انسى كل شي: اسمك، ملاحظاتك، وشو نسخت.',
     eraseYes: 'امسح كل شي',
     eraseDone: 'مسحت كل شي. رح نتعرّف من جديد.',
+    eraseLeft: 'مسحت كل شي إلا {names}: كان مفتوح. بخلّصه لما ارجع اشتغل.',
+    eraseNoRestart: 'ما قدرت ارجع اشتغل لحالي. شغّلني من جديد.',
     engineOff: 'شغّلني أول.',
 
     aboutSub: 'كل شي بيشتغل على جهازك.',
@@ -265,6 +269,8 @@ export const strings = {
     resetNo: 'No',
     resetDoneTitle: 'I’m back to my first settings.',
     resetDoneText: 'Everything you change is saved again.',
+    resetFailTitle: 'I couldn’t start fresh just now.',
+    resetFailText: 'Another program is holding the file. I changed nothing; try again in a moment.',
 
     saharSub: 'Set me up the way you like here, and I’ll show you right away how I look.',
     previewLabel: 'Preview',
@@ -381,6 +387,8 @@ export const strings = {
     eraseConfirmText: 'I’ll forget everything: your name, your notes, and what you copied.',
     eraseYes: 'Erase everything',
     eraseDone: 'I erased everything. We’ll get to know each other again.',
+    eraseLeft: 'I erased everything but {names}: it was open. I’ll finish when I start again.',
+    eraseNoRestart: 'I couldn’t start again by myself. Please start me.',
     engineOff: 'Start me first.',
 
     aboutSub: 'Everything runs on your PC.',

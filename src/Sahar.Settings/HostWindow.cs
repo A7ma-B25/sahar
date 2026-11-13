@@ -13,6 +13,7 @@ internal sealed unsafe class HostWindow
     public const string Title = "إعدادات سَحَر";
     public const int WidthDip = 960, HeightDip = 680, MinWidthDip = 720, MinHeightDip = 520;
 
+    private const int AppIconId = 32512;   // the .NET SDK's resource id for ApplicationIcon
     private static Native.WndProc? _proc;   // kept alive: Windows calls it for the window's whole life
     private static HostWindow? _current;
     private readonly UiSyncContext _ui;
@@ -20,7 +21,7 @@ internal sealed unsafe class HostWindow
     public nint Hwnd { get; }
     public event Action? Resized;
     public event Action<bool>? Activated;
-    public event Action? CloseRequested;
+    public event Func<Task>? CloseRequested;
     public event Action? SettingChanged;
 
     public HostWindow(UiSyncContext ui)
@@ -37,6 +38,7 @@ internal sealed unsafe class HostWindow
                 lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_proc),
                 hInstance = instance,
                 hCursor = Native.LoadCursorW(0, Native.IDC_ARROW),
+                hIcon = Native.LoadIconW(instance, AppIconId),   // the exe's icon (assets/sahar.ico, when the build has it)
                 lpszClassName = cls,
             };
             Native.RegisterClassExW(&wc);
@@ -150,7 +152,7 @@ internal sealed unsafe class HostWindow
                     return 0;
                 }
                 case Native.WM_CLOSE:
-                    if (self?.CloseRequested is { } close) { close(); return 0; }
+                    if (self?.CloseRequested is { } close) { _ = close(); return 0; }
                     break;
                 case Native.WM_DESTROY:
                     Native.PostQuitMessage(Program.ExitCode);

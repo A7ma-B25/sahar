@@ -14,7 +14,7 @@ public sealed class SettingsBridgeTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
-    private SettingsBridge Bridge() => new(PathOf, _engine, _locator, () => _now);
+    private SettingsBridge Bridge() => new(PathOf, _engine, _locator, () => _now, _dir);
 
     private async Task<JsonElement> Ask(string json)
     {
@@ -45,7 +45,8 @@ public sealed class SettingsBridgeTests : IDisposable
 
         public Task<CityResult> FindCityAsync(string text) => Task.FromResult(City);
         public Task<bool> ClearClipboardAsync() { Clears++; return Task.FromResult(Running); }
-        public Task<bool> EraseAllAsync() { Erases++; return Task.FromResult(Running); }
+        public EraseOutcome Erase = new([], true);
+        public Task<EraseOutcome?> EraseAllAsync() { Erases++; return Task.FromResult<EraseOutcome?>(Running ? Erase : null); }
     }
 
     private sealed class FakeLocator : ILocator
@@ -284,7 +285,7 @@ public sealed class SettingsBridgeTests : IDisposable
 
     // ---- 0.13 «النشاطات» ----
 
-    private SettingsBridge ActBridge() => new(PathOf, _engine, _locator, () => _now)
+    private SettingsBridge ActBridge() => new(PathOf, _engine, _locator, () => _now, _dir)
     {
         EnginePath = @"C:\Apps\Sahar\Sahar.Engine.exe",
         ClaudeSettingsPath = Path.Combine(_dir, ".claude", "settings.json"),
@@ -343,5 +344,54 @@ public sealed class SettingsBridgeTests : IDisposable
         Assert.Null(s.WeatherLatitude);
         Assert.True(s.WeatherEnabled);
         Assert.True(_engine.Reloads > 0);
+    }
+
+    // ---- Review fix pass (2026-11-13) ----
+
+    [Fact]
+    public async Task Reset_OnAHealthyFile_ChangesNothing()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { UserName = "Sami", HelloDone = true });
+        var before = File.ReadAllText(PathOf);
+        var r = await Ask("""{"id":30,"type":"reset"}""");
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        Assert.Equal(before, File.ReadAllText(PathOf));
+        Assert.False(File.Exists(PathOf + ".bad"));
+        Assert.Equal(0, _engine.HelloAsks);
+        Assert.Equal("Sami", r.GetProperty("value").GetProperty("userName").GetString());
+    }
+
+    [Fact]
+    public async Task Erase_WithoutEngine_ErasesItself()
+    {
+        _engine.Running = false;
+        SettingsStore.Save(PathOf, new SaharSettings { UserName = "Sami" });
+        File.WriteAllText(Path.Combine(_dir, "notes.json"), "[]");
+        var r = await Ask("""{"id":31,"type":"erase"}""");
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        Assert.Equal(0, r.GetProperty("left").GetArrayLength());
+        Assert.False(File.Exists(PathOf));
+        Assert.False(File.Exists(Path.Combine(_dir, "notes.json")));
+        Assert.Equal(0, _engine.Erases);
+    }
+
+    [Fact]
+    public async Task Erase_SaysWhatIsLeft_AndWhetherSheCameBack()
+    {
+        _engine.Erase = new EraseOutcome(["notes.json"], Restarted: false);
+        var r = await Ask("""{"id":32,"type":"erase"}""");
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        Assert.Equal(["notes.json"], r.GetProperty("left").EnumerateArray().Select(x => x.GetString()!));
+        Assert.False(r.GetProperty("restarted").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Get_ALockedFile_IsNotCalledBroken()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings());
+        var bridge = new SettingsBridge(PathOf, _engine, _locator, () => _now, _dir) { Read = _ => throw new IOException("in use") };
+        var r = JsonDocument.Parse(await bridge.HandleAsync("""{"id":33,"type":"get"}""")).RootElement;
+        Assert.False(r.GetProperty("caps").GetProperty("broken").GetBoolean());
+        Assert.True(r.GetProperty("caps").GetProperty("busy").GetBoolean());
     }
 }

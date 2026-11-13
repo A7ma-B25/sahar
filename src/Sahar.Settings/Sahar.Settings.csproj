@@ -12,6 +12,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <!-- The window and file icon: drawn on the installer branch (assets/sahar.ico); the build works without it. -->
+  <PropertyGroup>
+    <ApplicationIcon Condition="Exists('..\..\assets\sahar.ico')">..\..\assets\sahar.ico</ApplicationIcon>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>

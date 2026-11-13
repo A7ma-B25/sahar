@@ -11,6 +11,10 @@ const lower = (v) => String(v ?? '').toLowerCase();
 
 let preview = null;
 let nameTimer = 0;
+let flushName = null;   // the name typed but not saved yet (saved now when the window closes)
+
+/** The window is closing: what you typed a moment ago is saved first. */
+export async function flush() { if (flushName) await flushName(); }
 
 export function leave() {
   if (preview) preview.destroy();
@@ -40,13 +44,15 @@ export async function render({ S, tx, set, ask, render: rerender, reduced }) {
 
   // كيف بحكي معك
   const name = input({ id: 'name', placeholder: tx('namePlaceholder'), value: v.userName ?? '' });
+  // Always against the settings as they are now (review fix: a snapshot of the first draw missed going back).
   const commitName = async () => {
     clearTimeout(nameTimer);
+    flushName = null;
     const typed = name.value;
-    if ((v.userName ?? '') === typed.trim()) return;
+    if ((S.value.userName ?? '') === typed.trim()) return;
     await save('userName', typed);
   };
-  name.addEventListener('input', () => { clearTimeout(nameTimer); nameTimer = setTimeout(commitName, 400); });
+  name.addEventListener('input', () => { clearTimeout(nameTimer); flushName = commitName; nameTimer = setTimeout(commitName, 400); });
   name.addEventListener('blur', commitName);
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') commitName(); });
   const genderId = newId('lg');
@@ -84,7 +90,7 @@ export async function render({ S, tx, set, ask, render: rerender, reduced }) {
   const cityLine = h('span', { class: 'desc', id: 'weather-city-line', 'aria-live': 'polite', text: v.weatherCity ?? '' });
   cityRow.append(h('span', { class: 'label-col' }, h('label', { class: 'label', for: 'weather-city', text: tx('cityLabel') }), cityLine), cityInput);
   const weather = switchRow(tx('swWeather'), tx('swWeatherHint'), !!v.weatherEnabled, async (on, btn) => {
-    if (on && (v.weatherLatitude == null || v.weatherLongitude == null)) {
+    if (on && (S.value.weatherLatitude == null || S.value.weatherLongitude == null)) {
       cityRow.hidden = false;   // she needs your city first: the switch turns on once a city is found
       btn.set(false);
       cityInput.focus();
@@ -92,7 +98,7 @@ export async function render({ S, tx, set, ask, render: rerender, reduced }) {
     }
     const r = await save('weatherEnabled', on, on ? tx('sayOn') : tx('sayOff'));
     if (!r.ok) btn.set(!on);
-    else cityRow.hidden = !on;
+    else cityRow.hidden = true;   // saved: she knows the city (on) or does not need it (off)
   }, 'weatherEnabled');
   weather.id = 'sw-weather';
   cityInput.addEventListener('keydown', async (e) => {

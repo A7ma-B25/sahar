@@ -21,7 +21,7 @@ internal sealed class DndTool
         _check.Tick += (_, _) =>
         {
             try { Check(); }
-            catch (Exception e) { Log.Write($"dnd error: {e}"); }
+            catch (Exception e) { Log.Write($"dnd error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         };
     }
 

@@ -44,7 +44,7 @@ internal sealed class ShowcasePlayer : IDisposable
         _next.Tick += (_, _) =>
         {
             try { Advance(); }
-            catch (Exception e) { Log.Write($"show error: {e}"); Stop(); }
+            catch (Exception e) { Log.Write($"show error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); Stop(); }
         };
     }
 
