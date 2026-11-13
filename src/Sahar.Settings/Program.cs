@@ -35,7 +35,7 @@ internal static class Program
             SynchronizationContext.SetSynchronizationContext(ui);
             var window = new HostWindow(ui);
             var engine = new EngineLink(options.TestMode);
-            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now);
+            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now, CleanStart.RoamingFolder);
             var web = new WebHost(window, options, bridge);
             window.CloseRequested += () =>
             {

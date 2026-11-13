@@ -44,11 +44,11 @@ internal sealed class EngineLink(bool testMode) : IEngineLink
     public async Task<bool> ClearClipboardAsync() => (await Call("clipboard-clear", null))?.GetValueOrDefault("ok") == "true";
 
     /// <summary>She empties her data folder and quits; then she is started again (fresh, she asks your name).</summary>
-    public async Task<bool> EraseAllAsync()
+    public async Task<EraseOutcome?> EraseAllAsync()
     {
         var engines = Process.GetProcessesByName("Sahar.Engine");
         var r = await Call("erase-all", null);
-        if (r is null) return false;
+        if (r is null) return null;
         var deadline = DateTime.UtcNow.AddSeconds(5);
         foreach (var p in engines)
         {
@@ -69,7 +69,7 @@ internal sealed class EngineLink(bool testMode) : IEngineLink
         {
             SettingsLog.Write($"erase: she could not start again ({e.GetType().Name})");
         }
-        return true;
+        return new EraseOutcome([], true);
     }
 
     private static string? Text(string? b64)

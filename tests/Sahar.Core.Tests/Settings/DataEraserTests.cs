@@ -37,4 +37,37 @@ public sealed class DataEraserTests : IDisposable
         Assert.Equal(1, DataEraser.EraseAll(_dir, CleanStart.MarkerName));
         Assert.Equal([CleanStart.MarkerName], Directory.EnumerateFileSystemEntries(_dir).Select(Path.GetFileName));
     }
+
+    /// <summary>A file in use stays: the report names it, and a pending marker finishes the job at her next start.</summary>
+    [Fact]
+    public void Erase_ReportsWhatIsLeft_AndMarksItPending()
+    {
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), "{}");
+        File.WriteAllText(Path.Combine(_dir, "notes.json"), "[]");
+        void Delete(string p) { if (Path.GetFileName(p) == "notes.json") throw new IOException("in use"); File.Delete(p); }
+        var r = DataEraser.Erase(_dir, [CleanStart.MarkerName], Delete);
+        Assert.Equal(1, r.Removed);
+        Assert.Equal(["notes.json"], r.Left);
+        Assert.True(File.Exists(Path.Combine(_dir, DataEraser.PendingMarker)));
+    }
+
+    [Fact]
+    public void ResumeIfPending_FinishesAndClearsTheMarker()
+    {
+        File.WriteAllText(Path.Combine(_dir, "notes.json"), "[]");
+        File.WriteAllText(Path.Combine(_dir, DataEraser.PendingMarker), "");
+        File.WriteAllText(Path.Combine(_dir, CleanStart.MarkerName), "2");
+        var r = DataEraser.ResumeIfPending(_dir, [CleanStart.MarkerName]);
+        Assert.NotNull(r);
+        Assert.Empty(r!.Left);
+        Assert.Equal([CleanStart.MarkerName], Directory.EnumerateFileSystemEntries(_dir).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void ResumeIfPending_WithoutAMarker_DoesNothing()
+    {
+        File.WriteAllText(Path.Combine(_dir, "notes.json"), "[]");
+        Assert.Null(DataEraser.ResumeIfPending(_dir, [CleanStart.MarkerName]));
+        Assert.True(File.Exists(Path.Combine(_dir, "notes.json")));
+    }
 }

@@ -12,6 +12,9 @@ public sealed record GeoPlace(string Name, double Lat, double Lon);
 /// <summary>The geocoder's answer: a place, or the reason in her words (plan 0.10c Task 3: the reason travels too).</summary>
 public sealed record CityResult(GeoPlace? Place, string? Reason);
 
+/// <summary>What erasing did: the names still there (in use; they go at her next start), and whether she came back.</summary>
+public sealed record EraseOutcome(IReadOnlyList<string> Left, bool Restarted);
+
 /// <summary>The engine, seen from the settings app (the "sahar" pipe). Every call fails quietly when she is not running.</summary>
 public interface IEngineLink
 {
@@ -21,7 +24,8 @@ public interface IEngineLink
     Task<(bool Ok, string? Reason)> TryShortcutAsync(string value);
     Task<CityResult> FindCityAsync(string text);
     Task<bool> ClearClipboardAsync();
-    Task<bool> EraseAllAsync();
+    /// <summary>She erases her data and quits, and is started again; null when she could not be asked.</summary>
+    Task<EraseOutcome?> EraseAllAsync();
 }
 
 /// <summary>Windows location (an OS service, not a page request).</summary>
@@ -35,8 +39,11 @@ public interface ILocator
 /// writes settings.json only through <see cref="SettingsStore"/> (field by field: <see cref="SettingsStore.Update"/>),
 /// validates every edit with <see cref="SettingsPatch"/>, and tells the engine. Never throws.
 /// </summary>
-public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILocator locator, Func<DateTimeOffset> now)
+public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILocator locator, Func<DateTimeOffset> now, string dataFolder)
 {
+    /// <summary>How the file is read for its health (tests hold it "in use").</summary>
+    public Func<string, string>? Read { get; init; }
+
     public const string NoEngineCity = "شغّلني أول لدوّر عالمدينة.";
     public const string WindowsLocation = "موقع الويندوز";
     public const string Unreadable = "unreadable";
@@ -66,7 +73,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
                 "prayer-today" => PrayerToday(id),
                 "shortcut" => await Shortcut(id, req),
                 "clipboard-clear" => Reply(id, "clipboard-clear", w => { }, await engine.ClearClipboardAsync()),
-                "erase" => Reply(id, "erase", w => { }, await engine.EraseAllAsync()),
+                "erase" => await Erase(id),
                 "reset" => await Reset(id),
                 _ => Reply(id, "error", w => Fail(w, "bad-type")),
             };
@@ -81,10 +88,12 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
 
     private string Get(long? id)
     {
-        bool broken = !SettingsStore.Readable(settingsPath);
+        // Only a file that is not settings JSON is "broken"; one held by another program for a moment is not.
+        var health = SettingsStore.Health(settingsPath, Read);
+        bool broken = health == SettingsHealth.Unreadable;
         SaharSettings s;
-        try { s = broken ? new SaharSettings() : SettingsStore.Load(settingsPath); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { (s, broken) = (new SaharSettings(), true); }
+        try { s = health == SettingsHealth.Ok ? SettingsStore.Load(settingsPath) : new SaharSettings(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { s = new SaharSettings(); }
         return Reply(id, "settings", w =>
         {
             Value(w, s);
@@ -225,9 +234,27 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
 
     private async Task<string> Reset(long? id)
     {
+        // Asked again first: a file that reads fine now (the other program fixed it, a lock passed) is never reset.
+        if (SettingsStore.Health(settingsPath, Read) == SettingsHealth.Ok)
+            return Reply(id, "reset", w => Value(w, SettingsStore.Load(settingsPath)), true);
         var fresh = SettingsStore.Reset(settingsPath);
         await engine.ReloadAsync(askHello: true);
         return Reply(id, "reset", w => Value(w, fresh), true);
+    }
+
+    /// <summary>«امسح كل شي عني»: she erases and is started again; without her, the app erases the folder itself. The
+    /// reply names what is still there (in use: it goes at her next start).</summary>
+    private async Task<string> Erase(long? id)
+    {
+        EraseOutcome? outcome = engine.Running ? await engine.EraseAllAsync() : null;
+        outcome ??= new EraseOutcome(DataEraser.Erase(dataFolder, [CleanStart.MarkerName]).Left, Restarted: false);
+        return Reply(id, "erase", w =>
+        {
+            w.WriteStartArray("left");
+            foreach (var name in outcome.Left) w.WriteStringValue(name);
+            w.WriteEndArray();
+            w.WriteBoolean("restarted", outcome.Restarted);
+        }, true);
     }
 
     // ---- writing replies ----
