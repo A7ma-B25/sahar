@@ -44,11 +44,26 @@ public sealed class UpdateSchedule(DateTimeOffset started)
     /// <summary>The time before which she does not ask again, set when she asks.</summary>
     public static DateTimeOffset AskedAt(DateTimeOffset now) => now + AskAgainAfter;
 
+    /// <summary>A snooze further ahead than this is ignored (a clock set back, an edited file): never silent for long.</summary>
+    public static readonly TimeSpan MaxSnooze = TimeSpan.FromDays(7);
+
+    private static bool Snoozed(DateTimeOffset now, DateTimeOffset? askAfter) =>
+        askAfter is { } after && now < after && after - now <= MaxSnooze;
+
+    /// <summary>Before any request: null to go ahead; Snoozed or Later (busy) to make none. The tray always goes ahead.</summary>
+    public static UpdateStep? BeforeCheck(bool manual, bool busy, DateTimeOffset now, DateTimeOffset? askAfter)
+    {
+        if (manual) return null;
+        if (Snoozed(now, askAfter)) return UpdateStep.Snoozed;
+        return busy ? UpdateStep.Later : null;
+    }
+
+    /// <summary>After a check: what to do with its answer (busy is asked again: the check took a moment).</summary>
     public static UpdateStep Decide(UpdateOffer? offer, bool manual, bool busy, DateTimeOffset now, DateTimeOffset? askAfter)
     {
         if (manual) return offer is null ? UpdateStep.UpToDate : UpdateStep.Ask;
         if (offer is null) return UpdateStep.Nothing;
-        if (askAfter is { } after && now < after) return UpdateStep.Snoozed;
+        if (Snoozed(now, askAfter)) return UpdateStep.Snoozed;
         return busy ? UpdateStep.Later : UpdateStep.Ask;
     }
 }

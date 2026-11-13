@@ -6,8 +6,8 @@ namespace Sahar.Core.Tests.Update;
 public class UpdateScheduleTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 13, 9, 0, 0, TimeSpan.FromHours(3));
-    private static readonly UpdateOffer Offer = new(new SemVersion(0, 12, 0, null),
-        new ReleaseAsset("Sahar-Setup-0.12.0.exe", "https://github.com/a", 1), new ReleaseAsset("Sahar-Setup-0.12.0.exe.sha256", "https://github.com/b", 1));
+    private static readonly UpdateOffer Offer = new(new SemVersion(0, 12, 0, null), "Sahar-Setup-0.12.0.exe",
+        "https://github.com/A7ma-B25/sahar/releases/download/test-build/Sahar-Setup-0.12.0.exe", new string('a', 64));
 
     [Fact]
     public void FirstCheck_TwoMinutesAfterStart()
@@ -84,12 +84,25 @@ public class UpdateScheduleTests
     }
 
     [Theory]
-    [InlineData(UpdateChannel.TestBuild, null, "https://api.github.com/repos/A7ma-B25/sahar/releases/tags/test-build")]
-    [InlineData(UpdateChannel.Stable, null, "https://api.github.com/repos/A7ma-B25/sahar/releases/latest")]
-    [InlineData(UpdateChannel.TestBuild, "http://127.0.0.1:8765", "http://127.0.0.1:8765/repos/A7ma-B25/sahar/releases/tags/test-build")]
-    [InlineData(UpdateChannel.TestBuild, "http://127.0.0.1:8765/", "http://127.0.0.1:8765/repos/A7ma-B25/sahar/releases/tags/test-build")]
-    public void ReleaseApi(UpdateChannel channel, string? apiBase, string expected) =>
-        Assert.Equal(expected, UpdateRules.ReleaseApi(channel, apiBase).ToString());
+    // manual, busy, snoozed → before any request: null = go ahead
+    [InlineData(false, false, false, null)]
+    [InlineData(false, true, false, UpdateStep.Later)]
+    [InlineData(false, false, true, UpdateStep.Snoozed)]
+    [InlineData(false, true, true, UpdateStep.Snoozed)]
+    [InlineData(true, true, true, null)]
+    public void BeforeCheck_NoRequestWhileBusyOrSnoozed(bool manual, bool busy, bool snoozed, UpdateStep? expected)
+    {
+        DateTimeOffset? askAfter = snoozed ? T0 + TimeSpan.FromHours(1) : null;
+        Assert.Equal(expected, UpdateSchedule.BeforeCheck(manual, busy, T0, askAfter));
+    }
+
+    [Fact]
+    public void ASnoozeMoreThanAWeekAhead_IsIgnored_SoAClockJumpCannotSilenceHerForYears()
+    {
+        Assert.Equal(UpdateStep.Snoozed, UpdateSchedule.Decide(Offer, false, false, T0, T0 + TimeSpan.FromDays(7)));
+        Assert.Equal(UpdateStep.Ask, UpdateSchedule.Decide(Offer, false, false, T0, T0 + TimeSpan.FromDays(7.1)));
+        Assert.Null(UpdateSchedule.BeforeCheck(false, false, T0, T0 + TimeSpan.FromDays(400)));
+    }
 
     [Fact]
     public void UserAgent_IsSaharAndTheVersion_Only() => Assert.Equal($"Sahar/{CoreInfo.Version}", UpdateRules.UserAgent);
