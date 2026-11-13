@@ -4205,12 +4205,15 @@ function Stage-Activities {
         foreach ($s in @('SENTINELFILE', 'SENTINELCMD', 'SENTINELPROJECT', 'نسّم')) { if ($log -match $s) { throw "engine.log holds '$s'" } }
     }
     Step 'her expressions: the music sway, the halo from the cover, the leaf like an umbrella' {
+        $scene = Start-TestWindow 'scene-light'
+        Start-Sleep -Seconds 8   # her bubble from the hooks above goes first
         $e = Kva 'activity-expr' '{"music":"true","cover":"#E07A3A","rain":"true"}'
         if ($e.sway -ne 'music' -or $e.droop -ne '14' -or $e.halo -eq 'mood') { throw "sway $($e.sway) droop $($e.droop) halo $($e.halo)" }
         Start-Sleep -Milliseconds 900
         $st = State
         $shot = Screenshot 'act-expressions.png'
         Crop-Rect $shot ([int]$st.x - 60) ([int]$st.y - 70) ([int]$st.width + 120) ([int]$st.height + 110) (Join-Path $Out 'app-expressions-light.png')
+        Stop-Process -Id $scene.Id -ErrorAction SilentlyContinue
         $e = Kva 'activity-expr' '{}'
         if ($e.sway -ne 'soft' -or $e.droop -ne '0' -or $e.halo -ne 'mood') { throw 'the expressions did not end' }
     }
