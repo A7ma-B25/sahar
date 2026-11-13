@@ -77,13 +77,26 @@ public sealed class BenchTests
         Assert.Equal(1, llm.Calls);
     }
 
+    [Fact]
+    public async Task Bench_RowBadOutput_CountsAsFail_AndGoesOn()
+    {
+        var llm = new Scripted(good: true) { FailEvery = 2 };
+        var r = await BenchRunner.RunAsync(llm, "m", "{}", () => Task.FromResult(new RuntimeReady("m", "", Tier.Gpu6, Backend.Vulkan, 1, 0, 0)),
+            () => (0, 0), golden: true, null, () => DateTimeOffset.UnixEpoch, default);
+        Assert.Equal(30, r.ToolTotal);
+        Assert.Equal(30, r.DialectTotal);
+        Assert.True(r.ToolPass + r.DialectPass is > 0 and < 60);
+    }
+
     /// <summary>Answers every tool row with its expected call (or garbage), every chat line in Syrian.</summary>
     private sealed class Scripted(bool good) : ILlm
     {
         public int Calls;
+        public int FailEvery;
         public Task<LlmReply> CompleteAsync(LlmRequest request, Action<string>? partial, CancellationToken ct)
         {
             Calls++;
+            if (FailEvery > 0 && Calls > 1 && Calls % FailEvery == 0) throw new MindRuntimeException("bad-output");
             var line = request.Messages[^1].Content;
             var row = BenchSuite.Rows.FirstOrDefault(r => r.Text == line);
             string text = row is { Kind: "tool" }

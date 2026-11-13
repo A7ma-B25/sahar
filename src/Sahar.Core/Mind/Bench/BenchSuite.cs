@@ -147,9 +147,12 @@ public static class BenchRunner
             foreach (var row in BenchSuite.Rows)
             {
                 ct.ThrowIfCancellationRequested();
-                var reply = await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2, MaxTokens = 96 }), null, ct);
-                if (row.Kind == "tool") { tTotal++; if (ToolScore.Pass(row, reply.Text)) tPass++; }
-                else { dTotal++; if (DialectScore.Pass(DialectScore.SayOf(reply.Text), english: row.Text.Any(char.IsAsciiLetter))) dPass++; }
+                string text;
+                // A row the server cannot answer (bad JSON, a grammar it refuses) counts as a fail; the bench goes on.
+                try { text = (await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2, MaxTokens = 96 }), null, ct)).Text; }
+                catch (MindRuntimeException e) when (e.Code is "bad-output" or "busy") { text = ""; }
+                if (row.Kind == "tool") { tTotal++; if (ToolScore.Pass(row, text)) tPass++; }
+                else { dTotal++; if (DialectScore.Pass(DialectScore.SayOf(text), english: row.Text.Any(char.IsAsciiLetter))) dPass++; }
                 rowsDone?.Report(++done);
             }
         }

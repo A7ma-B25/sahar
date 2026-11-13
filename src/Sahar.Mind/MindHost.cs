@@ -326,8 +326,9 @@ internal sealed class MindHost : ITurnIO
             Send(new MindMsg { T = "bench-result", Bench = r });
             Send(Models());
         }
-        catch (MindRuntimeException e) { Send(new MindMsg { T = "error", Error = e.Code }); }
-        catch (OperationCanceledException) { }
+        catch (MindRuntimeException e) { MindLog.Write($"bench: failed ({e.Code})"); Send(new MindMsg { T = "error", Error = e.Code }); }
+        catch (OperationCanceledException) { MindLog.Write("bench: cancelled"); }
+        catch (Exception e) { MindLog.Write($"bench: failed ({e.GetType().Name})"); Send(new MindMsg { T = "error", Error = "bad-output" }); }
         finally { Interlocked.Decrement(ref _busy); _lastUse = DateTimeOffset.UtcNow; Send(new MindMsg { T = "state", Phase = "idle" }); }
     }
 
