@@ -32,6 +32,7 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
     {
         text = Clean(text, MaxItemChars);
         if (text.Length == 0 || !consent().Allows(source.Kind)) return null;
+        sensitive = Safety.Sensitive.Stricter(sensitive, Safety.Sensitive.Check(text));
         var hash = Hash(text);
         return Change(StoreFile, MemoryJson.Default.StoreData, () => new StoreData(), d =>
         {
@@ -50,7 +51,7 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
                 row.Item = row.Item with
                 {
                     Sources = sources, Confidence = ConfidenceRule.Of(sources, at),
-                    Sensitive = Stricter(row.Item.Sensitive, sensitive),
+                    Sensitive = Safety.Sensitive.Stricter(row.Item.Sensitive, sensitive),
                 };
             }
             PruneProfile(d);
@@ -338,9 +339,6 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
         var s = string.Join(' ', (text ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return s.Length > max ? s[..max].TrimEnd() : s;
     }
-
-    /// <summary>The stricter of two: anything sensitive wins over None.</summary>
-    private static Sensitivity Stricter(Sensitivity a, Sensitivity b) => a != Sensitivity.None ? a : b;
 
     private static string Clip(string s) => s.Length > MaxSnippet ? s[..MaxSnippet] : s;
 
