@@ -16,6 +16,7 @@ namespace Sahar.Engine.Menu;
 /// </summary>
 internal sealed unsafe class ChatField : IWindowHandler
 {
+    private const uint WM_APP_TYPED = 0x8009;   // 0.14: the first letter (her brain warms up)
     private const uint WM_APP_ENTER = 0x8001, WM_APP_ESC = 0x8002, WM_APP_TAB = 0x8003, WM_APP_SHIFTTAB = 0x8004,
         WM_CTLCOLOREDIT = 0x0133, WM_ERASEBKGND = 0x0014, WM_SETFONT = 0x0030, EM_LIMITTEXT = 0x00C5, WM_CHAR = 0x0102,
         WM_PAINT = 0x000F, WM_SETFOCUS = 0x0007, WM_KILLFOCUS = 0x0008;
@@ -52,6 +53,8 @@ internal sealed unsafe class ChatField : IWindowHandler
     public bool HasFocus => _edit != 0 && Native.GetFocus() == _edit;
 
     public event Action<string>? Submitted;
+    /// <summary>0.14: the first letter typed into an empty field (never the text).</summary>
+    public event Action? Typed;
     public event Action? Escaped;
     /// <summary>Tab (false) or Shift+Tab (true) out of the field.</summary>
     public event Action<bool>? TabbedOut;
@@ -136,6 +139,9 @@ internal sealed unsafe class ChatField : IWindowHandler
     {
         switch (msg)
         {
+            case WM_APP_TYPED:
+                Typed?.Invoke();
+                return 0;
             case WM_APP_ENTER:
                 Submitted?.Invoke(Text);
                 return 0;
@@ -184,7 +190,9 @@ internal sealed unsafe class ChatField : IWindowHandler
             }
         }
         if (msg == WM_CHAR && (wParam == 13 || wParam == 27 || wParam == 9)) return 0;   // no beep
+        bool first = msg == WM_CHAR && wParam >= 32 && Native.GetWindowTextLength(hwnd) == 0;
         var r = Native.CallWindowProc(s_oldEditProc, hwnd, msg, wParam, lParam);
+        if (first) Native.PostMessage(s_owner, WM_APP_TYPED, 0, 0);
         if (msg is WM_PAINT or WM_SETFOCUS or WM_KILLFOCUS && Native.GetWindowTextLength(hwnd) == 0) PaintPlaceholder(hwnd);
         if (msg == WM_CHAR) Native.InvalidateRect(hwnd, null, 1);   // the placeholder goes with the first letter
         return r;

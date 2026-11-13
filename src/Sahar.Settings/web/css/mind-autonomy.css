@@ -1,1 +1,7 @@
-/* 0.14 stream autonomy's own rules (the shared ones are in mind.css). */
+/* 0.14 stream autonomy's own rules (the shared ones are in mind.css): «شو عملت اليوم» (mockup PSettingsToday). */
+.t-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-block-end: 8px; }
+.t-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.t-note { padding: 12px 0 0; }
+.m-icon-btn[aria-pressed=true] { color: var(--accent-ink); background: var(--accent-soft); }
+.t-status { padding: 0 14px 10px; }
+.t-status:empty { display: none; }
