@@ -50,6 +50,15 @@ internal sealed unsafe class App
         catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
         Address.You = settings.UserGender;   // her words agree with who she talks to
         Address.Name = settings.UserName;
+        // Two programs write settings.json (0.12): every save is load → change → save under the store's lock, never a
+        // whole copy kept in memory, so a change the settings app made meanwhile is kept. A refused save keeps what she
+        // has in memory and logs once per kind; never the path (it holds the user name).
+        void Save(Func<SaharSettings, SaharSettings> change)
+        {
+            settings = change(settings);
+            try { settings = SettingsStore.Update(SettingsStore.DefaultPath, change); }
+            catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }
+        }
         // Overlay coordinates are screen pixels (Origin 0,0): the stage shifts the composition root by the window's place.
         var sahar = new SaharVisual(host, Rig.Load(), BodyDip, dpi / 96f) { Origin = Vector2.Zero };
         sahar.Position = StartPosition(sahar, work);
@@ -228,11 +237,9 @@ internal sealed unsafe class App
         void SetActivity(ActivityLevel level)
         {
             Log.Write($"activity: {level}");
-            settings = settings with { Activity = level };
+            Save(s => s with { Activity = level });
             tray.Activity = level;
             if (life != null) life.Level = level;
-            try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }   // once per kind; never the path: it holds the user name
         }
         tray.ActivityChosen += level => Safe(() => SetActivity(level));
         tray.HideHour += () => director.HideFor(TimeSpan.FromHours(1));
@@ -273,6 +280,8 @@ internal sealed unsafe class App
         {
             Enabled = !_options.TestMode,
             Away = () => idle.Away,
+            AutoMood = () => settings.AutoMood,
+            PlaysAlone = () => settings.PlaysAlone,
         };
         life = lifeDirector;
         // What you copy (spec §7.2): kept by the rules, a short "copied" face at most every 30 s.
@@ -307,7 +316,7 @@ internal sealed unsafe class App
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
         using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
         var apps = new AppWatch(ui,
-            allowed: () => CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
+            allowed: () => settings.AwarenessEnabled && CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => idle.Away,
             say: line => speech.Say(Address.ToYou(line), comment: true), ownComments: !_options.TestMode);   // her words agree with you
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
@@ -317,11 +326,6 @@ internal sealed unsafe class App
         using var weather = new Weather(ui, director.Post, _options.WeatherStubDir,
             settings.WeatherEnabled ? settings.WeatherLatitude : null, settings.WeatherEnabled ? settings.WeatherLongitude : null);
         tray.WeatherCity = weather.On ? settings.WeatherCity : null;
-        void SaveSettings()
-        {
-            try { SettingsStore.Save(SettingsStore.DefaultPath, settings); }
-            catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }   // once per kind; never the path: it holds the user name
-        }
         void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
         void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
         {
@@ -329,8 +333,7 @@ internal sealed unsafe class App
             ui.TryEnqueue(() => Safe(() =>
             {
                 if (place is null) { AskCity($"{error} — جرّب مدينة تانية"); return; }
-                settings = settings with { WeatherEnabled = true, WeatherCity = place.Name ?? city.Trim(), WeatherLatitude = place.Latitude, WeatherLongitude = place.Longitude };
-                SaveSettings();
+                Save(s => s with { WeatherEnabled = true, WeatherCity = place.Name ?? city.Trim(), WeatherLatitude = place.Latitude, WeatherLongitude = place.Longitude });
                 tray.WeatherCity = settings.WeatherCity;
                 weather.Use(place);
             }));
@@ -340,15 +343,14 @@ internal sealed unsafe class App
             if (weather.On)
             {
                 weather.TurnOff();
-                settings = settings with { WeatherEnabled = false };
-                SaveSettings();
+                Save(s => s with { WeatherEnabled = false });
                 tray.WeatherCity = null;
             }
             else AskCity("شو مدينتك؟ (للمطر بس)");
         });
         // 🕌 Prayer times: the city search is the weather's (same stub in tests).
         using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
-            line => speech.Say(line), () => settings, s => { settings = s; SaveSettings(); }, _options.TestMode);
+            line => speech.Say(line), () => settings, Save, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
 
         // Shaken while dragged (0.8): dizzy, sick, or angry — angry is more likely if you did it again within 5 minutes.
@@ -430,8 +432,7 @@ internal sealed unsafe class App
 
         void FinishHello(string? name, Gender you)
         {
-            settings = settings with { UserName = name, UserGender = you, HelloDone = true };
-            SaveSettings();
+            Save(s => s with { UserName = name, UserGender = you, HelloDone = true });
             Address.You = you;
             Address.Name = name;
             Log.Write($"hello: done ({you})");   // never the name (spec §14)
@@ -449,7 +450,7 @@ internal sealed unsafe class App
         }
         var music = new MusicTool(ui, media, line => speech.Say(line));
         using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => speech.Say(line),
-            () => settings, s => { settings = s; SaveSettings(); }, _options.QuranBase);
+            () => settings, Save, _options.QuranBase);
         quran.PlayingChanged += on => Safe(() => director.SetQuran(on));
         menu.State = () => new Sahar.Core.Menu.MenuState(timerTool.Running, dndTool.On, quran.Playing);
         menu.Facts = () => new Sahar.Core.Menu.MenuFacts(timerTool.Remaining, director.CurrentKey == "claude-permission", prayer.Next(),

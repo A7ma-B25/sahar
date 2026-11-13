@@ -121,4 +121,16 @@ public class LifeChooserTests
         DateTimeOffset? last = minutesSinceLast is { } m ? now.AddMinutes(-m) : null;
         Assert.Equal(expected, TypeAlongPolicy.Should(now, last, roll));
     }
+
+    [Fact]
+    public void PlaysAloneOff_NeverPicksPlayMoves()
+    {
+        var c = Ctx() with { PlaysAlone = false };
+        var counts = Draw(c, 10_000);
+        foreach (var a in new[] { LifeAction.PlayWithMoon, LifeAction.HopWindows, LifeAction.MoonToss, LifeAction.ChaseButterfly })
+            Assert.Equal(0, counts[a]);
+        var on = Draw(Ctx(), 10_000);
+        Assert.True(on[LifeAction.MoonToss] > 0 && on[LifeAction.ChaseButterfly] > 0);
+        Assert.True(new LifeContext(false, false, false, false, false, false, 14, true).PlaysAlone);
+    }
 }

@@ -6,8 +6,9 @@ namespace Sahar.Core.Life;
 /// <param name="HasPerchableWindow">The front window is one she can sit on.</param>
 /// <param name="VideoPlaying">Something may be a video in front of you: only small things (a face moment, a breath).</param>
 /// <param name="CursorResting">The mouse has rested near her for a couple of seconds.</param>
+/// <param name="PlaysAlone">She may play by herself (settings «العب لحالي»): off, never the four play moves.</param>
 public sealed record LifeContext(bool Typing, bool VideoPlaying, bool MusicPlaying, bool UserAway, bool Hidden, bool Busy,
-    int Hour, bool HasPerchableWindow, bool CursorResting = false);
+    int Hour, bool HasPerchableWindow, bool CursorResting = false, bool PlaysAlone = true);
 
 /// <summary>Picks her next own action: weighted by the moment and by what you have shown you like.</summary>
 public static class LifeChooser
@@ -31,6 +32,7 @@ public static class LifeChooser
                 LifeAction.Moment => 4,
                 LifeAction.Breathe => 1,
                 _ when c.VideoPlaying => 0,
+                LifeAction.PlayWithMoon or LifeAction.HopWindows or LifeAction.MoonToss or LifeAction.ChaseButterfly when !c.PlaysAlone => 0,
                 LifeAction.Flight => 3,
                 LifeAction.Wander => 2,
                 LifeAction.PeekTaskbar => 2,

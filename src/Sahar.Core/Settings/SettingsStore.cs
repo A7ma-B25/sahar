@@ -85,8 +85,113 @@ public static class SettingsStore
                 throw new SettingsSaveRefusedException();
             }
         }
+        WriteLocked(path, settings);
+    }
+
+    /// <summary>Load → change → save, all under the cross-process lock: the way both programs save (plan 0.10c
+    /// Ruling 4), so a change made by the other program meanwhile is never lost. Reads the file fresh (never a copy kept
+    /// in memory); a missing or blank file starts from defaults. Returns what was saved. Throws
+    /// <see cref="SettingsSaveRefusedException"/> when the file on disk is unreadable (a ".bad" copy is kept), and the IO
+    /// error when every read attempt failed (remembered, as <see cref="Load(string)"/> does).</summary>
+    public static SaharSettings Update(string path, Func<SaharSettings, SaharSettings> change)
+    {
+        string full = Path.GetFullPath(path);
+        using var gate = Lock();
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        SaharSettings current = new();
+        if (File.Exists(path))
+        {
+            string text;
+            try { text = Retry(() => File.ReadAllText(path)); }
+            catch (FileNotFoundException) { text = ""; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                LoadFailed(path);
+                throw;
+            }
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                if (Parse(text) is not { } parsed)
+                {
+                    KeepBad(path, text);
+                    throw new SettingsSaveRefusedException();
+                }
+                current = parsed;
+            }
+        }
+        Succeeded(full);
+        var next = change(current);
+        WriteLocked(path, next);
+        return next;
+    }
+
+    /// <summary>Like <see cref="Update"/>, but answers false (and the settings unchanged on disk) instead of throwing
+    /// when the file cannot be read or written.</summary>
+    public static bool TryUpdate(string path, Func<SaharSettings, SaharSettings> change, out SaharSettings? saved)
+    {
+        try
+        {
+            saved = Update(path, change);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            saved = null;
+            return false;
+        }
+    }
+
+    /// <summary>Whether the file can be used: missing, blank, or JSON settings. False for a file that does not parse
+    /// (or cannot be read at all): the settings page then offers «نبلّش من جديد».</summary>
+    public static bool Readable(string path)
+    {
+        if (!File.Exists(path)) return true;
+        string text;
+        try
+        {
+            using (Lock()) text = Retry(() => File.ReadAllText(path));
+        }
+        catch (FileNotFoundException) { return true; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+        return string.IsNullOrWhiteSpace(text) || Parse(text) is not null;
+    }
+
+    /// <summary>«نبلّش من جديد» (owner ruling 2026-11-13): the unreadable file is kept aside as ".bad" and fresh defaults
+    /// are written (she asks your name again: HelloDone is false). Only settings.json: notes and the rest stay.</summary>
+    public static SaharSettings Reset(string path)
+    {
+        string full = Path.GetFullPath(path);
+        using var gate = Lock();
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        if (File.Exists(path))
+        {
+            try
+            {
+                string text = Retry(() => File.ReadAllText(path));
+                if (!string.IsNullOrWhiteSpace(text) && Parse(text) is null) KeepBad(path, text);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                try { File.Copy(path, path + ".bad", overwrite: true); } catch (Exception) { /* a courtesy */ }
+            }
+        }
+        var fresh = new SaharSettings();
+        WriteLocked(path, fresh);
+        Succeeded(full);
+        return fresh;
+    }
+
+    /// <summary>The settings as the file writes them (camelCase, indented).</summary>
+    public static string ToJson(SaharSettings settings) => JsonSerializer.Serialize(settings, SettingsJson.Default.SaharSettings);
+
+    /// <summary>Settings from JSON text; anything that is not settings JSON gives defaults (never throws).</summary>
+    public static SaharSettings FromJson(string json) => string.IsNullOrWhiteSpace(json) ? new SaharSettings() : Parse(json) ?? new SaharSettings();
+
+    // The caller holds the lock: "path.tmp" then swap it in, so a crash never leaves a half-written file.
+    private static void WriteLocked(string path, SaharSettings settings)
+    {
         string tmp = path + ".tmp";
-        string json = JsonSerializer.Serialize(settings, SettingsJson.Default.SaharSettings);
+        string json = ToJson(settings);
         Retry(() => { File.WriteAllText(tmp, json); return 0; });
         Retry(() =>
         {
@@ -135,7 +240,7 @@ public static class SettingsStore
         {
             return JsonSerializer.Deserialize(text, SettingsJson.Default.SaharSettings) ?? new SaharSettings();
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or NotSupportedException or InvalidOperationException)
         {
             return null;
         }

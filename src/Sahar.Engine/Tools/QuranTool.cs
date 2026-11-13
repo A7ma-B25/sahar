@@ -24,14 +24,14 @@ internal sealed class QuranTool : IDisposable
     private readonly Media _media;
     private readonly Action<string> _say;
     private readonly Func<SaharSettings> _get;
-    private readonly Action<SaharSettings> _set;
+    private readonly Action<Func<SaharSettings, SaharSettings>> _set;   // load → change → save (two writers)
     private readonly string? _base;
     private readonly DispatcherQueueTimer _openTimeout;
     private IRecitation? _player;
     private int _generation;
 
     public QuranTool(DispatcherQueue ui, ListBubble list, Func<RectF> body, Media media, Action<string> say,
-        Func<SaharSettings> get, Action<SaharSettings> set, string? baseUrl)
+        Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> set, string? baseUrl)
     {
         (_ui, _list, _body, _media, _say, _get, _set, _base) = (ui, list, body, media, say, get, set, baseUrl);
         // A recitation that never opens (a network that hangs) gives up once, gently: no endless "playing".
@@ -75,7 +75,7 @@ internal sealed class QuranTool : IDisposable
             i =>
             {
                 if (i < 0 || i >= Q.Reciters.Count) return;
-                _set(_get() with { QuranReciter = Q.Reciters[i].Id });
+                _set(s => s with { QuranReciter = Q.Reciters[i].Id });
                 Log.Write($"quran: reciter {Q.Reciters[i].Id}");
                 _ui.TryEnqueue(() => Safe(Open));
             },
@@ -109,7 +109,7 @@ internal sealed class QuranTool : IDisposable
             if (gen != _generation) return;
             _openTimeout.Stop();
             State = "playing";
-            _set(_get() with { QuranLastSurah = surah });
+            _set(s => s with { QuranLastSurah = surah });
         }));
         player.Ended += () => _ui.TryEnqueue(() => Safe(() => { if (gen == _generation) Finish("ended"); }));
         player.Failed += why => _ui.TryEnqueue(() => Safe(() => { if (gen == _generation) Fail(why); }));

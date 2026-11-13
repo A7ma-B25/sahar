@@ -28,7 +28,7 @@ internal sealed class PrayerTool : IDisposable
     private readonly Director _director;
     private readonly Action<string> _say;
     private readonly Func<SaharSettings> _get;
-    private readonly Action<SaharSettings> _set;
+    private readonly Action<Func<SaharSettings, SaharSettings>> _set;   // load → change → save (two writers)
     private readonly DispatcherQueue _ui;
     private readonly DispatcherQueueTimer _timer;
     private readonly bool _testMode;
@@ -38,7 +38,7 @@ internal sealed class PrayerTool : IDisposable
 
     public PrayerTool(DispatcherQueue ui, ListBubble list, TextBubble bubble, Func<RectF> body,
         Func<string, Task<(GeoResult? Place, string? Error)>> find, Director director, Action<string> say,
-        Func<SaharSettings> get, Action<SaharSettings> set, bool testMode)
+        Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> set, bool testMode)
     {
         (_ui, _list, _bubble, _body, _find, _director, _say, _get, _set, _testMode) =
             (ui, list, bubble, body, find, director, say, get, set, testMode);
@@ -95,7 +95,7 @@ internal sealed class PrayerTool : IDisposable
             i =>
             {
                 if (i < 0 || i >= methods.Length) return;
-                _set(_get() with { PrayerMethod = methods[i] });
+                _set(s => s with { PrayerMethod = methods[i] });
                 Log.Write($"prayer: method {methods[i]}");
                 Rebuild();
                 _ui.TryEnqueue(() => Safe(Open));
@@ -111,7 +111,7 @@ internal sealed class PrayerTool : IDisposable
         _ui.TryEnqueue(() => Safe(() =>
         {
             if (place is null) { AskCity($"{error} — جرّب مدينة تانية"); return; }
-            _set(_get() with { PrayerCity = place.Name ?? city.Trim(), PrayerLatitude = place.Latitude, PrayerLongitude = place.Longitude });
+            _set(s => s with { PrayerCity = place.Name ?? city.Trim(), PrayerLatitude = place.Latitude, PrayerLongitude = place.Longitude });
             Log.Write("prayer: city set");   // never which city (spec §14)
             Rebuild();
             Open();
@@ -125,7 +125,8 @@ internal sealed class PrayerTool : IDisposable
         if (_schedule is null || (_testMode && _fakeBase is null)) { _director.SetAdhan(false); return; }
         var now = Now;
         int before = Math.Clamp(_get().PrayerReminderMinutes, 1, 60);
-        if (_schedule.TakeReminder(now, before, out var p) && _schedule.Next(now) is { } next)
+        // Switched off in the settings (0.12): the reminder is still taken, so turning it on never fires a late one.
+        if (_schedule.TakeReminder(now, before, out var p) && _get().PrayerReminderOn && _schedule.Next(now) is { } next)
         {
             Log.Write($"prayer: reminder for {p}");
             // Real time for the brain: the face stays until the prayer's time (or a poke).
@@ -140,6 +141,13 @@ internal sealed class PrayerTool : IDisposable
         bool quiet = _schedule.InAdhanQuiet(now);
         if (quiet != _director.Adhan) Log.Write($"prayer: quiet {(quiet ? "on" : "off")}");
         _director.SetAdhan(quiet);
+    }
+
+    /// <summary>The settings changed (city, method, Asr, reminder): the schedule is rebuilt from them.</summary>
+    public void Reload()
+    {
+        Rebuild();
+        Check();
     }
 
     /// <summary>Test mode: the prayer clock jumps to <paramref name="at"/> and moves on from there.</summary>

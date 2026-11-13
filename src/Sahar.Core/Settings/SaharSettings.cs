@@ -38,7 +38,12 @@ public sealed record SaharSettings
     public float Volume { get; set; } = 0.6f;
     public TimeOnly? QuietFrom { get; set; }
     public TimeOnly? QuietTo { get; set; }
+    /// <summary>She comments on what you are doing (the settings page's «علّق على شغلك»).</summary>
     public bool AwarenessEnabled { get; set; } = true;
+    /// <summary>Her mood changes by itself with the time and what happens (her late-night mood); 0.12.</summary>
+    public bool AutoMood { get; set; } = true;
+    /// <summary>She plays by herself when idle (moon, windows, the butterfly); 0.12.</summary>
+    public bool PlaysAlone { get; set; } = true;
     public IReadOnlyList<string> BlockedApps { get; set; } = [];
     public bool WeatherEnabled { get; set; }
     /// <summary>The city you typed for the weather, and where Open-Meteo put it.</summary>
@@ -51,6 +56,8 @@ public sealed record SaharSettings
     public double? PrayerLongitude { get; set; }
     public PrayerMethod PrayerMethod { get; set; } = PrayerMethod.UmmAlQura;
     public bool PrayerHanafiAsr { get; set; }
+    /// <summary>A reminder before each prayer (0.12: it can be switched off).</summary>
+    public bool PrayerReminderOn { get; set; } = true;
     public int PrayerReminderMinutes { get; set; } = 10;
     /// <summary>📖 The reciter chosen and the surah played last (shown first).</summary>
     public string QuranReciter { get; set; } = "ar.alafasy";

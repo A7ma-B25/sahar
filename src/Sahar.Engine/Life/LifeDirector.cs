@@ -53,6 +53,10 @@ internal sealed unsafe class LifeDirector : IDisposable
 
     public bool Enabled { get; set; } = true;
     /// <summary>Are you away (from real input, never from her face)? While away she does nothing by herself.</summary>
+    /// <summary>Her mood may change by itself (settings, 0.12); read at each moment.</summary>
+    public Func<bool> AutoMood { get; set; } = () => true;
+    /// <summary>She may play by herself (settings, 0.12): off, life never picks the four play moves.</summary>
+    public Func<bool> PlaysAlone { get; set; } = () => true;
     public Func<bool> Away { get; set; } = () => false;
     public int Actions { get; private set; }
     public bool Typing { get; private set; }
@@ -169,7 +173,8 @@ internal sealed unsafe class LifeDirector : IDisposable
         }
         // Her routine follows life: a test machine's own clock (CI runs at night too) never posts it into other stages.
         if (Enabled && _routine.TakeBreakDue()) _director.Post(EventKind.Break);
-        if (Enabled && _routine.TakeLateNightDue()) _director.Post(EventKind.LateNight);
+        // Her late-night mood is her own (settings «مزاجي بيتغيّر لحالو»): off, the moment is taken but not shown.
+        if (Enabled && _routine.TakeLateNightDue() && AutoMood()) _director.Post(EventKind.LateNight);
         Housekeeping(now);
         // Something needs you (Claude asks, the timer is done, a reminder): she draws your eye, paced.
         if (!_director.Hidden && !Paused && _motion.Current is not (MotionKind.Drag or MotionKind.Throw or MotionKind.Goodbye or MotionKind.Game)
@@ -224,7 +229,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         var forced = _forceNext;
         _forceNext = null;
         var context = new LifeContext(Typing, _media.VideoPlaying || DndOn() || CameraMicOn() || AdhanOn() || QuranOn(), _media.MusicPlaying, away, _director.Hidden, !Resting,
-            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting);
+            now.Hour, ForegroundInfo.IsPerchable(Native.GetForegroundWindow()), _cursorResting) { PlaysAlone = PlaysAlone() };
         var action = forced is { } f && f != LifeAction.None && !_director.Hidden
             ? f
             : LifeChooser.Choose(context, _prefs.Weight, _rng);

@@ -75,4 +75,11 @@ public class AddressTests
     [InlineData("   ", null)]
     [InlineData("اسم طويل كتير كتير كتير كتير كتير", "اسم طويل كتير كتير ك")]   // 20 characters at most
     public void Name_IsTrimmedAndShort(string typed, string? expected) => Assert.Equal(expected, Address.CleanName(typed));
+
+    [Fact]
+    public void Pairs_AreTheWholeWordTable()
+    {
+        Assert.Contains(("اكتب", "اكتبي"), Address.Pairs);
+        foreach (var (male, female) in Address.Pairs) Assert.Equal(female, Address.For(Gender.Female, male));
+    }
 }

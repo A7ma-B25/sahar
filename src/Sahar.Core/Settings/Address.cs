@@ -21,6 +21,9 @@ public static partial class Address
         ("اشلف", "اشلفي"), ("تصبح", "تصبحي"), ("وإنت", "وإنتي"), ("خبّرني", "خبّريني"), ("اكتبلي", "اكتبيلي"),
     ];
 
+    /// <summary>The whole-word pairs (the settings page addresses you with the same table).</summary>
+    public static IReadOnlyList<(string Male, string Female)> Pairs => Words;
+
     private static readonly Dictionary<string, string> Feminine = Words.ToDictionary(w => w.Male, w => w.Female);
 
     // Longest first, and only as whole words: a letter right before or after means another word.

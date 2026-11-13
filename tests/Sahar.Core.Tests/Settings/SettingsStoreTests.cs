@@ -220,4 +220,124 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(5, SettingsStore.Retry(() => { if (++calls < 3) throw new UnauthorizedAccessException(); return 5; }));
         Assert.Equal(3, calls);
     }
+
+    // ---- 0.12 (plan 0.10c Task 1): saved field by field from two programs ----
+
+    [Fact]
+    public void Update_ChangesOnlyItsField()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { Activity = ActivityLevel.Calm });
+        var saved = SettingsStore.Update(PathOf, s => s with { Size = SaharSize.Large });
+        var back = SettingsStore.Load(PathOf);
+        Assert.Equal((ActivityLevel.Calm, SaharSize.Large), (back.Activity, back.Size));
+        Assert.Equal(SettingsStore.ToJson(back), SettingsStore.ToJson(saved));
+    }
+
+    [Fact]
+    public void Update_TwoWritersBothKept()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings());
+        SettingsStore.Update(PathOf, s => s with { Activity = ActivityLevel.Lively });   // the engine (tray)
+        SettingsStore.Update(PathOf, s => s with { Size = SaharSize.Small });           // the settings app
+        var back = SettingsStore.Load(PathOf);
+        Assert.Equal((ActivityLevel.Lively, SaharSize.Small), (back.Activity, back.Size));
+    }
+
+    [Fact]
+    public void Update_MissingFile_CreatesIt()
+    {
+        var nested = System.IO.Path.Combine(_dir, "new", "settings.json");
+        SettingsStore.Update(nested, s => s with { UserName = "Sami" });
+        Assert.Equal("Sami", SettingsStore.Load(nested).UserName);
+    }
+
+    [Fact]
+    public void Update_CorruptFile_KeepsBadCopyAndRefuses()
+    {
+        File.WriteAllText(PathOf, "{ not json");
+        Assert.Throws<SettingsSaveRefusedException>(() => SettingsStore.Update(PathOf, s => s with { Size = SaharSize.Large }));
+        Assert.Equal("{ not json", File.ReadAllText(PathOf));
+        Assert.Equal("{ not json", File.ReadAllText(PathOf + ".bad"));
+        Assert.False(SettingsStore.TryUpdate(PathOf, s => s with { Size = SaharSize.Large }, out _));
+    }
+
+    /// <summary>Two writers hammering one file (the plan allows threads when a second process is impractical in the test
+    /// host): every thread opens its own handle to the named mutex, exactly as a second program does. Each counter is
+    /// raised by load → change → save; a lost update leaves a counter short.</summary>
+    [Fact]
+    public void Update_TwoProcessesHammering_NoLostUpdates()
+    {
+        SettingsStore.Save(PathOf, new SaharSettings { QuranLastSurah = 0, PrayerReminderMinutes = 0 });
+        var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        var threads = Enumerable.Range(0, 8).Select(w => new Thread(() =>
+        {
+            for (int i = 0; i < 25; i++)
+                try
+                {
+                    if (w % 2 == 0) SettingsStore.Update(PathOf, s => s with { QuranLastSurah = (s.QuranLastSurah ?? 0) + 1 });
+                    else SettingsStore.Update(PathOf, s => s with { PrayerReminderMinutes = s.PrayerReminderMinutes + 1 });
+                }
+                catch (Exception e) { errors.Add(e); }
+        })).ToList();
+        foreach (var t in threads) t.Start();
+        foreach (var t in threads) t.Join();
+        Assert.Empty(errors);
+        var back = SettingsStore.Load(PathOf);
+        Assert.Equal((100, 100), (back.QuranLastSurah, back.PrayerReminderMinutes));
+    }
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("[1,2]")]
+    [InlineData("")]
+    public void FromJson_Bad_IsDefaults(string json) => Assert.Equal(new SaharSettings(), SettingsStore.FromJson(json));
+
+    [Fact]
+    public void ToJson_FromJson_RoundTrip()
+    {
+        var s = new SaharSettings { Size = SaharSize.Large, UserName = "Sami", MenuItems = ["play"] };
+        var back = SettingsStore.FromJson(SettingsStore.ToJson(s));
+        Assert.Equal(SettingsStore.ToJson(s), SettingsStore.ToJson(back));
+        Assert.Equal((SaharSize.Large, "Sami"), (back.Size, back.UserName));
+        Assert.Equal(["play"], back.MenuItems!);
+    }
+
+    [Fact]
+    public void OldFile_NewSwitchesDefaultOn()
+    {
+        File.WriteAllText(PathOf, """{ "version": 1, "size": "Small", "activity": "Calm" }""");
+        var s = SettingsStore.Load(PathOf);
+        Assert.Equal((true, true, true), (s.AutoMood, s.PlaysAlone, s.PrayerReminderOn));
+    }
+
+    // ---- Owner ruling 2026-11-13: «نبلّش من جديد» when settings.json can't be read ----
+
+    [Fact]
+    public void Readable_TellsAnUnreadableFile()
+    {
+        Assert.True(SettingsStore.Readable(PathOf));   // missing counts as fine
+        File.WriteAllText(PathOf, "  ");
+        Assert.True(SettingsStore.Readable(PathOf));
+        File.WriteAllText(PathOf, """{ "size": "Large" }""");
+        Assert.True(SettingsStore.Readable(PathOf));
+        File.WriteAllText(PathOf, "{ not json");
+        Assert.False(SettingsStore.Readable(PathOf));
+    }
+
+    [Fact]
+    public void Reset_KeepsTheUnreadableFileAside_AndStartsFresh()
+    {
+        File.WriteAllText(PathOf, "{ not json");
+        var notes = System.IO.Path.Combine(_dir, "notes.json");
+        File.WriteAllText(notes, "[\"keep me\"]");
+        SettingsStore.LoadFailed(PathOf);
+        var fresh = SettingsStore.Reset(PathOf);
+        Assert.Equal(SettingsStore.ToJson(new SaharSettings()), SettingsStore.ToJson(fresh));
+        Assert.False(fresh.HelloDone);
+        Assert.Equal("{ not json", File.ReadAllText(PathOf + ".bad"));
+        Assert.Equal(SettingsStore.ToJson(new SaharSettings()), SettingsStore.ToJson(SettingsStore.Load(PathOf)));
+        Assert.True(SettingsStore.Readable(PathOf));
+        Assert.Equal("[\"keep me\"]", File.ReadAllText(notes));
+        Assert.True(SettingsStore.TrySave(PathOf, new SaharSettings { Size = SaharSize.Small }));   // saves work again
+    }
 }
