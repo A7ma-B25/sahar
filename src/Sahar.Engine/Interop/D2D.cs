@@ -66,6 +66,15 @@ internal struct D2DMatrix
 internal struct D2DBrushProps { public float Opacity; public D2DMatrix Transform; }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct D2DSizeU { public uint Width, Height; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct D2DBitmapProps { public uint Format, Alpha; public float DpiX, DpiY; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct D2DBitmapBrushProps { public uint ExtendX, ExtendY, Interpolation; }
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct D2DGradientStop { public float Position; public D2DColor Color; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -349,6 +358,31 @@ internal sealed unsafe class D2DContext : IDisposable
         // ID2D1RenderTarget::DrawTextLayout(origin, layout, brush, options)
         ((delegate* unmanaged[Stdcall]<nint, D2DPoint, nint, nint, int, void>)Com.Slot(_dc, 28))(_dc, origin, layout, brush, 0);
         return DWrite.Size(layout);
+    }
+
+    /// <summary>A bitmap from 8-bit premultiplied BGRA pixels (a cover, a thumbnail); released with the context.</summary>
+    public nint Bitmap(ReadOnlySpan<byte> bgra, int width, int height)
+    {
+        // ID2D1RenderTarget::CreateBitmap(D2D1_SIZE_U, const void*, UINT32 pitch, const D2D1_BITMAP_PROPERTIES*, ID2D1Bitmap**)
+        var props = new D2DBitmapProps { Format = 87 /* DXGI_FORMAT_B8G8R8A8_UNORM */, Alpha = 1 /* premultiplied */, DpiX = 96, DpiY = 96 };
+        var size = new D2DSizeU { Width = (uint)width, Height = (uint)height };
+        nint bitmap;
+        fixed (byte* px = bgra)
+            Check(((delegate* unmanaged[Stdcall]<nint, D2DSizeU, void*, uint, D2DBitmapProps*, nint*, int>)Com.Slot(_dc, 4))(_dc, size, px, (uint)(width * 4), &props, &bitmap), "CreateBitmap");
+        return Own(bitmap);
+    }
+
+    /// <summary>A bitmap stretched into <paramref name="r"/> with rounded corners (a bitmap brush filling a rounded rect).</summary>
+    public void FillRoundedImage(D2DRect r, float radius, nint bitmap, int width, int height)
+    {
+        // ID2D1RenderTarget::CreateBitmapBrush(ID2D1Bitmap*, const D2D1_BITMAP_BRUSH_PROPERTIES*, const D2D1_BRUSH_PROPERTIES*, ID2D1BitmapBrush**)
+        var bbp = new D2DBitmapBrushProps { ExtendX = 0, ExtendY = 0, Interpolation = 1 /* linear */ };
+        var m = Matrix3x2.CreateScale((r.Right - r.Left) / width, (r.Bottom - r.Top) / height) * Matrix3x2.CreateTranslation(r.Left, r.Top);
+        var bp = new D2DBrushProps { Opacity = 1, Transform = D2DMatrix.From(m) };
+        nint brush;
+        Check(((delegate* unmanaged[Stdcall]<nint, nint, D2DBitmapBrushProps*, D2DBrushProps*, nint*, int>)Com.Slot(_dc, 7))(_dc, bitmap, &bbp, &bp, &brush), "CreateBitmapBrush");
+        Own(brush);
+        FillRoundedRect(r, radius, brush);
     }
 
     private nint Own(nint p) { _owned.Add(p); return p; }

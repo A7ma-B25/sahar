@@ -39,3 +39,21 @@ public static class ActivityRank
     /// <summary>6 s; the volume moment 1.5 s.</summary>
     public static TimeSpan MomentLength(ActivityKind k) => k == ActivityKind.Volume ? TimeSpan.FromSeconds(1.5) : TimeSpan.FromSeconds(6);
 }
+
+/// <summary>Settings → النشاطات: each kind's switch (her own timer has none).</summary>
+public static class ActivitySwitch
+{
+    public static bool On(ActivityKind k, Settings.SaharSettings s) => k switch
+    {
+        ActivityKind.Music or ActivityKind.MusicPaused => s.ActMusic,
+        ActivityKind.WeatherAlert or ActivityKind.WeatherToday => s.ActWeather,
+        ActivityKind.ClaudeAsk or ActivityKind.ClaudeWorking or ActivityKind.ClaudeDone => s.ActClaude,
+        ActivityKind.Shelf or ActivityKind.Screenshot => s.ActShelf,
+        ActivityKind.Volume or ActivityKind.BatteryLow or ActivityKind.Charging => s.ActSystem,
+        ActivityKind.CameraMic => s.ActMicCam,
+        ActivityKind.Copy or ActivityKind.CopyDone => s.ActCopy,
+        ActivityKind.Back => s.ActAway,
+        ActivityKind.ScreenTime => s.ActScreenTime,
+        _ => true,
+    };
+}

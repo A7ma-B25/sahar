@@ -12,20 +12,23 @@ public enum TagSide { Below, Left, Right }
 /// </summary>
 public static class TagPlace
 {
-    public const float HeightDip = 40, MaxWidthDip = 220, ThreadDip = 14, SideGapDip = 10, Radius = 14;
+    public const float HeightDip = 40, MaxWidthDip = 220, ThreadDip = 16, BeadDip = 9, KnotDip = 5, SideGapDip = 10, Radius = 14;
     /// <summary>Room for the tag's shadow (the menu's e1: 24 DIP blur, 8 down).</summary>
     public const float ShadowSideDip = 16, ShadowBelowDip = 24;
 
-    public static RectF Place(RectF body, RectF work, Vector2 tag, float dpi, out TagSide side)
+    /// <summary>The thread's length (ActTag: 16 + 9 per bead, a little more for the knot).</summary>
+    public static float Thread(int beads, bool knot) => ThreadDip + BeadDip * Math.Clamp(beads, 0, 3) + (knot ? KnotDip : 0);
+
+    public static RectF Place(RectF body, RectF work, Vector2 tag, float dpi, out TagSide side, float threadDip = ThreadDip)
     {
         float w = MathF.Round(tag.X), h = MathF.Round(tag.Y);
         float cx = body.X + body.Width / 2, cy = body.Y + body.Height / 2;
         float x, y;
-        if (work.Bottom - body.Bottom >= ThreadDip * dpi + h)
+        if (work.Bottom - body.Bottom >= threadDip * dpi + h)
         {
             side = TagSide.Below;
             x = cx - w / 2;
-            y = body.Bottom + ThreadDip * dpi;
+            y = body.Bottom + threadDip * dpi;
         }
         else
         {

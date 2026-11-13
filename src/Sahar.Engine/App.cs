@@ -1,3 +1,4 @@
+using Sahar.Engine.Activities;
 using Sahar.Engine.Games;
 using Sahar.Core.Games;
 using System.Globalization;
@@ -107,6 +108,7 @@ internal sealed unsafe class App
             monitors.Select(m => m.Bounds).ToList());
         RectF Canvas() => new(sahar.Position.X, sahar.Position.Y, sahar.CanvasPx.Width, sahar.CanvasPx.Height);
         sahar.Need = (who, area) => stage.Need(who, area);
+        ActivityHub? acts = null;   // 0.13: her tag follows her (set below, once the menu and the senses exist)
         void MoveTo(Vector2 position)
         {
             sahar.Position = position;
@@ -124,6 +126,7 @@ internal sealed unsafe class App
             }
             // One batch per move: her input window and the overlay (position only while the size stays).
             stage.Follow(Canvas(), sahar.DpiScale, input.MoveTo(sahar.HitRect));
+            acts?.OnMoved();
         }
         MoveTo(sahar.Position);   // her monitor, her DPI, and the overlay on her from the first frame
 
@@ -214,6 +217,8 @@ internal sealed unsafe class App
         void SetHidden(bool hidden)
         {
             _state.Hidden = hidden;
+            acts?.FullscreenAway(hidden && director?.Where == FullscreenWhere.Hers);
+            acts?.Refresh();
             if (hidden) { menu.Close(); stopShow?.Invoke(false); }
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
@@ -478,6 +483,28 @@ internal sealed unsafe class App
             menu.Open("shortcut", caretInChat: true);
         });
         lifeDirector.QuranOn = () => quran.Playing;
+        // 0.13 «النشاطات»: the tag she carries, its cards, the knock, and the sources that feed them.
+        acts = new ActivityHub(ui, host, _options.Capturable, sahar, () => motion.Body)
+        {
+            Dark = () => menu.Dark(),
+            MenuOpen = () => menu.IsOpen,
+            Hidden = () => _state.Hidden,
+            Dragged = () => motion.Current is MotionKind.Drag or MotionKind.Throw,
+            Hushed = () => dndTool.On,
+            InCall = () => cameraMic.InUse,
+            Settings = () => settings,
+            Fullscreen = () => director.Where,
+            FullscreenMonitor = () => director.FullscreenMonitor != 0 ? Monitors.Describe(director.FullscreenMonitor).Bounds : null,
+            Say = line => speech.Say(line),
+            NeedArea = stage.Need,
+        };
+        using var activities = acts;
+        var claudeSource = new ClaudeSource(acts, director.Post);
+        tray.SessionLocked += locked => Safe(() => acts.Locked(locked));
+        host.DeviceLost += () => Safe(acts.DeviceLost);
+        overlay.SettingChanged += () => Safe(acts.Refresh);
+        motion.DragStarted += () => Safe(acts.Refresh);
+        acts.TagClicked += a => Safe(() => { if (a.Kind == Sahar.Core.Activities.ActivityKind.Timer) menu.Open("tag"); });
         menu.RingOpened += ring => Safe(() => { if (ring == "music") music.SayNowPlaying(); });
         tray.PowerChanged += () => Safe(() => { timerTool.Check(); dndTool.Check(); prayer.Check(); });
         tray.SessionLocked += locked => Safe(() => { if (!locked) { timerTool.Check(); dndTool.Check(); } });
@@ -485,6 +512,8 @@ internal sealed unsafe class App
         menu.OpenChanged += open =>
         {
             _state.MenuOpen = open;
+            if (open) acts.CloseCard();
+            acts.Refresh();
             if (open)
             {
                 // A double-click is a poke, then the menu: the hop and the joy face are cut (eased) and a passing face
@@ -677,7 +706,7 @@ internal sealed unsafe class App
                         Address.You = next.UserGender;
                         Address.Name = next.UserName;
                         break;
-                    case "menu": menu.Reload(next, _ => true); break;
+                    case "menu": menu.Reload(next, _ => true); acts.Refresh(); break;
                     case "stars": sahar.SetInnerStars(next.InnerStars); break;
                     case "prayer": prayer.Reload(); break;
                     case "weather":
@@ -693,6 +722,7 @@ internal sealed unsafe class App
                         }
                         break;
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
+                    case "activities": acts.SettingsChanged(); break;
                 }
             }
             Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
@@ -727,6 +757,13 @@ internal sealed unsafe class App
             return new PipeReply(true, result == "ok" ? "ok=true" : $"ok=false reason64={B64(reason ?? Shortcuts.Taken)}");
         });
         pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true, "ok=true"); });
+        // Claude Code's hooks (0.13, production): one line per hook from «Sahar.Engine.exe hook»; notify only.
+        pipe.Register("claude-hook", r =>
+        {
+            if (Sahar.Core.Activities.ClaudeHook.FromArgs(r.Args) is not { } signal) return new PipeReply(false, "bad hook");
+            if (settings.ActClaude) claudeSource.Apply(signal);
+            return new PipeReply(true);
+        });
         pipe.Register("erase-all", _ => new PipeReply(true, "ok=true"), afterReply: () =>
         {
             Log.Write("erase: all her data, then quit");
@@ -784,6 +821,7 @@ internal sealed unsafe class App
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} faceAnims={sahar.FaceAnimationsMade + FadeLayer.StepAnimationsMade} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
+            ActivityPipe.Register(pipe, acts, claudeSource, () => monitors);
             pipe.Register("debug-simulate-device-removed", _ => { host.SimulateRemoved(); return new PipeReply(true); });
             // Her size for pixel checks (0.11 face stage): a bigger body makes an eye tens of pixels, so two faces show.
             pipe.Register("debug-size", r =>

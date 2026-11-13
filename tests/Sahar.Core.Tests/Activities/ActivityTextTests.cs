@@ -70,4 +70,32 @@ public class ActivityTextTests
         ];
         foreach (var t in all) Assert.False(t.Any(char.IsAsciiDigit), t);
     }
+
+    [Theory]
+    [InlineData(1, "دقيقة")]
+    [InlineData(2, "دقيقتين")]
+    [InlineData(4, "٤ دقايق")]
+    [InlineData(40, "٤٠ دقيقة")]
+    [InlineData(60, "ساعة")]
+    [InlineData(70, "ساعة و١٠ دقايق")]
+    [InlineData(122, "ساعتين ودقيقتين")]
+    [InlineData(200, "٣ ساعات و٢٠ دقيقة")]
+    public void LongDuration(int minutes, string text) => Assert.Equal(text, ActivityText.Long(TimeSpan.FromMinutes(minutes)));
+
+    [Theory]
+    [InlineData(15, 22, "٣:٢٢")]
+    [InlineData(0, 5, "١٢:٠٥")]
+    public void Clock(int h, int m, string text) => Assert.Equal(text, ActivityText.Clock(new DateTimeOffset(2026, 11, 13, h, m, 0, TimeSpan.Zero)));
+
+    [Theory]
+    [InlineData(15, "٣م")]
+    [InlineData(9, "٩ص")]
+    [InlineData(0, "١٢ص")]
+    public void Hour(int h, string text) => Assert.Equal(text, ActivityText.Hour(new DateTimeOffset(2026, 11, 13, h, 0, 0, TimeSpan.Zero)));
+
+    [Theory]
+    [InlineData(84, "١:٢٤")]
+    [InlineData(220, "٣:٤٠")]
+    [InlineData(3700, "١:٠١:٤٠")]
+    public void SongTime(int seconds, string text) => Assert.Equal(text, ActivityText.SongTime(TimeSpan.FromSeconds(seconds)));
 }

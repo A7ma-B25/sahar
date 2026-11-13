@@ -42,6 +42,9 @@ internal sealed class Director
     }
 
     public bool Hidden => _hidden;
+    /// <summary>Where the fullscreen app is, seen from her (0.13: the knock), and its monitor's handle.</summary>
+    public FullscreenWhere Where => _fullscreen;
+    public nint FullscreenMonitor { get; private set; }
     /// <summary>The expression the brain wants right now (what transient expressions return to).</summary>
     public string CurrentKey => _lastKey;
 
@@ -122,6 +125,7 @@ internal sealed class Director
     private void CheckFullscreen()
     {
         nint monitor = FullscreenWatcher.CheckMonitor();
+        if (monitor != 0) FullscreenMonitor = monitor;
         bool any = _debounce.Update(monitor != 0, DateTimeOffset.UtcNow);
         int index = any ? _monitorIndex(monitor) : FullscreenScope.NoMonitor, her = _herMonitor();
         // Re-checked every tick: moved onto the fullscreen app's monitor, she hides; when it ends she comes back.

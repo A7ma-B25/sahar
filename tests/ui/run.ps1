@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui"
 )
@@ -154,6 +154,8 @@ Add-Type -AssemblyName System.Windows.Forms
 `$f = New-Object System.Windows.Forms.Form
 `$f.Text = 'Sahar test $kind'
 `$f.BackColor = 'DarkSlateBlue'
+if ('$kind' -eq 'scene-light') { `$f.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#DCD9E3') }   # the mockups' scenes (0.13)
+if ('$kind' -eq 'scene-dark') { `$f.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#0F0E12') }
 if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$true }
 if ('$kind' -eq 'typing') {
     `$f.StartPosition = 'Manual'; `$f.Location = New-Object System.Drawing.Point(150, 120); `$f.Size = New-Object System.Drawing.Size(560, 380)
@@ -4014,6 +4016,174 @@ function Stage-Settings {
     if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
 }
 
+# ---- 0.13 live activities: her tag, its cards, the knock, Claude Code's hooks (spec 2026-11-13) ----
+
+function Acts { Kv 'debug-activities' }
+function Act([string]$cmd, [string]$argsJson = '{}') { Kva $cmd $argsJson }
+function Rect4([string]$v) { $a = $v -split ',' | ForEach-Object { [int]$_ }; @{ x = $a[0]; y = $a[1]; w = $a[2]; h = $a[3] } }
+function Crop-Rect([string]$path, [int]$x, [int]$y, [int]$w, [int]$h, [string]$to) {
+    $src = [System.Drawing.Bitmap]::new($path)
+    try {
+        $x = [math]::Max(0, $x); $y = [math]::Max(0, $y)
+        $w = [math]::Min($w, $src.Width - $x); $h = [math]::Min($h, $src.Height - $y)
+        $dst = $src.Clone([System.Drawing.Rectangle]::new($x, $y, $w, $h), $src.PixelFormat)
+        $dst.Save($to, [System.Drawing.Imaging.ImageFormat]::Png)
+        $dst.Dispose()
+    }
+    finally { $src.Dispose() }
+}
+function Run-Hook([string]$json) {
+    # Claude Code runs "Sahar.Engine.exe hook" (exec form) with the hook's JSON on stdin.
+    $psi = [System.Diagnostics.ProcessStartInfo]::new($Exe, 'hook')
+    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.StandardInput.Write($json); $p.StandardInput.Close()
+    $out = $p.StandardOutput.ReadToEnd()
+    if (-not $p.WaitForExit(5000)) { $p.Kill(); throw 'the hook did not exit within 5 s' }
+    @{ code = $p.ExitCode; out = $out; ms = $sw.ElapsedMilliseconds }
+}
+function Hook-Json([string]$ev, [string]$extra = '') {
+    '{"session_id":"s1","cwd":"C:\\Users\\runner\\code\\SENTINELPROJECT","hook_event_name":"' + $ev + '"' + $extra + '}'
+}
+
+function Stage-Activities {
+    $kinds = @('music', 'musicPaused', 'weather', 'weatherAlert', 'claude', 'claudeAsk', 'claudeDone', 'shelf', 'shot', 'copy', 'volume',
+        'battery', 'charging', 'camera', 'away', 'time')
+    foreach ($theme in @('light', 'dark')) {
+        Step "every tag and card ($theme)" {
+            Stop-Engine
+            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '" }')
+            $script:actWin = Start-TestWindow "scene-$theme"
+            Start-Engine
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Pose-Body ([int]($Work.Width * 0.62)) ([int]($Work.Height * 0.22)) | Out-Null
+            [Mouse]::Move(5, 5)
+            Start-Sleep -Milliseconds 400
+            foreach ($k in $kinds) {
+                Act 'activity-clear' | Out-Null
+                $a = Act 'activity-sim' ('{"kind":"' + $k + '"}')
+                Start-Sleep -Milliseconds 500
+                $a = Acts
+                if ($a.tagShown -ne 'true') { throw "${k}: no tag ($($a.front))" }
+                $st = State
+                $t = Rect4 $a.tag
+                if ($t.y -lt $st.y) { throw "${k}: the tag is above her ($($t.y) < $($st.y))" }
+                if ($t.x -lt $Work.Left -or $t.x + $t.w -gt $Work.Right -or $t.y + $t.h -gt $Work.Bottom) { throw "${k}: the tag $($a.tag) leaves the work area" }
+                $shot = Screenshot "act-$k-$theme.png"
+                $bx = [int]$st.x - 40; $by = [int]$st.y - 30
+                Crop-Rect $shot ([math]::Min($bx, $t.x - 30)) $by ([math]::Max($st.x + $st.width + 40, $t.x + $t.w + 30) - [math]::Min($bx, $t.x - 30)) ($t.y + $t.h + 34 - $by) (Join-Path $Out "app-$k-tag-$theme.png")
+                $a = Act 'activity-card'
+                Start-Sleep -Milliseconds 600
+                $a = Acts
+                if ($a.cardOpen -ne 'true' -or $a.cardShown -ne 'true') { throw "${k}: the card did not open ($($a.cardOpen)/$($a.cardShown))" }
+                if ($a.tagShown -ne 'false') { throw "${k}: the tag stays while its card is open" }
+                $c = Rect4 $a.card
+                $shot = Screenshot "act-$k-card-$theme.png"
+                Crop-Rect $shot ($c.x - 24) ($c.y - 24) ($c.w + 48) ($c.h + 56) (Join-Path $Out "app-$k-card-$theme.png")
+                Assert-NoCover "$k card ($theme)"
+                Act 'activity-card-close' | Out-Null
+            }
+            Act 'activity-clear' | Out-Null
+            Stop-Process -Id $script:actWin.Id -ErrorAction SilentlyContinue
+        }
+    }
+    Step 'the knock: a small tag from the top edge for 4 s, never the whole monitor' {
+        Act 'activity-knock' '{"kind":"claudeAsk"}' | Out-Null
+        Start-Sleep -Milliseconds 600
+        $a = Acts
+        if ($a.knock -ne 'true') { throw 'no knock' }
+        $r = Rect4 $a.knockRect
+        $m = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        if ($r.y -ne $m.Top -or $r.h -ge $m.Height / 4 -or $r.w -ge $m.Width / 2) { throw "knock rect $($a.knockRect)" }
+        $shot = Screenshot 'act-knock.png'
+        Crop-Rect $shot ($r.x - 20) 0 ($r.w + 40) ($r.h + 20) (Join-Path $Out 'app-knock-dark.png')
+        Assert-NoCover 'knock'
+        Start-Sleep -Milliseconds 4300
+        if ((Acts).knock -ne 'false') { throw 'the knock stayed past 4 s' }
+    }
+    Step 'one at a time: rank, beads (three, then a knot), the wheel' {
+        Stop-Engine
+        Write-Settings '{ "helloDone": true }'
+        Start-Engine
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body ([int]($Work.Width * 0.5)) ([int]($Work.Height * 0.3)) | Out-Null
+        foreach ($k in @('music', 'claude', 'shelf', 'camera', 'weather')) { Act 'activity-sim' ('{"kind":"' + $k + '"}') | Out-Null }
+        $a = Acts
+        if ($a.front -ne 'ClaudeWorking') { throw "front $($a.front) (Claude working outranks music)" }
+        if ($a.beads -ne 'Music,CameraMic,Shelf' -or $a.knot -ne 'false') { throw "beads $($a.beads) knot $($a.knot) (the weather waits for an empty thread)" }
+        Act 'activity-sim' '{"kind":"copy"}' | Out-Null
+        $a = Acts
+        if ($a.front -ne 'Copy' -or $a.knot -ne 'true') { throw "with five: front $($a.front) knot $($a.knot)" }
+        Act 'activity-wheel' '{"steps":"1"}' | Out-Null
+        if ((Acts).front -ne 'ClaudeWorking') { throw "the wheel did not move to the next one ($((Acts).front))" }
+        Act 'activity-bead' '{"index":"1"}' | Out-Null
+        $a = Acts
+        Write-Host "    after a bead click: front $($a.front)"
+        Act 'activity-sim' '{"kind":"shot","moment":"true"}' | Out-Null
+        if ((Acts).front -ne 'Screenshot') { throw 'a moment did not take the front' }
+        Start-Sleep -Milliseconds 6600
+        if ((Acts).front -ne $a.front) { throw "after the moment the pick did not come back ($((Acts).front) vs $($a.front))" }
+        $shot = Screenshot 'act-beads.png'
+        $t = Rect4 (Acts).tag; $st = State
+        Crop-Rect $shot ($t.x - 60) ($st.y - 30) ($t.w + 120) ($t.y + $t.h + 40 - $st.y) (Join-Path $Out 'app-beads-tag-light.png')
+    }
+    Step 'the tag hides while the menu is open and comes back' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Acts).tagShown -ne 'false') { throw 'the tag shows over the menu' }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((Acts).tagShown -ne 'true') { throw 'the tag did not come back' }
+    }
+    Step 'she flies with her tag: it follows, inside the overlay, and the overlay never covers a monitor' {
+        $before = (Acts).tag
+        Pose-Body ([int]($Work.Width * 0.25)) ([int]($Work.Height * 0.4)) | Out-Null
+        Start-Sleep -Milliseconds 300
+        $a = Acts; $o = Overlay; $t = Rect4 $a.tag
+        if ($a.tag -eq $before) { throw 'the tag did not move with her' }
+        if ($t.x -lt [int]$o.x -or $t.y -lt [int]$o.y -or $t.x + $t.w -gt [int]$o.x + [int]$o.w -or $t.y + $t.h -gt [int]$o.y + [int]$o.h) { throw "the tag $($a.tag) is outside the overlay $($o.x),$($o.y) $($o.w)x$($o.h)" }
+        Pose-Body ([int]($Work.Width * 0.5)) ([int]($Work.Bottom - 90)) | Out-Null
+        Start-Sleep -Milliseconds 300
+        $a = Acts
+        if ($a.side -eq 'Below') { throw 'near the taskbar the tag still hangs below her' }
+        Assert-NoCover 'tag at her side'
+        Act 'activity-clear' | Out-Null
+    }
+    Step 'Claude Code: the hook runs silently, the tag follows the session, the ask comes first' {
+        $r = Run-Hook (Hook-Json 'PreToolUse' ',"tool_name":"Edit","tool_input":{"file_path":"C:\\x\\SENTINELFILE.cs"}')
+        if ($r.code -ne 0 -or $r.out -ne '') { throw "hook exit $($r.code), stdout '$($r.out)'" }
+        Write-Host "    hook took $($r.ms) ms"
+        Start-Sleep -Milliseconds 300
+        $a = Acts
+        if ($a.front -ne 'ClaudeWorking' -or $a.claudeSessions -ne '1') { throw "after PreToolUse: front $($a.front), sessions $($a.claudeSessions)" }
+        $r = Run-Hook (Hook-Json 'PermissionRequest' ',"tool_name":"Bash","tool_input":{"command":"echo SENTINELCMD"}')
+        if ($r.code -ne 0 -or $r.out -ne '') { throw "the permission hook printed '$($r.out)' (notify only: it must never answer)" }
+        Start-Sleep -Milliseconds 300
+        if ((Acts).front -ne 'ClaudeAsk') { throw "asking is not first ($((Acts).front))" }
+        Run-Hook (Hook-Json 'PostToolUse' ',"tool_name":"Bash","tool_input":{"command":"x"},"tool_response":{"stdout":"' + ('y' * 200000) + '"}') | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Acts).front -ne 'ClaudeWorking') { throw "the ask did not end when Claude went on ($((Acts).front))" }
+        Run-Hook (Hook-Json 'Stop') | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ((Acts).front -ne 'ClaudeDone') { throw "no done moment ($((Acts).front))" }
+        $g = Run-Hook 'this is not json'
+        if ($g.code -ne 0 -or $g.out -ne '') { throw 'garbage made the hook speak' }
+    }
+    Step 'privacy: no title, path, command or project name in engine.log' {
+        Act 'activity-sim' '{"kind":"music"}' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        foreach ($s in @('SENTINELFILE', 'SENTINELCMD', 'SENTINELPROJECT', 'نسّم')) { if ($log -match $s) { throw "engine.log holds '$s'" } }
+    }
+    Stop-Engine
+    Step 'the hook with no engine: exit 0, nothing printed, quickly' {
+        $r = Run-Hook (Hook-Json 'Stop')
+        if ($r.code -ne 0 -or $r.out -ne '' -or $r.ms -gt 3000) { throw "exit $($r.code) out '$($r.out)' in $($r.ms) ms" }
+    }
+    $sheet = @(Get-ChildItem $Out -Filter 'app-*-tag-light.png' | Select-Object -First 16 | ForEach-Object FullName)
+    if ($sheet.Count) { Contact-Sheet $sheet 4 240 (Join-Path $Out 'activities-tags.png') }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -4032,6 +4202,7 @@ try {
             'shell' { Stage-Shell }
             'face' { Stage-Face }
             'settings' { Stage-Settings }
+            'activities' { Stage-Activities }
         }
     }
 }

@@ -7,7 +7,8 @@ each segment is sampled, every point is moved by 1.1 · (noise − 0.5) on x and
 unit, its own field per axis), and the moved points become cubic Béziers again (Catmull-Rom within a segment, so
 corners stay corners). Circles become closed paths so they wobble too.
 
-Usage: python3 -I tools/art/wobble_icons.py            → prints the C# dictionary body for MenuIcons.cs
+Usage: python3 -I tools/art/wobble_icons.py               → prints the C# dictionary body for MenuIcons.cs
+       python3 -I tools/art/wobble_icons.py --activities  → the same for ActivityIcons.cs (0.13, from ActTag/ActCard)
 No dependencies.
 """
 import math
@@ -33,6 +34,42 @@ ICONS = {
     "back": (["M9 5l7 7-7 7"], []),
     "mic": (["M9 6.5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z", "M6 11.5a6 6 0 0 0 12 0M12 17.5V21"], []),
     "send": (["M19 12H6M11 7l-5 5 5 5"], []),
+}
+
+
+# The activities' clean icons (0.13, copied from ActTag.dc.html / ActCard.dc.html; same filter).
+ACT_ICONS = {
+    "play": (["M8.6 6.4v11.2c0 .5.5.8.9.5l8.3-5.6c.4-.3.4-.8 0-1.1L9.5 5.9c-.4-.3-.9 0-.9.5z"], []),
+    "pause": (["M9 6.2v11.6M15 6.2v11.6"], []),
+    "prev": (["M6.8 6v12M17.8 6.6v10.8L10 12z"], []),
+    "next": (["M17.2 6v12M6.2 6.6v10.8L14 12z"], []),
+    "sun": (["M12 8.3a3.7 3.7 0 1 0 0 7.4 3.7 3.7 0 0 0 0-7.4zM12 3.2v1.9M12 18.9v1.9M3.2 12h1.9M18.9 12h1.9M5.8 5.8l1.3 1.3M16.9 16.9l1.3 1.3M18.2 5.8l-1.3 1.3M7.1 16.9l-1.3 1.3"], []),
+    "cloud": (["M7.6 16.5h9a3.3 3.3 0 0 0 .4-6.6 5 5 0 0 0-9.6-1A3.8 3.8 0 0 0 7.6 16.5z"], []),
+    "rain": (["M7.6 14h9a3.3 3.3 0 0 0 .4-6.6 5 5 0 0 0-9.6-1A3.8 3.8 0 0 0 7.6 14zM9 17.2l-.9 2.3M12.6 17.2l-.9 2.3M16.2 17.2l-.9 2.3"], []),
+    "wind": (["M3.5 9.2h10a2.6 2.6 0 1 0-2.6-2.6M3.5 13h14.2a2.6 2.6 0 1 1-2.6 2.6M3.5 16.8h6.4"], []),
+    "terminal": (["M4.4 5.4h15.2v13.2H4.4zM8 10l2.6 2.1L8 14.2M12.8 14.4h3.6"], []),
+    "bell": (["M12 4.4a5.8 5.8 0 0 0-5.8 5.8v3.6L4.7 16.4h14.6l-1.5-2.6v-3.6A5.8 5.8 0 0 0 12 4.4zM10 19.2a2 2 0 0 0 4 0"], []),
+    "check": (["M5.6 12.6l4 3.9 8.8-9"], []),
+    "stack": (["M4.4 8.6 12 4.6l7.6 4L12 12.6zM4.4 12.6l7.6 4 7.6-4M4.4 16.4l7.6 4 7.6-4"], []),
+    "copy": (["M8.6 8.6h10.2v11H8.6zM15.4 8.6V5.4H5.2v11h3.4"], []),
+    "speaker": (["M4.8 9.6h3.1l4.6-4v12.8l-4.6-4H4.8zM15.6 9.4a3.6 3.6 0 0 1 0 5.2M18.1 6.9a7.2 7.2 0 0 1 0 10.2"], []),
+    "battery": (["M3.8 8.2h14.4v7.6H3.8zM20.4 10.6v2.8M6.2 10.6v2.8"], []),
+    "bolt": (["M13.2 3.6 6.6 13h5.1l-1 7.4L17.4 11h-5.2z"], []),
+    "camera": (["M3.8 8.1h11.4v7.8H3.8zM15.2 11l5-3v8l-5-3"], []),
+    "mic": (["M9 6.5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM6 11.5a6 6 0 0 0 12 0M12 17.5V21"], []),
+    "hourglass": (["M7 4h10M7 20h10M8.2 4v1.6c0 2.6 3.8 4 3.8 6.4 0-2.4 3.8-3.8 3.8-6.4V4M8.2 20v-1.6c0-2.6 3.8-4 3.8-6.4 0 2.4 3.8 3.8 3.8 6.4V20"], []),
+    "lock": (["M7.4 11V8.2a4.6 4.6 0 0 1 9.2 0V11M5.6 11h12.8v9H5.6z"], []),
+    "share": (["M12 15.2V4.6M8.2 8.2 12 4.4l3.8 3.8M5.6 12.4v7.2h12.8v-7.2"], []),
+    "text": (["M5.2 6.4V4.8h13.6v1.6M12 4.8v14.6M9.6 19.4h4.8"], []),
+    "shrink": (["M14 4.6h5.4V10M10 19.4H4.6V14M19.4 4.6 14 10M4.6 19.4 10 14"], []),
+    "zip": (["M6.2 3.6h8.4l3.4 3.4v13.4H6.2zM11.2 4v2.2M11.2 7.6v2.2M11.2 11.2v2.2M10.2 14.6h2v2.6h-2z"], []),
+    "notes": (["M9.2 17.4V6.6l9-2v10.8M9.2 17.4a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zM18.2 15.4a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"], []),
+    "open": (["M14 4.6h5.4V10M19.4 4.6 11 13M17 13.6v5.8H4.6V7h5.8"], []),
+    "sweep": (["M5.2 7.2h13.6M10 7.2V4.8h4v2.4M7 7.2l1 12.2h8l1-12.2"], []),
+    "thermo": (["M10 14.4V5.2a2 2 0 0 1 4 0v9.2a3.5 3.5 0 1 1-4 0z"], []),
+    "snow": (["M12 3.8v16.4M4.9 7.9l14.2 8.2M19.1 7.9 4.9 16.1"], []),
+    "leaf": (["M12 19.5c-4.2-1.6-6.4-5.6-5.6-10.2 2.2.6 4.4 1.6 5.6 3.6 1.2-2 3.4-3 5.6-3.6.8 4.6-1.4 8.6-5.6 10.2zM12 19.5V22"], []),
+    "file": (["M6.2 3.6h8.4l3.4 3.4v13.4H6.2z"], []),
 }
 
 
@@ -177,7 +214,7 @@ def bake(subs):
 
 def main():
     lines = []
-    for key, (paths, circles) in ICONS.items():
+    for key, (paths, circles) in (ACT_ICONS if "--activities" in sys.argv else ICONS).items():
         baked = [bake(segments(p)) for p in paths] + [bake(circle(*c)) for c in circles]
         body = ", ".join(f'"{b}"' for b in baked)
         lines.append(f'        ["{key}"] = new MenuIcon([{body}], []),')

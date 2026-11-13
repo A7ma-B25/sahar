@@ -36,6 +36,29 @@ public static class ActivityText
         return h == 0 ? $"{N(m)} د" : rest == 0 ? $"{N(h)} س" : $"{N(h)} س {N(rest)} د";
     }
 
+    /// <summary>«دقيقة», «٤ دقايق», «ساعة و١٠ دقايق», «٣ ساعات و٢٠ دقيقة» (the card headers).</summary>
+    public static string Long(TimeSpan t)
+    {
+        long m = Math.Max(0, (long)Math.Floor(t.TotalMinutes)), h = m / 60, rest = m % 60;
+        static string Minutes(long n) => n switch { 1 => "دقيقة", 2 => "دقيقتين", <= 10 => $"{N(n)} دقايق", _ => $"{N(n)} دقيقة" };
+        static string Hours(long n) => n switch { 1 => "ساعة", 2 => "ساعتين", <= 10 => $"{N(n)} ساعات", _ => $"{N(n)} ساعة" };
+        if (h == 0) return m == 0 ? "أقل من دقيقة" : Minutes(m);
+        return rest == 0 ? Hours(h) : $"{Hours(h)} و{Minutes(rest)}";
+    }
+
+    /// <summary>A time of day on a 12-hour clock («٣:٢٢»).</summary>
+    public static string Clock(DateTimeOffset t) => N(t.Hour % 12 == 0 ? 12 : t.Hour % 12) + ":" + N(t.Minute).PadLeft(2, '٠');
+
+    /// <summary>An hour in the forecast row («٣م», «٩ص»).</summary>
+    public static string Hour(DateTimeOffset t) => N(t.Hour % 12 == 0 ? 12 : t.Hour % 12) + (t.Hour < 12 ? "ص" : "م");
+
+    /// <summary>A song position («١:٢٤»; over an hour «١:٠١:٤٠»).</summary>
+    public static string SongTime(TimeSpan t)
+    {
+        long s = Math.Max(0, (long)t.TotalSeconds);
+        return s >= 3600 ? $"{N(s / 3600)}:{N(s / 60 % 60).PadLeft(2, '٠')}:{N(s % 60).PadLeft(2, '٠')}" : $"{N(s / 60)}:{N(s % 60).PadLeft(2, '٠')}";
+    }
+
     public static string Shelf(int n) => n switch
     {
         1 => "معي شغلة",

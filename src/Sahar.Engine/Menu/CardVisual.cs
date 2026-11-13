@@ -80,6 +80,8 @@ internal sealed class CardVisual : IDisposable
     }
 
     public bool Shown { get; private set; }
+    /// <summary>Her moon rests on the menu's corner; the activity cards have none (0.13 mockups).</summary>
+    public bool Clasp { set => _clasp.IsVisible = value; }
     /// <summary>The open animation finished (or the card showed at once).</summary>
     public event Action? Opened;
     /// <summary>The card's place on screen (px) while shown.</summary>
@@ -88,7 +90,11 @@ internal sealed class CardVisual : IDisposable
     /// <summary>Shows a view: drawn into the spare surfaces, or — when one of the two already holds exactly this
     /// content (<paramref name="key"/>) — just shown again (opening the menu, main ↔ a drill, costs no drawing);
     /// <paramref name="fade"/> cross-fades from the one showing (a drill).</summary>
-    public void Draw(CardContent content, float dpi, bool fade, string key)
+    public void Draw(CardContent content, float dpi, bool fade, string key) =>
+        Draw(dc => CardPainter.Background(dc, content), dc => CardPainter.Foreground(dc, content), content.T, dpi, fade, key);
+
+    /// <summary>The same, for any card drawn in this frame (0.13: the activity cards): two painters in DIPs.</summary>
+    public void Draw(Action<D2DContext> background, Action<D2DContext> foreground, ThemeTokens t, float dpi, bool fade, string key)
     {
         Ensure(dpi);
         var size = new SizeI((int)MathF.Ceiling(MenuCardLayout.Width * dpi), (int)MathF.Ceiling(MaxHeightDip * dpi));
@@ -99,8 +105,8 @@ internal sealed class CardVisual : IDisposable
         else
         {
             var scale = Matrix3x2.CreateScale(dpi);
-            index = _bg.Draw(dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Background(dc, content); });
-            _fg!.DrawAt(index, dc => { dc.Clear(); dc.SetTransform(scale); CardPainter.Foreground(dc, content); });
+            index = _bg.Draw(dc => { dc.Clear(); dc.SetTransform(scale); background(dc); });
+            _fg!.DrawAt(index, dc => { dc.Clear(); dc.SetTransform(scale); foreground(dc); });
             _keys[index] = key;
             Drawn++;
         }
@@ -108,7 +114,7 @@ internal sealed class CardVisual : IDisposable
         _bgLayer!.Show(index, fadeTime);
         _fgLayer!.Show(index, fadeTime);
         foreach (var s in new[] { _shadowNear, _shadowFar }) { s.Brush = _bg.Brushes[index]; s.Size = new Vector2(size.Width, size.Height); }
-        Theme(content.T, content.Layout, dpi);
+        Theme(t, dpi);
     }
 
     private readonly string?[] _keys = new string?[2];
@@ -212,7 +218,7 @@ internal sealed class CardVisual : IDisposable
 
     private Rgba _hoverColor, _pressedColor;
 
-    private void Theme(ThemeTokens t, CardLayout l, float dpi)
+    private void Theme(ThemeTokens t, float dpi)
     {
         _hoverColor = t.Hover;
         _pressedColor = t.Pressed;
@@ -221,7 +227,6 @@ internal sealed class CardVisual : IDisposable
         bool dark = t == Tokens.Dark;
         Shadow(_shadowNear, 2, 1, dark ? 0.45f : 0.08f, dpi);
         Shadow(_shadowFar, dark ? 32 : 24, dark ? 12 : 8, dark ? 0.5f : 0.12f, dpi);
-        _ = l;
     }
 
     private void Shadow(SpriteVisual v, float blur, float y, float alpha, float dpi)

@@ -183,3 +183,43 @@ public class ActivityStackTests
     public void TagShown_FalseWhileCardMenuHiddenOrDragged(bool card, bool menu, bool hidden, bool dragged, bool shown) =>
         Assert.Equal(shown, ActivityStack.TagShown(card, menu, hidden, dragged));
 }
+
+public class ActivitySwitchTests
+{
+    [Theory]
+    [InlineData(ActivityKind.Music, "music")]
+    [InlineData(ActivityKind.MusicPaused, "music")]
+    [InlineData(ActivityKind.WeatherAlert, "weather")]
+    [InlineData(ActivityKind.WeatherToday, "weather")]
+    [InlineData(ActivityKind.ClaudeAsk, "claude")]
+    [InlineData(ActivityKind.ClaudeDone, "claude")]
+    [InlineData(ActivityKind.Shelf, "shelf")]
+    [InlineData(ActivityKind.Screenshot, "shelf")]
+    [InlineData(ActivityKind.Volume, "system")]
+    [InlineData(ActivityKind.Charging, "system")]
+    [InlineData(ActivityKind.CameraMic, "miccam")]
+    [InlineData(ActivityKind.CopyDone, "copy")]
+    [InlineData(ActivityKind.Back, "away")]
+    [InlineData(ActivityKind.ScreenTime, "screentime")]
+    public void Off_SwitchesItsKindOff(ActivityKind k, string which)
+    {
+        var all = new Sahar.Core.Settings.SaharSettings { ActScreenTime = true };
+        Assert.True(ActivitySwitch.On(k, all));
+        var off = which switch
+        {
+            "music" => all with { ActMusic = false },
+            "weather" => all with { ActWeather = false },
+            "claude" => all with { ActClaude = false },
+            "shelf" => all with { ActShelf = false },
+            "system" => all with { ActSystem = false },
+            "miccam" => all with { ActMicCam = false },
+            "copy" => all with { ActCopy = false },
+            "away" => all with { ActAway = false },
+            _ => all with { ActScreenTime = false },
+        };
+        Assert.False(ActivitySwitch.On(k, off));
+    }
+
+    [Fact]
+    public void Timer_AlwaysOn() => Assert.True(ActivitySwitch.On(ActivityKind.Timer, new Sahar.Core.Settings.SaharSettings { ActSystem = false }));
+}

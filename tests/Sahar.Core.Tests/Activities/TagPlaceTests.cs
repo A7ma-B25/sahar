@@ -111,4 +111,14 @@ public class TagPlaceTests
             foreach (var m in monitors) Assert.False(OverlayPlan.Covers(plan, m), $"{plan} covers {m}");
         }
     }
+
+    [Fact]
+    public void Thread_GrowsWithBeads()
+    {
+        Assert.Equal(16, TagPlace.Thread(0, false));
+        Assert.Equal(43, TagPlace.Thread(3, false));
+        Assert.Equal(43 + TagPlace.KnotDip, TagPlace.Thread(3, true));
+        var body = new RectF(900, 400, 80, 77);
+        Assert.Equal(body.Bottom + 43, TagPlace.Place(body, Work, Tag(1), 1, out _, TagPlace.Thread(3, false)).Y);
+    }
 }
