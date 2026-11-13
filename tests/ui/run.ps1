@@ -3461,7 +3461,11 @@ function Write-Settings([string]$json) {
     New-Item -ItemType Directory -Force -Path (Split-Path $script:SettingsFile) | Out-Null
     Set-Content -Path $script:SettingsFile -Value $json -Encoding UTF8
 }
-function Settings-Json { if (Test-Path $script:SettingsFile) { Get-Content $script:SettingsFile -Raw } else { '' } }
+function Settings-Json {
+    # Read while the page may be writing it (two quick saves): a sharing violation is "not yet", and the wait goes on.
+    if (-not (Test-Path $script:SettingsFile)) { return '' }
+    try { Get-Content $script:SettingsFile -Raw -ErrorAction Stop } catch [System.IO.IOException] { '' }
+}
 function Reload-Settings([string]$extra = '') {
     $r = Send ('{"type":"cmd","name":"settings-reload"' + $extra + '}')
     if (-not $r.ok) { throw "settings-reload not ok: $($r.error)" }
@@ -3805,7 +3809,6 @@ function Stage-Settings {
         Wait-Settings '"lyricsEnabled"\s*:\s*false' 3000 'lyrics off'
         SClick '#sw-actScreenTime'
         Wait-Settings '"actScreenTime"\s*:\s*false' 3000 'screen time off'
-        Capture 'app-activities-light'
     }
     Step 'general: light, dark and English' {
         SNav 'general'
@@ -3821,10 +3824,6 @@ function Stage-Settings {
         Write-Host "    caption pixel $($px.R),$($px.G),$($px.B)"
         if ([math]::Abs($px.R - $want.R) -gt 6 -or [math]::Abs($px.G - $want.G) -gt 6 -or [math]::Abs($px.B - $want.B) -gt 6) { throw "the caption is not #18161C" }
         Capture 'app-general-dark'
-        SNav 'activities'
-        Start-Sleep -Milliseconds 400
-        Capture 'app-activities-dark'   # 0.13: the activities page in dark
-        SNav 'general'
         SClick '#appearance-0'
         Wait-Settings '"appearance"\s*:\s*"system"' 3000 'appearance back to Windows'
         SClick '#language-2'
@@ -3846,7 +3845,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; prayer = 'الصلاة'; listen = 'الاستماع'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
