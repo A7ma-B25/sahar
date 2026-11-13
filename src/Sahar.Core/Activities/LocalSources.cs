@@ -89,6 +89,22 @@ public sealed class ScreenTime(string folder)
 
     public static bool Counts(bool idle, bool locked, bool videoPlaying) => !locked && (!idle || videoPlaying);
 
+    /// <summary>A day's total from its file (null when there is none).</summary>
+    public static TimeSpan? TotalOf(string folder, DateOnly day)
+    {
+        var file = Path.Combine(folder, day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".json");
+        try
+        {
+            if (!File.Exists(file)) return null;
+            using var doc = JsonDocument.Parse(File.ReadAllBytes(file));
+            double sum = 0;
+            if (doc.RootElement.TryGetProperty("apps", out var apps) && apps.ValueKind == JsonValueKind.Object)
+                foreach (var p in apps.EnumerateObject()) if (p.Value.TryGetDouble(out var v)) sum += v;
+            return TimeSpan.FromSeconds(sum);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return null; }
+    }
+
     private static readonly Dictionary<string, string> Names = new(StringComparer.OrdinalIgnoreCase)
     {
         ["msedge"] = "Edge", ["ms-teams"] = "Teams", ["explorer"] = "الملفات", ["winword"] = "Word", ["excel"] = "Excel",
@@ -269,4 +285,65 @@ public sealed class Shelf
 public static class Settle
 {
     public static bool Stable(long sizeBefore, long sizeNow) => sizeNow > 0 && sizeNow == sizeBefore;
+}
+
+/// <summary>Explorer's copy dialog title → its percentage (any language: the first number before a % sign, Latin or
+/// Arabic-Indic digits); null when there is none.</summary>
+public static partial class CopyTitle
+{
+    [System.Text.RegularExpressions.GeneratedRegex(@"(\d{1,3})\s*[%٪]")]
+    private static partial System.Text.RegularExpressions.Regex Pct();
+
+    public static double? Percent(string title)
+    {
+        var m = Pct().Match(Sahar.Core.Text.Digits.ToLatin(title));
+        if (!m.Success) return null;
+        int p = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+        return p <= 100 ? p : null;
+    }
+}
+
+/// <summary>What a shelf item is (a screenshot, a photo, another file), and its small file actions' names.</summary>
+public static class ShelfThings
+{
+    private static readonly string[] Images = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"];
+
+    public static bool IsImage(string path) => Images.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    public static (ShelfThing Thing, string Ext) Of(string path, string? screenshots)
+    {
+        var ext = Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
+        if (!IsImage(path)) return (ShelfThing.Doc, ext);
+        var dir = Dir(path);
+        bool shot = screenshots is not null && string.Equals(dir.TrimEnd('\\', '/'), screenshots.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+        return (shot ? ShelfThing.Shot : ShelfThing.Photo, ext);
+    }
+
+    public static string Label(string path) => Path.GetFileNameWithoutExtension(path.Replace('\\', '/').Split('/')[^1]);
+
+    public static string ZipName(IReadOnlyList<string> paths) => paths.Count == 1 ? Label(paths[0]) + ".zip" : "رف سحر.zip";
+
+    /// <summary>The long side at 1920 (never larger than the original).</summary>
+    public static (int W, int H) Shrunk(int w, int h)
+    {
+        int longest = Math.Max(w, h);
+        if (longest <= 1920) return (w, h);
+        double k = 1920.0 / longest;
+        return ((int)Math.Round(w * k), (int)Math.Round(h * k));
+    }
+
+    /// <summary>Next to the original (Windows or POSIX separators, as given).</summary>
+    public static string ShrunkPath(string path) => Beside(path, Label(path) + "-صغيرة.jpg");
+
+    public static string Beside(string path, string name)
+    {
+        int cut = path.LastIndexOfAny(['\\', '/']);
+        return cut < 0 ? name : path[..(cut + 1)] + name;
+    }
+
+    private static string Dir(string path)
+    {
+        int cut = path.LastIndexOfAny(['\\', '/']);
+        return cut < 0 ? "" : path[..cut];
+    }
 }

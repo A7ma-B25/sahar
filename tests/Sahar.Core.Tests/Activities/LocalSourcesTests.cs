@@ -202,3 +202,59 @@ public class LocalSourcesTests
     [InlineData(2000, 2000, true)]
     public void Settle_GrowingFileWaits(long before, long now, bool stable) => Assert.Equal(stable, Settle.Stable(before, now));
 }
+
+public class SourceParsingTests
+{
+    [Theory]
+    [InlineData("42% complete", 42.0)]
+    [InlineData("اكتمل 42%", 42.0)]
+    [InlineData("اكتمل ٤٢٪", 42.0)]
+    [InlineData("7 % terminé", 7.0)]
+    [InlineData("Copying 3 items", null)]
+    [InlineData("", null)]
+    [InlineData("150% complete", null)]
+    public void CopyTitle_Percent(string title, double? percent) => Assert.Equal(percent, CopyTitle.Percent(title));
+
+    [Theory]
+    [InlineData(@"C:\Users\me\Pictures\Screenshots\Screenshot 2026-11-13 141402.png", ShelfThing.Shot, "PNG")]
+    [InlineData(@"C:\Users\me\Pictures\sea.jpg", ShelfThing.Photo, "JPG")]
+    [InlineData(@"C:\Users\me\Documents\العقد.pdf", ShelfThing.Doc, "PDF")]
+    [InlineData(@"C:\notes.TXT", ShelfThing.Doc, "TXT")]
+    [InlineData(@"C:\folder", ShelfThing.Doc, "")]
+    public void ShelfThings_Kind(string path, ShelfThing thing, string ext)
+    {
+        var (t, e) = ShelfThings.Of(path, @"C:\Users\me\Pictures\Screenshots");
+        Assert.Equal((thing, ext), (t, e));
+    }
+
+    [Fact]
+    public void ShelfThings_Label_NameWithoutExtension() => Assert.Equal("العقد", ShelfThings.Label(@"C:\x\العقد.pdf"));
+
+    [Fact]
+    public void ShelfThings_IsImage() => Assert.True(ShelfThings.IsImage(@"a\b.JPEG") && !ShelfThings.IsImage(@"a\b.pdf"));
+
+    [Fact]
+    public void ScreenTime_TotalOfADay()
+    {
+        var dir = Directory.CreateTempSubdirectory("usage2").FullName;
+        File.WriteAllText(Path.Combine(dir, "2026-11-12.json"), """{"apps":{"Code":3600,"Chrome":600}}""");
+        Assert.Equal(TimeSpan.FromSeconds(4200), ScreenTime.TotalOf(dir, new DateOnly(2026, 11, 12)));
+        Assert.Null(ScreenTime.TotalOf(dir, new DateOnly(2026, 11, 11)));
+    }
+
+    [Theory]
+    [InlineData("Screenshot.png", "lsd.zip", "Screenshot.zip")]
+    public void Zip_NameFromTheFirst(string first, string _, string zip) => Assert.Equal(zip, ShelfThings.ZipName([first]));
+
+    [Fact]
+    public void Zip_Many_ShelfName() => Assert.Equal("رف سحر.zip", ShelfThings.ZipName(["a.png", "b.pdf"]));
+
+    [Theory]
+    [InlineData(4000, 3000, 1920, 1440)]
+    [InlineData(1000, 3000, 640, 1920)]
+    [InlineData(800, 600, 800, 600)]
+    public void Shrink_LongSide1920(int w, int h, int ew, int eh) => Assert.Equal((ew, eh), ShelfThings.Shrunk(w, h));
+
+    [Fact]
+    public void Shrink_Name() => Assert.Equal(@"C:\x\sea-صغيرة.jpg", ShelfThings.ShrunkPath(@"C:\x\sea.png"));
+}
