@@ -14,29 +14,10 @@ namespace Sahar.Core.Mind;
 public static partial class MindParts
 {
     private static partial IToolRegistry CreateToolRegistry(IReadOnlyList<ToolSpec> announced) => new ToolRegistry(announced);
-    private static partial IAutonomyPolicy CreatePolicy() => new StubPolicy();
-    private static partial IInitiativeGate CreateGate() => new StubGate();
+    private static partial IAutonomyPolicy CreatePolicy() => new AutonomyPolicy();
+    private static partial IInitiativeGate CreateGate() => new InitiativeGate();
     private static partial ITurnRunner CreateTurnRunner(ILlm llm, IPromptParts prompts, IMindStore store) => new StubTurn();
     private static partial IActionLog CreateActionLog(ISecretBox box, Func<string, ITool?> tool, Func<DateTimeOffset> now) => new StubLog(now);
-
-    private sealed class StubTools(IReadOnlyList<ToolSpec> announced) : IToolRegistry
-    {
-        public IReadOnlyList<ToolSpec> Announced => announced;
-        public ToolCheck Validate(ToolCall call) => announced.Any(t => t.Name == call.Tool) ? ToolCheck.Valid : new(false, "not-announced");
-        public ActionClass ClassOf(ToolCall call) => announced.FirstOrDefault(t => t.Name == call.Tool)?.Class ?? ActionClass.C;
-        public string DecisionSchema() => "{\"type\":\"object\"}";
-    }
-
-    private sealed class StubPolicy : IAutonomyPolicy
-    {
-        public AutonomyDecision Decide(ToolSpec spec, ToolCall call, ActionClass cls, ActSource source, AutonomyContext ctx) => new(Verdict.Refuse, "not-built");
-    }
-
-    private sealed class StubGate : IInitiativeGate
-    {
-        public InitiativeVerdict Check(InitiativeInputs inputs) => new(false, "not-built");
-        public int Cap(InitiativeLevel level) => 0;
-    }
 
     private sealed class StubTurn : ITurnRunner
     {
