@@ -7,6 +7,8 @@
     <AssemblyName>Sahar.Engine</AssemblyName>
     <RootNamespace>Sahar.Engine</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Sahar's face (tools/art/app_icon.py): the exe, its shortcut, Settings → Apps and the tray (resource 32512). -->
+    <ApplicationIcon>assets\sahar.ico</ApplicationIcon>
     <!-- Compiles on non-Windows machines too (compile checks only). -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <PublishAot>true</PublishAot>
