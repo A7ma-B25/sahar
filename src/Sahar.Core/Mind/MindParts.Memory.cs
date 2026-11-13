@@ -9,7 +9,7 @@ namespace Sahar.Core.Mind;
 // STREAM B owns this file (feat/0.14-memory). Seam stubs: nothing is kept, nothing is learned (in memory only).
 public static partial class MindParts
 {
-    private static partial IMindStore CreateStore(string folder, Func<DateTimeOffset> now, Func<LearnConsent> consent) => new StubStore(now);
+    private static partial IMindStore CreateStore(string folder, Func<DateTimeOffset> now, Func<LearnConsent> consent, Func<int>? episodeDays) => new StubStore(now);
     private static partial ISecretBox CreateSecretBox(string folder) => new StubBox();
     private static partial IPromptParts CreatePromptParts(IMindStore store) => new StubPrompts();
     private static partial IDrafter CreateDrafter(ILlm llm, IMindStore store) => new StubDrafter();

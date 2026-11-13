@@ -36,6 +36,15 @@ internal sealed partial class MindEngine
     partial void AttachRuntime()
     {
         Send = EnsureAndSend;
+        SendIfRunning = m =>
+        {
+            lock (_mindGate)
+            {
+                if (_mindOut is not { } w) return false;
+                try { w.WriteLine(MindWire.Encode(m)); return true; }
+                catch (Exception e) when (e is IOException or ObjectDisposedException) { Disconnected(); return false; }
+            }
+        };
         Ready = () => Settings().MindEnabled && (Script is not null || ActiveModel() is not null);
         Received += OnRuntimeMessage;
         // The settings app's «عقلي» and «النماذج» (production commands; replies are key=value data).

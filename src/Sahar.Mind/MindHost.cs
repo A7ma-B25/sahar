@@ -47,7 +47,7 @@ internal sealed class MindHost : ITurnIO
         catch (Exception) { return new SaharSettings(); }
     }
 
-    private IMindStore Store => _store ??= MindParts.Store(MindPaths.Personal, () => DateTimeOffset.Now, () => LearnConsent.From(Settings()));
+    private IMindStore Store => _store ??= MindParts.Store(MindPaths.Personal, () => DateTimeOffset.Now, () => LearnConsent.From(Settings()), () => Settings().MindEpisodeDays);
 
     public void Send(MindMsg msg)
     {
