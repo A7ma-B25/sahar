@@ -78,7 +78,7 @@ export function render({ S, tx, set, ask, render: rerender }) {
     title(tx('pageActivities')),
     sub(tx('activitiesSub')),
     section(tx('groupCarry')),
-    group(sw('actMusic', 'swMusic', 'swMusicHint'), sw('actWeather', 'swWeather', 'swWeatherHint'),
+    group(sw('actMusic', 'swMusic', 'swMusicHint'), sw('actWeather', 'swActWeather', 'swActWeatherHint'),
       sw('actClaude', 'swClaude', 'swClaudeHint'), sw('actShelf', 'swShelf', 'swShelfHint')),
     section(tx('groupDevice')),
     group(sw('actSystem', 'swSystem', 'swSystemHint'), sw('actMicCam', 'swMicCam', 'swMicCamHint'), sw('actCopy', 'swCopy', 'swCopyHint'),
