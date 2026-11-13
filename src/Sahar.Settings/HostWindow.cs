@@ -53,6 +53,17 @@ internal sealed unsafe class HostWindow
         Native.SetForegroundWindow(Hwnd);
     }
 
+    /// <summary>Test mode: to the front even when another program has the foreground (input attached for a moment).</summary>
+    public void ForceFront()
+    {
+        if (Native.IsIconic(Hwnd)) Native.ShowWindow(Hwnd, Native.SW_RESTORE);
+        uint fg = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), null), me = Native.GetCurrentThreadId();
+        bool attached = fg != 0 && fg != me && Native.AttachThreadInput(me, fg, true);
+        Native.BringWindowToTop(Hwnd);
+        Native.SetForegroundWindow(Hwnd);
+        if (attached) Native.AttachThreadInput(me, fg, false);
+    }
+
     public float Dpi => Native.GetDpiForWindow(Hwnd) is var d and > 0 ? d / 96f : 1f;
 
     public (int Width, int Height) ClientSize

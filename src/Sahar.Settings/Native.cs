@@ -76,6 +76,11 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")] public static partial nint LoadCursorW(nint instance, nint name);
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)] public static partial int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool AllowSetForegroundWindow(uint processId);
+    [LibraryImport("user32.dll")] public static partial nint GetForegroundWindow();
+    [LibraryImport("user32.dll")] public static partial uint GetWindowThreadProcessId(nint hwnd, uint* pid);
+    [LibraryImport("kernel32.dll")] public static partial uint GetCurrentThreadId();
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool AttachThreadInput(uint attach, uint to, [MarshalAs(UnmanagedType.Bool)] bool on);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool BringWindowToTop(nint hwnd);
     [LibraryImport("shcore.dll")] public static partial int GetDpiForMonitor(nint monitor, int type, uint* dpiX, uint* dpiY);
     [LibraryImport("dwmapi.dll")] public static partial int DwmSetWindowAttribute(nint hwnd, int attr, void* value, int size);
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)] public static partial nint GetModuleHandleW(string? name);

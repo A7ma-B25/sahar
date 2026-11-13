@@ -123,6 +123,7 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
             {
                 var dir = options.SnapshotDir ?? Path.GetTempPath();
                 Directory.CreateDirectory(dir);
+                window.ForceFront();
                 // DevTools' screenshot forces a frame even when the window is behind another (CapturePreview waits for
                 // the next painted frame, which never comes while the window is covered: CI run 43480934329).
                 var json = await web.View!.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", """{"format":"png"}""");
@@ -144,6 +145,9 @@ internal sealed class TestPipe(UiSyncContext ui, HostWindow window, WebHost web,
                 var code = Encoding.UTF8.GetString(Convert.FromBase64String(Arg(r, "code64")));
                 return new PipeReply(true, "result64=" + B64(await Eval(code)));
             }
+            case "front":
+                window.ForceFront();
+                return new PipeReply(true);
             case "close":
                 Native.PostMessageW(window.Hwnd, Native.WM_CLOSE, 0, 0);
                 return new PipeReply(true);

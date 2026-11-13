@@ -32,6 +32,10 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
     public async Task StartAsync()
     {
         var envOptions = new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = false };
+        // Test mode: the page keeps painting while another window covers it (the CI desktop is small and her card sits
+        // on top), so captures and timers behave as on a real screen.
+        if (options.TestMode)
+            envOptions.AdditionalBrowserArguments = "--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding";
         // Its own data folder; one that cannot be made (a file in the way, no rights) fails here, at once.
         Directory.CreateDirectory(DataFolder(options));
         _env = await CoreWebView2Environment.CreateAsync(null, DataFolder(options), envOptions).WaitAsync(StartTimeout);

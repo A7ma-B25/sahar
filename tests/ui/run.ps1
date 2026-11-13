@@ -3882,6 +3882,7 @@ function Stage-Settings {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log') -Raw
         if ($log -match 'دمشق') { throw 'settings.log has the typed city' }
         Start-Engine
+        SNav 'sahar'
         SClick '#sw-mood'
         Wait-Settings '"autoMood"\s*:\s*true' 3000 'the switch back'
     }
