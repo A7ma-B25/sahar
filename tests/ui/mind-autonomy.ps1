@@ -14,6 +14,11 @@ function Mind-Log([string]$day = 'today') {
     $r = Kva 'mind-log' ('{"day":"' + $day + '"}')
     (Text64 $r.json64) | ConvertFrom-Json
 }
+function Last-Turn([string]$kind = 'chat') {
+    $m = [regex]::Matches((Mind-Sent), "turn:([ci]\d+):$kind") | Select-Object -Last 1
+    if (-not $m) { throw "no $kind turn sent: $(Mind-Sent)" }
+    $m.Groups[1].Value
+}
 function Chat-Line([string]$text) {
     $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
     $r = Send ('{"type":"cmd","name":"menu-chat","args":{"text64":"' + $b + '"}}')
@@ -44,17 +49,18 @@ function Stage-MindAutonomy {
     Start-Engine
     Pose-Body ([int]($Work.Width * 0.3)) ([int]($Work.Height * 0.35)) | Out-Null
 
-    Step 'mind (autonomy): her brain''s engine side stays light (a turn, calls, the log: < 3 MB over rest)' {
+    Step 'mind (autonomy): her brain''s engine side stays light (turns, calls, the log, nothing drawn: < 3 MB over rest)' {
         Start-Sleep -Seconds 20
         $rest = (State).workingSetBytes
         Kva 'mind-test-fake' '{"on":"true"}' | Out-Null
         for ($k = 0; $k -lt 5; $k++) {
             Kva 'mind-test-initiative' '{"force":"true"}' | Out-Null
-            $id = ([regex]::Matches((Mind-Sent), 'turn:(i\d+):initiative') | Select-Object -Last 1).Groups[1].Value
+            $id = Last-Turn 'initiative'
             Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":1,"tool":"prayer.next","data":"{}","why":"x"}')
-            Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":2,"tool":"note.save","data":"{\"text\":\"rest-check\"}","why":"x"}')
+            Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":2,"tool":"timer.cancel","data":"{}","why":"x"}')
             Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"","final":true}')
             Mind-Log 'all' | Out-Null
+            Write-Host ("    after turn {0}: {1:N1} MB" -f ($k + 1), ((State).workingSetBytes / 1MB))
         }
         Start-Sleep -Seconds 3
         $after = (State).workingSetBytes
@@ -95,28 +101,28 @@ function Stage-MindAutonomy {
         $f = Kva 'mind-test-fake' '{"on":"true","askSeconds":"8"}'
         if ($f.fake -ne 'true') { throw 'no fake Mind' }
         Chat-Line 'ركّزني شي ربع ساعة SENTINEL-TYPED'
-        if ((Mind-Sent) -notmatch 'turn:c1:chat') { throw "sent: $(Mind-Sent)" }
+        $script:c1 = Last-Turn
         $m = Menu
         if ((Text64 $m.line64) -ne 'عم فكّر…') { throw "header: $(Text64 $m.line64)" }
         Start-Sleep -Milliseconds 400
         Card-Shot 'app-header-thinking'
-        Mind-Line '{"v":1,"t":"partial","id":"c1","text":"يلا نركّز!"}'
+        Mind-Line ('{"v":1,"t":"partial","id":"' + $script:c1 + '","text":"يلا نركّز!"}')
         if ((Text64 (Menu).line64) -ne 'يلا نركّز!') { throw "streamed: $(Text64 (Menu).line64)" }
     }
 
     Step 'mind (autonomy): calls run her real abilities (timer, hush, note, game) and are logged' {
-        Mind-Line '{"v":1,"t":"call","id":"c1","call":1,"tool":"timer.start","data":"{\"minutes\":15}","why":"x"}'
+        Mind-Line ('{"v":1,"t":"call","id":"' + $script:c1 + '","call":1,"tool":"timer.start","data":"{\"minutes\":15}","why":"x"}')
         Start-Sleep -Milliseconds 300
         $t = Kv 'debug-timer'
         if ($t.running -ne 'true' -or [int]$t.remaining -lt 880) { throw "timer: $($t.running) $($t.remaining)" }
-        if ((Mind-Sent) -notmatch 'tool-result:c1::1:ok') { throw "sent: $(Mind-Sent)" }
-        Mind-Line '{"v":1,"t":"call","id":"c1","call":2,"tool":"hush.on","data":"{\"minutes\":30}","why":"x"}'
+        if ((Mind-Sent) -notmatch "tool-result:$($script:c1)::1:ok") { throw "sent: $(Mind-Sent)" }
+        Mind-Line ('{"v":1,"t":"call","id":"' + $script:c1 + '","call":2,"tool":"hush.on","data":"{\"minutes\":30}","why":"x"}')
         Start-Sleep -Milliseconds 300
         if ((Auto).hush -ne 'true') { throw 'no hush' }
-        Mind-Line '{"v":1,"t":"call","id":"c1","call":3,"tool":"note.save","data":"{\"text\":\"SENTINEL-NOTE\"}","why":"x"}'
+        Mind-Line ('{"v":1,"t":"call","id":"' + $script:c1 + '","call":3,"tool":"note.save","data":"{\"text\":\"SENTINEL-NOTE\"}","why":"x"}')
         Start-Sleep -Milliseconds 300
         if (-not ((Get-Content $notesFile -Raw) -match 'SENTINEL-NOTE')) { throw 'the note was not saved' }
-        Mind-Line '{"v":1,"t":"say","id":"c1","text":"شغّلت مؤقت ربع ساعة وسكتّ","final":true}'
+        Mind-Line ('{"v":1,"t":"say","id":"' + $script:c1 + '","text":"شغّلت مؤقت ربع ساعة وسكتّ","final":true}')
         Start-Sleep -Milliseconds 300
         $log = Mind-Log
         foreach ($t in 'timer.start', 'hush.on', 'note.save') {
@@ -126,8 +132,8 @@ function Stage-MindAutonomy {
         if ($q.why -notmatch 'ركّزني') { throw "his words are not with his line: $($q.why)" }
         # a game: the card closes and the game runs
         Chat-Line 'بدي العب'
-        if ((Mind-Sent) -notmatch 'turn:c2:chat') { throw "sent: $(Mind-Sent)" }
-        Mind-Line '{"v":1,"t":"call","id":"c2","call":1,"tool":"game.start","data":"{\"game\":\"stars\"}","why":"x"}'
+        $script:c2 = Last-Turn
+        Mind-Line ('{"v":1,"t":"call","id":"' + $script:c2 + '","call":1,"tool":"game.start","data":"{\"game\":\"stars\"}","why":"x"}')
         Start-Sleep -Milliseconds 500
         if ((Auto).game -ne 'true') { throw 'no game' }
         Send '{"type":"cmd","name":"game-stop"}' | Out-Null
