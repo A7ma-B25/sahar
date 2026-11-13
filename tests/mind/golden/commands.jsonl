@@ -1,0 +1,65 @@
+{"id": "timer-ar-01", "text": "شغليلي مؤقت ربع ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-02", "text": "بدي ركّز نص ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 30}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-03", "text": "شغليلي شي ربع ساعة لركّز", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-04", "text": "حطيلي تايمر ٢٥ دقيقة", "expect": {"tool": "timer.start", "args": {"minutes": 25}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-05", "text": "مؤقت ساعة لو سمحتي", "expect": {"tool": "timer.start", "args": {"minutes": 60}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-06", "text": "ذكريني بعد ١٠ دقايق انو خلص الوقت", "expect": {"tool": "timer.start", "args": {"minutes": 10}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-07", "text": "شغلي موقت ٤٥", "expect": {"tool": "timer.start", "args": {"minutes": 45}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-08", "text": "بدي استراحة ٥ دقايق، حطيلي وقت", "expect": {"tool": "timer.start", "args": {"minutes": 5}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-ar-09", "text": "عيري تايمر ساعتين", "expect": {"tool": "timer.start", "args": {"minutes": 120}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-en-01", "text": "start a 20 minute timer", "expect": {"tool": "timer.start", "args": {"minutes": 20}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "timer-en-02", "text": "focus timer for 50 mins please", "expect": {"tool": "timer.start", "args": {"minutes": 50}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "timer-cancel-01", "text": "وقفي المؤقت", "expect": {"tool": "timer.cancel", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-cancel-02", "text": "خلص لغي التايمر", "expect": {"tool": "timer.cancel", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "timer-cancel-en", "text": "cancel the timer", "expect": {"tool": "timer.cancel", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "reminder-ar-01", "text": "ذكريني اشرب مي بعد نص ساعة", "expect": {"tool": "reminder.set", "args": {"inMinutes": 30, "text": "اشرب مي"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "reminder-ar-02", "text": "ذكريني اتصل بأمي الساعة ٩ المسا", "expect": {"tool": "reminder.set", "args": {"at": "21:00", "text": "اتصل بأمي"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "reminder-ar-03", "text": "نبهيني بعد ساعة شيل الغسيل", "expect": {"tool": "reminder.set", "args": {"inMinutes": 60, "text": "شيل الغسيل"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "reminder-en-01", "text": "remind me to stretch in 40 minutes", "expect": {"tool": "reminder.set", "args": {"inMinutes": 40, "text": "stretch"}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "note-ar-01", "text": "سجلي عندك: جيب خبز وحليب", "expect": {"tool": "note.save", "args": {"text": "جيب خبز وحليب"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "note-ar-02", "text": "اكتبيلي ملاحظة انو الاجتماع الخميس", "expect": {"tool": "note.save", "args": {"text": "الاجتماع الخميس"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "note-ar-03", "text": "احفظي هالرقم ٠٩٣٣", "expect": {"tool": "note.save", "args": {"text": "٠٩٣٣"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "note-en-01", "text": "note: buy batteries", "expect": {"tool": "note.save", "args": {"text": "buy batteries"}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "note-open-01", "text": "فرجيني ملاحظاتي", "expect": {"tool": "note.open", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "hush-ar-01", "text": "اسكتي شوي", "expect": {"tool": "hush.on", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "hush-ar-02", "text": "ما بدي تعليقات لساعة", "expect": {"tool": "hush.on", "args": {"minutes": 60}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "hush-ar-03", "text": "هسسس نص ساعة", "expect": {"tool": "hush.on", "args": {"minutes": 30}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "hush-en-01", "text": "be quiet for 90 minutes", "expect": {"tool": "hush.on", "args": {"minutes": 90}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "hush-off-01", "text": "رجعي احكي", "expect": {"tool": "hush.off", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "hush-off-02", "text": "خلص فيكي تحكي هلق", "expect": {"tool": "hush.off", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "sleep-ar-01", "text": "روحي نامي ساعة", "expect": {"tool": "sleep.hide", "args": {"minutes": 60}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "sleep-ar-02", "text": "اختفي شي ربع ساعة", "expect": {"tool": "sleep.hide", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "sleep-en-01", "text": "hide for two hours", "expect": {"tool": "sleep.hide", "args": {"minutes": 120}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "game-ar-01", "text": "يلا نلعب لقط النجوم", "expect": {"tool": "game.start", "args": {"game": "stars"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "game-ar-02", "text": "بدي العب غميضة", "expect": {"tool": "game.start", "args": {"game": "hide"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "game-ar-03", "text": "الحقيني!", "expect": {"tool": "game.start", "args": {"game": "chase"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "game-ar-04", "text": "يلا طابة", "expect": {"tool": "game.start", "args": {"game": "ball"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "games-open-01", "text": "شو في العاب؟", "expect": {"tool": "games.open", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-01", "text": "ارقصيلي شوي", "expect": {"tool": "move.play", "args": {"move": "dance"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-02", "text": "تمطّي", "expect": {"tool": "move.play", "args": {"move": "stretch"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-03", "text": "نطّي نطّة", "expect": {"tool": "move.play", "args": {"move": "hop"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-en-01", "text": "dance for me", "expect": {"tool": "move.play", "args": {"move": "dance"}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "prayer-ar-01", "text": "ايمتى الصلاة الجاية؟", "expect": {"tool": "prayer.next", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "prayer-ar-02", "text": "قديش باقي عالمغرب؟", "expect": {"tool": "prayer.next", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "prayer-open-01", "text": "فرجيني مواقيت الصلاة", "expect": {"tool": "prayer.open", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-now-01", "text": "شو عم يشتغل هلق؟", "expect": {"tool": "music.now", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-ar-01", "text": "وقفي الغنية", "expect": {"tool": "music.control", "args": {"op": "pause"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-ar-02", "text": "الغنية الجاية", "expect": {"tool": "music.control", "args": {"op": "next"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-ar-03", "text": "رجعي الغنية اللي قبل", "expect": {"tool": "music.control", "args": {"op": "prev"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-ar-04", "text": "شغلي الموسيقى", "expect": {"tool": "music.control", "args": {"op": "toggle"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "music-en-01", "text": "next song", "expect": {"tool": "music.control", "args": {"op": "next"}}, "say": {"dialect": false, "maxChars": 220}}
+{"id": "quran-ar-01", "text": "بدي اسمع قرآن", "expect": {"tool": "quran.open", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "quran-ar-02", "text": "وقفي القرآن", "expect": {"tool": "quran.stop", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-01", "text": "كبري حالك شوي", "expect": {"tool": "settings.set", "args": {"key": "size", "value": "large"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-02", "text": "صغري حجمك", "expect": {"tool": "settings.set", "args": {"key": "size", "value": "small"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-03", "text": "خليكي هادية أكتر", "expect": {"tool": "settings.set", "args": {"key": "activity", "value": "calm"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-04", "text": "حطي الوضع الليلي", "expect": {"tool": "settings.set", "args": {"key": "appearance", "value": "dark"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-05", "text": "طفي النجوم اللي جواتك", "expect": {"tool": "settings.set", "args": {"key": "innerStars", "value": false}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-06", "text": "شغلي الطقس", "expect": {"tool": "settings.set", "args": {"key": "weatherEnabled", "value": true}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-07", "text": "احكي معي انكليزي", "expect": {"tool": "settings.set", "args": {"key": "language", "value": "english"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-08", "text": "ذكريني بالصلاة قبل ربع ساعة", "expect": {"tool": "settings.set", "args": {"key": "prayerReminderMinutes", "value": 15}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "settings-ar-09", "text": "ناديني أبو علي", "expect": {"tool": "settings.set", "args": {"key": "userName", "value": "أبو علي"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "memory-ar-01", "text": "تذكري اني بحب القهوة بلا سكر", "expect": {"tool": "memory.remember", "args": {"text": "بيحب القهوة بلا سكر", "kind": "preference"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "goal-ar-01", "text": "بدي خلص المشروع قبل الجمعة، تابعيني كل يوم", "expect": {"tool": "goal.add", "args": {"text": "خلّص المشروع قبل الجمعة", "checkEvery": "day"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "typo-ar-01", "text": "شغيليلي موءقت ١٥", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "digits-ar-01", "text": "مؤقت ٧ دقايق", "expect": {"tool": "timer.start", "args": {"minutes": 7}}, "say": {"dialect": true, "maxChars": 220}}

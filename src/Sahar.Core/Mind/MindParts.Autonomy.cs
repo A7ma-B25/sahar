@@ -13,7 +13,7 @@ namespace Sahar.Core.Mind;
 // STREAM C owns this file (feat/0.14-autonomy). Seam stubs: nothing is allowed, nothing runs, the gate stays shut.
 public static partial class MindParts
 {
-    private static partial IToolRegistry CreateToolRegistry(IReadOnlyList<ToolSpec> announced) => new StubTools(announced);
+    private static partial IToolRegistry CreateToolRegistry(IReadOnlyList<ToolSpec> announced) => new ToolRegistry(announced);
     private static partial IAutonomyPolicy CreatePolicy() => new StubPolicy();
     private static partial IInitiativeGate CreateGate() => new StubGate();
     private static partial ITurnRunner CreateTurnRunner(ILlm llm, IPromptParts prompts, IMindStore store) => new StubTurn();
