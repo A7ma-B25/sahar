@@ -3464,7 +3464,7 @@ function Write-Settings([string]$json) {
 function Settings-Json {
     # Read while the page may be writing it (two quick saves): a sharing violation is "not yet", and the wait goes on.
     if (-not (Test-Path $script:SettingsFile)) { return '' }
-    try { Get-Content $script:SettingsFile -Raw -ErrorAction Stop } catch [System.IO.IOException] { '' }
+    try { Get-Content $script:SettingsFile -Raw -ErrorAction Stop } catch [System.IO.IOException] { '' } catch [System.Management.Automation.ItemNotFoundException] { '' }   # replaced under us (File.Replace)
 }
 function Reload-Settings([string]$extra = '') {
     $r = Send ('{"type":"cmd","name":"settings-reload"' + $extra + '}')
