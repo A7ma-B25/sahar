@@ -3567,6 +3567,9 @@ function Wait-Settings([string]$pattern, [int]$ms, [string]$what) {
 # A field of settings.json, parsed (the file escapes '+' and Arabic as \uXXXX).
 function Setting([string]$name) { try { (Settings-Json | ConvertFrom-Json).$name } catch { $null } }
 # The page as the owner sees it (app-*.png): WebView2's own picture; if it does not come, the window cut from the screen.
+function SClear([string]$sel) {
+    SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("(() => { const e = document.querySelector(" + ($sel | ConvertTo-Json) + "); e.focus(); e.value = ''; e.dispatchEvent(new Event('input')); e.blur(); return true; })()")) + '"}')
+}
 function Capture([string]$name) {
     try { SOk 'capture' ('{"name":"' + $name + '"}'); return }
     catch { Write-Host "    capture through WebView2 failed ($_); cutting the window from the screen" }
@@ -3748,6 +3751,15 @@ function Stage-Settings {
         Wait-Until { (Setting 'menuShortcut') -eq 'Ctrl+Alt+S' } 3000 'settings.json: shortcut back to Ctrl+Alt+S'
     }
     # ---- الصلاة، الاستماع، عام، الخصوصية (Task 7) ----
+    # ---- Review fix pass (2026-11-13): the page reads her settings as they are now, not as they were drawn ----
+    Step 'سحورة: the name can go back to how it was' {
+        SNav 'sahar'
+        SType '#name' 'Sami'
+        SKey 'Tab'
+        Wait-Until { (Setting 'userName') -eq 'Sami' } 3000 'the name was not saved'
+        SClear '#name'
+        Wait-Until { $null -eq (Setting 'userName') } 3000 'clearing the name back to how it was drawn was not saved'
+    }
     Step 'prayer: city, method, Asr and reminder' {
         # She searches cities through the engine's geocoder: a stub that knows Aleppo.
         $script:sx = Join-Path $env:TEMP 'sahar-settings-stub'
@@ -3780,6 +3792,21 @@ function Stage-Settings {
         Wait-Settings '"prayerReminderOn"\s*:\s*true' 3000 'reminder back on'
         $p = Kv 'debug-prayer'
         if ($p.on -ne 'true') { throw 'the engine has no prayer times after the reload' }
+    }
+    Step 'سحورة: the weather goes off and on again once her city is known' {
+        SNav 'sahar'
+        if ((Js "document.getElementById('sw-weather').getAttribute('aria-checked')") -ne 'true') {
+            SClick '#sw-weather'
+            Wait-Until { (Js "document.getElementById('weather-city-row').hidden") -eq $false } 2000 'no city field'
+            SType '#weather-city' 'حلب'
+            SKey 'Enter'
+            Wait-Until { (Setting 'weatherEnabled') -eq $true } 5000 'the found city did not turn the weather on'
+        }
+        SClick '#sw-weather'
+        Wait-Until { (Setting 'weatherEnabled') -eq $false } 3000 'weather off'
+        SClick '#sw-weather'
+        Wait-Until { (Setting 'weatherEnabled') -eq $true } 3000 'weather on again (she knows the city now) was not saved'
+        if ((Js "document.getElementById('weather-city-row').hidden") -ne $true) { throw 'the city field opened although she knows the city' }
     }
     Step 'listening: the reciter' {
         SNav 'listen'
@@ -3917,6 +3944,19 @@ function Stage-Settings {
         Wait-Settings '"size"\s*:\s*"medium"' 3000 'size back to medium'
         if ((Settings-Json) -notmatch '"activity"\s*:\s*"lively"') { throw 'the engine''s activity was lost on the second save' }
     }
+    Step 'her own save applies what the other program saved' {
+        $dpi = [double](Info).dpi
+        $j = Settings-Json | ConvertFrom-Json
+        $j.size = 'Large'
+        Set-Content -Path $script:SettingsFile -Value ($j | ConvertTo-Json -Depth 5) -Encoding UTF8   # no reload: as if the app's reload never came
+        Kva 'set-activity' '{"level":"Calm"}' | Out-Null
+        Wait-Until { [math]::Abs((State).width - 120 * $dpi) -le 2 } 2000 "her save took the file's size without applying it (width $((State).width))"
+        Kva 'set-activity' '{"level":"Medium"}' | Out-Null
+        $j = Settings-Json | ConvertFrom-Json
+        $j.size = 'Medium'
+        Set-Content -Path $script:SettingsFile -Value ($j | ConvertTo-Json -Depth 5) -Encoding UTF8
+        Reload-Settings | Out-Null
+    }
     Step 'settings without her' {
         Stop-Engine
         Wait-Until { -not (Test-Path '\\.\pipe\sahar') } 5000 'the engine pipe is still there'
@@ -3963,6 +4003,17 @@ function Stage-Settings {
         Capture 'app-reset-confirm-light'
         SClick '#reset-no'
         Wait-Until { (SText '#reset-note .label') -eq 'ما عم اقدر اقرا ملف إعداداتي.' } 2000 '«لا» did not go back'
+        # Held by another program at that moment: the reset fails calmly, and nothing is lost.
+        $hold = [System.IO.File]::Open($script:SettingsFile, 'Open', 'Read', 'None')
+        try {
+            SClick '#reset-start'
+            SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("window.sahar.reload().then(() => true)")) + '"}')
+            Wait-Until { [bool](Js "!!document.getElementById('reset-yes')") } 3000 'the window coming back closed the open «أكيد؟»'
+            SClick '#reset-yes'
+            Wait-Until { (SText '#reset-note .label') -eq 'ما قدرت ابلّش من جديد هلق.' } 12000 "a failed reset says nothing ($(SText '#reset-note .label'))"
+        }
+        finally { $hold.Dispose() }
+        if ((Get-Content $script:SettingsFile -Raw) -ne '{ not json') { throw 'a failed reset changed the file' }
         SClick '#reset-start'
         SClick '#reset-yes'
         Wait-Until { (SText '#reset-note .label') -eq 'رجعت متل أول.' } 5000 'no «رجعت متل أول.»'
@@ -3987,17 +4038,37 @@ function Stage-Settings {
         SClick '#clip-yes'
         Wait-Until { (Clip-Count) -eq 0 } 3000 'the clipboard history is not empty'
         Wait-Until { (SText '#clip-status') -eq 'مسحته. الحافظة فاضية هلق.' } 2000 'no «مسحته»'
+        SNav 'sahar'
+        SClick '#gender-1'
+        Wait-Until { (Setting 'userGender') -match '^female$' } 3000 'gender female before the erase'
+        SNav 'privacy'
         $old = (Get-Process -Name 'Sahar.Engine').Id
         SClick '#erase-ask'
         if ((SText '#erase .desc') -notmatch 'رح انسى كل شي') { throw 'the erase question is missing' }
-        SClick '#erase-yes'
-        Wait-Until { -not (Get-Process -Id $old -ErrorAction SilentlyContinue) } 8000 'the engine did not quit'
-        Wait-Until { $p = @(Get-Process -Name 'Sahar.Engine' -ErrorAction SilentlyContinue); $p.Count -eq 1 -and $p[0].Id -ne $old -and (Test-Path '\\.\pipe\sahar') } 10000 'the engine was not started again'
-        $json = Settings-Json
-        if ($json -match '"userGender"\s*:\s*"female"' -or $json -match '"prayerLatitude"') { throw "settings survived the erase: $json" }
-        Wait-Until { (SText '#erase-status') -eq 'مسحت كل شي. رح نتعرّف من جديد.' } 8000 'no «مسحت كل شي»'
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("window.sahar.reload().then(() => true)")) + '"}')
+        Wait-Until { [bool](Js "!!document.getElementById('erase-yes')") } 3000 'the window coming back closed the open «أكيد؟»'
+        # A file in use stays: the page says so, and her next start finishes it.
+        $lockedPath = Join-Path $env:APPDATA 'Sahar\in-use.txt'
+        Set-Content -Path $lockedPath -Value 'x'
+        $hold = [System.IO.File]::Open($lockedPath, 'Open', 'Read', 'None')
+        try {
+            SClick '#erase-yes'
+            Wait-Until { -not (Get-Process -Id $old -ErrorAction SilentlyContinue) } 15000 'the engine did not quit'
+            Wait-Until { $p = @(Get-Process -Name 'Sahar.Engine' -ErrorAction SilentlyContinue); $p.Count -eq 1 -and $p[0].Id -ne $old -and (Test-Path '\\.\pipe\sahar') } 15000 'the engine was not started again'
+            $json = Settings-Json
+            if ($json -match '"userGender"\s*:\s*"female"' -or $json -match '"prayerLatitude"') { throw "settings survived the erase: $json" }
+            Wait-Until { (SText '#erase-status') -match 'in-use\.txt' } 15000 "the page does not say what is left ($(SText '#erase-status'))"
+            if (-not (Test-Path (Join-Path $env:APPDATA 'Sahar\erase-pending'))) { throw 'no pending marker for what is left' }
+        }
+        finally { $hold.Dispose() }
         if (-not (Test-Path (Join-Path $env:APPDATA 'Sahar\data-version'))) { throw 'the clean-start marker went too' }
         $script:engine = Get-Process -Name 'Sahar.Engine' | Select-Object -First 1
+        Stop-Engine
+        Start-Engine
+        Wait-Until { -not (Test-Path $lockedPath) -and -not (Test-Path (Join-Path $env:APPDATA 'Sahar\erase-pending')) } 5000 'her next start did not finish the erase'
+        # The page shows her as she is now: nothing about you.
+        SNav 'sahar'
+        if ((Js "document.getElementById('gender-1').getAttribute('aria-checked')") -ne 'false' -or (Js "document.getElementById('gender-2').getAttribute('aria-checked')") -ne 'true') { throw 'the page still shows the erased settings' }
     }
     Step 'hidden pages stay hidden' {
         foreach ($page in 'sounds', 'claude') {
@@ -4011,15 +4082,21 @@ function Stage-Settings {
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
         Capture 'app-about-light'
     }
+    Step 'zoom works (Ctrl + wheel, Ctrl ±)' {
+        if ((SKv 'state').zoomControl -ne 'true') { throw 'zoom is switched off' }
+    }
     Step 'it closes completely' {
+        SNav 'sahar'
         $app = Get-Process -Id $script:settingsApp.Id
         $views = Our-WebViews
         $mb = ($app.WorkingSet64 + (($views | ForEach-Object { (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue).WorkingSet64 }) | Measure-Object -Sum).Sum) / 1MB
         Write-Host ("    settings RAM while open: {0:0} MB ({1} WebView2 processes)" -f $mb, $views.Count)
         if ($views.Count -lt 1) { throw 'no WebView2 process of ours found while open' }
+        SType '#name' 'Lina'   # and close at once: the name typed a moment ago is still saved
         SOk 'close'
         if (-not $script:settingsApp.WaitForExit(5000)) { throw 'the app did not exit within 5 s' }
         if ($script:settingsApp.ExitCode -ne 0) { throw "exit code $($script:settingsApp.ExitCode)" }
+        if ((Setting 'userName') -ne 'Lina') { throw 'the name typed just before closing was lost' }
         $deadline = (Get-Date).AddSeconds(10)
         while ((Our-WebViews).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
         if ((Our-WebViews).Count) { throw "$((Our-WebViews).Count) WebView2 processes of ours left" }
@@ -4033,7 +4110,7 @@ function Stage-Settings {
         if ($p.ExitCode -ne 2) { throw "exit code $($p.ExitCode), want 2" }
         if (Get-Process -Name 'WerFault' -ErrorAction SilentlyContinue) { throw 'a crash dialog appeared' }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log') -Raw
-        if ($log -notmatch 'webview2: failed') { throw 'settings.log does not say WebView2 failed' }
+        if ($log -notmatch 'webview2: failed \(runtime present') { throw 'settings.log does not say WebView2 failed with the runtime present' }
     }
     Stop-SettingsApp
     Stop-Engine

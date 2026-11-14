@@ -27,7 +27,7 @@ public sealed class AutonomyBridgeTests
         public Task<(bool Ok, string? Reason)> TryShortcutAsync(string value) => Task.FromResult((true, (string?)null));
         public Task<CityResult> FindCityAsync(string text) => Task.FromResult(new CityResult(null, null));
         public Task<bool> ClearClipboardAsync() => Task.FromResult(true);
-        public Task<bool> EraseAllAsync() => Task.FromResult(true);
+        public Task<EraseOutcome?> EraseAllAsync() => Task.FromResult<EraseOutcome?>(new EraseOutcome([], true));
         public Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args)
         {
             Calls.Add((name, args));
@@ -40,7 +40,7 @@ public sealed class AutonomyBridgeTests
     private static async Task<JsonElement> Ask(IEngineLink engine, string json)
     {
         var bridge = new SettingsBridge(Path.Combine(Path.GetTempPath(), "sahar-none-" + Guid.NewGuid().ToString("n") + ".json"), engine,
-            new NoLocator(), () => Now);
+            new NoLocator(), () => Now, Path.GetTempPath());
         return JsonDocument.Parse(await bridge.HandleAsync(json)).RootElement.Clone();
     }
 

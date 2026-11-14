@@ -43,33 +43,49 @@ internal sealed class EngineLink(bool testMode) : IEngineLink
 
     public async Task<bool> ClearClipboardAsync() => (await Call("clipboard-clear", null))?.GetValueOrDefault("ok") == "true";
 
-    /// <summary>She empties her data folder and quits; then she is started again (fresh, she asks your name).</summary>
-    public async Task<bool> EraseAllAsync()
+    /// <summary>She empties her data folder (what is in use stays, named in her answer, and goes at her next start) and
+    /// quits; once she is gone she is started again — never while the old one still runs (a second start would only
+    /// meet her single-instance lock), and once more if her pipe does not come (review fix m1).</summary>
+    public async Task<EraseOutcome?> EraseAllAsync()
     {
         var engines = Process.GetProcessesByName("Sahar.Engine");
         var r = await Call("erase-all", null);
-        if (r is null) return false;
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        if (r is null) return null;
+        var left = (Text(r.GetValueOrDefault("left64")) ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        bool gone = true;
         foreach (var p in engines)
         {
             try
             {
-                var left = deadline - DateTime.UtcNow;
-                if (left > TimeSpan.Zero) await p.WaitForExitAsync(new CancellationTokenSource(left).Token);
+                var wait = deadline - DateTime.UtcNow;
+                if (wait > TimeSpan.Zero) await p.WaitForExitAsync(new CancellationTokenSource(wait).Token);
+                gone &= p.HasExited;
             }
-            catch (Exception) { /* gone already, or not ours */ }
+            catch (OperationCanceledException) { gone = false; }
+            catch (Exception) { /* not ours, or gone already */ }
         }
+        if (!gone)
+        {
+            SettingsLog.Write("erase: she did not quit in time; not started again");
+            return new EraseOutcome(left, Restarted: false);
+        }
+        bool back = false;
+        for (int attempt = 1; attempt <= 2 && !back; attempt++)
+        {
+            Start();
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (!(back = Running) && DateTime.UtcNow < until) await Task.Delay(200);
+        }
+        SettingsLog.Write(back ? "erase: done, she is back" : "erase: she could not start again");
+        return new EraseOutcome(left, back);
+    }
+
+    private void Start()
+    {
         var exe = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Sahar.Engine.exe"));
-        try
-        {
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, Arguments = testMode ? "--test-mode --capturable" : "" });
-            SettingsLog.Write("erase: done, she starts again");
-        }
-        catch (Exception e)
-        {
-            SettingsLog.Write($"erase: she could not start again ({e.GetType().Name})");
-        }
-        return true;
+        try { Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, Arguments = testMode ? "--test-mode --capturable" : "" }); }
+        catch (Exception e) { SettingsLog.Write($"erase: start failed ({e.GetType().Name})"); }
     }
 
     public async Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args) => await Call(name, args);

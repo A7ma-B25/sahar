@@ -56,10 +56,19 @@ internal sealed unsafe class App
         // Two programs write settings.json (0.12): every save is load → change → save under the store's lock, never a
         // whole copy kept in memory, so a change the settings app made meanwhile is kept. A refused save keeps what she
         // has in memory and logs once per kind; never the path (it holds the user name).
+        // What the file holds beyond her own change (the settings app saved it, its reload not here yet) is applied
+        // too, never just absorbed (review fix m4): set once the parts it applies exist.
+        Action<SaharSettings, SaharSettings> applyOthers = (_, _) => { };
         void Save(Func<SaharSettings, SaharSettings> change)
         {
-            settings = change(settings);
-            try { settings = SettingsStore.Update(SettingsStore.DefaultPath, change); }
+            var mine = change(settings);
+            settings = mine;
+            try
+            {
+                var saved = SettingsStore.Update(SettingsStore.DefaultPath, change);
+                settings = saved;
+                applyOthers(mine, saved);
+            }
             catch (Exception e) { if (settingsLog.First(e.GetType().Name)) Log.Write(e is SettingsSaveRefusedException ? "settings: not saved (the file could not be read; it is kept)" : $"settings: not saved ({e.GetType().Name})"); }
         }
         // Overlay coordinates are screen pixels (Origin 0,0): the stage shifts the composition root by the window's place.
@@ -750,6 +759,16 @@ internal sealed unsafe class App
             }
             var old = settings;
             settings = next;
+            var (changed, hk) = ApplyChanges(old, next);
+            Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
+            if (askHello && !next.HelloDone) StartHello();   // «نبلّش من جديد»: she asks your name again (owner ruling 2026-11-13)
+            // Her answer: a hop with her joy face — never in the adhan's silence, never over another face (review fix m5).
+            if (SettingsAppPolicy.CheerFor(director.Adhan, _state.Expression) == Cheer.HopOrFace && !soul.Hop(1f)) soul.HappyFace();
+            return (changed, hk);
+        }
+        // What differs between two settings, applied to her: size, activity, address, menu, stars, prayer, weather, shortcut.
+        (IReadOnlyList<string> Applied, string Hotkey) ApplyChanges(SaharSettings old, SaharSettings next)
+        {
             var changed = SettingsChanges.Between(old, next);
             string hk = "same";
             foreach (var group in changed)
@@ -777,11 +796,13 @@ internal sealed unsafe class App
                     case "mind": mind?.RaiseSettings(next); break;
                 }
             }
-            Log.Write($"settings: reloaded ({string.Join(", ", changed)})");   // the groups' names only, never a value
-            if (askHello && !next.HelloDone) StartHello();   // «نبلّش من جديد»: she asks your name again (owner ruling 2026-11-13)
-            if (!soul.Hop(1f)) soul.HappyFace();
             return (changed, hk);
         }
+        applyOthers = (mine, saved) =>
+        {
+            var (others, _) = ApplyChanges(mine, saved);
+            if (others.Count > 0) Log.Write($"settings: applied on save ({string.Join(", ", others)})");
+        };
         static string B64(string text) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text));
 
         using var pipe = new PipeServer(ui);
@@ -816,9 +837,16 @@ internal sealed unsafe class App
             if (settings.ActClaude) claudeSource.Apply(signal);
             return new PipeReply(true);
         });
-        pipe.Register("erase-all", _ => new PipeReply(true, "ok=true"), afterReply: () =>
+        // «امسح كل شي عني» (review fix m2): erased first, then the answer names what is still in use (a pending marker
+        // finishes it at her next start); nothing of hers is saved on the way out.
+        pipe.Register("erase-all", _ =>
         {
-            Log.Write("erase: all her data, then quit");
+            lifeDirector.KeepOnExit = false;
+            var report = DataEraser.Erase(CleanStart.RoamingFolder, [CleanStart.MarkerName]);
+            Log.Write($"erase: {report.Removed} removed, {report.Left.Count} in use");   // counts only
+            return new PipeReply(true, $"ok=true left64={B64(string.Join('\n', report.Left))}");
+        }, afterReply: () =>
+        {
             EraseRequested = true;
             Native.PostQuitMessage(0);
         });
@@ -1150,7 +1178,7 @@ internal sealed unsafe class App
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"error: {e}"); }
+        catch (Exception e) { Log.Write($"error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     /// <summary>A numeric argument of a pipe command (screen pixels).</summary>

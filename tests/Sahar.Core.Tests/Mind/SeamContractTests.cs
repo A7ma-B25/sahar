@@ -181,7 +181,7 @@ public sealed class SeamContractTests
     {
         var table = MindBridges.Table(new MindBridgeContext("x", new NoEngine(), () => DateTimeOffset.UnixEpoch));
         Assert.All(table.Keys, k => Assert.StartsWith("mind-", k));
-        var reply = new SettingsBridge(Path.Combine(Path.GetTempPath(), "none.json"), new NoEngine(), new NoLocator(), () => DateTimeOffset.UnixEpoch)
+        var reply = new SettingsBridge(Path.Combine(Path.GetTempPath(), "none.json"), new NoEngine(), new NoLocator(), () => DateTimeOffset.UnixEpoch, Path.GetTempPath())
             .HandleAsync("{\"id\":3,\"type\":\"mind-nothing\"}").Result;
         Assert.Contains("bad-type", reply);
     }
@@ -201,7 +201,7 @@ public sealed class SeamContractTests
         public Task<(bool Ok, string? Reason)> TryShortcutAsync(string value) => Task.FromResult((false, (string?)null));
         public Task<CityResult> FindCityAsync(string text) => Task.FromResult(new CityResult(null, null));
         public Task<bool> ClearClipboardAsync() => Task.FromResult(false);
-        public Task<bool> EraseAllAsync() => Task.FromResult(false);
+        public Task<EraseOutcome?> EraseAllAsync() => Task.FromResult<EraseOutcome?>(null);
     }
 
     private sealed class NoLocator : ILocator

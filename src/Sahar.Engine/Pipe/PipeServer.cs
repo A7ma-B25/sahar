@@ -63,7 +63,7 @@ internal sealed class PipeServer : IDisposable
             {
                 await server.DisposeAsync();
                 if (_stop.IsCancellationRequested) return;
-                Log.Write($"pipe accept failed: {e.Message}");
+                Log.Write($"pipe accept failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
                 await Delay(200);
                 continue;
             }
@@ -94,7 +94,7 @@ internal sealed class PipeServer : IDisposable
         }
         catch (Exception e)
         {
-            Log.Write($"pipe connection error: {e}");
+            Log.Write($"pipe connection error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}");
         }
     }
 
@@ -125,7 +125,7 @@ internal sealed class PipeServer : IDisposable
             try { done.SetResult(handle(request)); }
             catch (Exception e)
             {
-                Log.Write($"pipe handler '{request.Name}' failed: {e}");
+                Log.Write($"pipe handler '{request.Name}' failed: {Sahar.Core.Diagnostics.LogRules.Describe(e)}");
                 done.SetResult(new PipeReply(false, e.Message));
             }
         });

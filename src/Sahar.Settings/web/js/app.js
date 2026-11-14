@@ -54,11 +54,14 @@ export async function ask(type, body) {
 async function load() {
   const r = await request('get');
   if (r.type === 'settings') {
+    // Held by another program for a moment: keep what the page knew (its settings, an open «نبلّش من جديد»).
+    if (r.caps?.busy && S.loaded) return;
     S.value = r.value || {};
     S.caps = r.caps || S.caps;
     S.pairs = r.pairs || [];
     S.loaded = true;
     if (!S.caps.broken && S.reset !== 2) S.reset = 0;
+    if (!S.caps.broken && S.reset === 3) S.reset = 0;
   }
 }
 
@@ -83,15 +86,16 @@ function nav() {
 function banner() {
   if (!S.caps.broken && S.reset !== 2) return null;
   const step = S.reset;
-  const titleKey = ['resetTitle', 'resetConfirmTitle', 'resetDoneTitle'][step];
-  const textKey = ['resetText', 'resetConfirmText', 'resetDoneText'][step];
-  const actions = step === 0
+  const titleKey = ['resetTitle', 'resetConfirmTitle', 'resetDoneTitle', 'resetFailTitle'][step];
+  const textKey = ['resetText', 'resetConfirmText', 'resetDoneText', 'resetFailText'][step];
+  const actions = step === 0 || step === 3
     ? ghost(tx('resetStart'), () => { S.reset = 1; render(true); }, { id: 'reset-start' })
     : step === 1
       ? h('span', { class: 'btn-row' },
         pri(tx('resetStart'), async () => {
           const r = await ask('reset');
           if (r.ok) { S.reset = 2; await load(); applyLook(); render(); }
+          else { S.reset = 3; render(true); }   // held by another program: calmly, nothing changed
         }, { id: 'reset-yes' }),
         ghost(tx('resetNo'), () => { S.reset = 0; render(true); }, { id: 'reset-no' }))
       : null;
@@ -122,7 +126,7 @@ export async function render(keepFocus = true, entering = false) {
   const page = h('div', { class: entering && !reduced() ? 'page enter' : 'page', id: 'page', 'data-page': S.page });
   const b = banner();
   if (b) page.append(b);
-  page.append(...[].concat(await mod.render({ S, tx, set, ask, render, reduced })));
+  page.append(...[].concat(await mod.render({ S, tx, set, ask, render, reduced, reload: () => window.sahar.reload() })));
   const main = h('main', { class: 'main' }, page);
   document.body.replaceChildren(h('div', { class: 'app' }, nav(), main));
   main.scrollTop = scroll;
@@ -132,6 +136,7 @@ export async function render(keepFocus = true, entering = false) {
 export function go(id) {
   if (!visiblePages(S.caps).some((p) => p.id === id)) return false;
   if (id === S.page) return true;
+  if (current?.away) current.away();
   S.page = id;
   render(false, true);
   return true;
@@ -156,11 +161,17 @@ window.sahar = {
   settings: () => S.value,
   /** What the window does when it comes to the front: ask the host again (the engine may have saved meanwhile). */
   reload: async () => { await load(); applyLook(); await render(); },
+  /** The window is closing: the page saves what is still waiting (a name typed a moment ago). */
+  flush: async () => { if (current?.flush) await current.flush(); },
   /** Light/dark and motion asked again (after the test pipe emulates them: no change event comes then). */
   relook: async () => { applyLook(); await render(); },
 };
 
 onPush(async (msg) => {
+  if (msg?.type === 'closing') {
+    try { await window.sahar.flush(); } finally { tell('flushed'); }
+    return;
+  }
   if (msg?.type !== 'focus') return;
   // The window came to the front: the engine may have saved meanwhile (two writers).
   if (document.activeElement?.tagName === 'INPUT') { await load(); applyLook(); return; }   // never under your typing

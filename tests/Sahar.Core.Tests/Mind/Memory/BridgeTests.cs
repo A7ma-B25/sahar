@@ -29,7 +29,7 @@ public sealed class BridgeTests : IDisposable
         public Task<(bool Ok, string? Reason)> TryShortcutAsync(string value) => Task.FromResult<(bool, string?)>((true, null));
         public Task<CityResult> FindCityAsync(string text) => Task.FromResult(new CityResult(null, null));
         public Task<bool> ClearClipboardAsync() => Task.FromResult(true);
-        public Task<bool> EraseAllAsync() => Task.FromResult(true);
+        public Task<EraseOutcome?> EraseAllAsync() => Task.FromResult<EraseOutcome?>(new EraseOutcome([], true));
         public Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args)
         {
             Commands.Add(name);
