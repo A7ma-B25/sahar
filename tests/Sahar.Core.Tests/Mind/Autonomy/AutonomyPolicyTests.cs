@@ -31,6 +31,7 @@ public sealed class AutonomyPolicyTests
         "self-off" => new(SelfActionsOn: false),
         "goal" => new(ForConfirmedGoalOrRoutine: true),
         "call-start" => new(CameraMic: true, CallStarting: true),
+        "call-start-off" => new(CameraMic: true, CallStarting: true, SelfActionsOn: false),
         "asked3" => new(SelfAsksThisHour: 3),
         _ => throw new ArgumentException(name),
     };
@@ -86,6 +87,7 @@ public sealed class AutonomyPolicyTests
         { "settings.set", """{"key":"weatherEnabled","value":true}""", ActSource.Self, "fullscreen", Verdict.Refuse, "fullscreen" },
         { "music.control", """{"op":"pause"}""", ActSource.Self, "call-start", Verdict.Act, null },
         { "music.control", """{"op":"toggle"}""", ActSource.Self, "call-start", Verdict.Refuse, "camera" },
+        { "music.control", """{"op":"pause"}""", ActSource.Self, "call-start-off", Verdict.Refuse, "self-off" },
         { "settings.set", """{"key":"weatherEnabled","value":true}""", ActSource.Self, "asked3", Verdict.Refuse, "rate" },
         { "hush.on", "{}", ActSource.Self, "asked3", Verdict.Refuse, "rate" },
         { "timer.start", """{"minutes":25}""", ActSource.Self, "asked3", Verdict.Act, null },

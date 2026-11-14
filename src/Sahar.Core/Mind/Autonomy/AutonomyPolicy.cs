@@ -31,7 +31,8 @@ public sealed class AutonomyPolicy : IAutonomyPolicy
 
         // Her own: never while he is away, locked, in adhan quiet, fullscreen, or on a call (spec §3.7 row C) — except
         // pausing the music the moment a call starts.
-        if (ctx.CameraMic && ctx.CallStarting && call.Tool == "music.control" && Op(call) == "pause") return new(Verdict.Act);
+        if (ctx.CameraMic && ctx.CallStarting && call.Tool == "music.control" && Op(call) == "pause")
+            return ctx.SelfActionsOn ? new(Verdict.Act) : Refuse("self-off");
         if (ctx.Away) return Refuse("away");
         if (ctx.Locked) return Refuse("locked");
         if (ctx.AdhanQuiet) return Refuse("adhan");

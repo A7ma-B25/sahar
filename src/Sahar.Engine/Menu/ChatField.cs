@@ -53,8 +53,8 @@ internal sealed unsafe class ChatField : IWindowHandler
     public bool HasFocus => _edit != 0 && Native.GetFocus() == _edit;
 
     public event Action<string>? Submitted;
-    /// <summary>0.14: the first letter typed into an empty field (never the text).</summary>
-    public event Action? Typed;
+    /// <summary>0.14: a letter typed (true for the first one in an empty field); never the text.</summary>
+    public event Action<bool>? Typed;
     public event Action? Escaped;
     /// <summary>Tab (false) or Shift+Tab (true) out of the field.</summary>
     public event Action<bool>? TabbedOut;
@@ -140,7 +140,7 @@ internal sealed unsafe class ChatField : IWindowHandler
         switch (msg)
         {
             case WM_APP_TYPED:
-                Typed?.Invoke();
+                Typed?.Invoke(wParam != 0);
                 return 0;
             case WM_APP_ENTER:
                 Submitted?.Invoke(Text);
@@ -190,9 +190,9 @@ internal sealed unsafe class ChatField : IWindowHandler
             }
         }
         if (msg == WM_CHAR && (wParam == 13 || wParam == 27 || wParam == 9)) return 0;   // no beep
-        bool first = msg == WM_CHAR && wParam >= 32 && Native.GetWindowTextLength(hwnd) == 0;
+        bool typed = msg == WM_CHAR && wParam >= 32, first = typed && Native.GetWindowTextLength(hwnd) == 0;
         var r = Native.CallWindowProc(s_oldEditProc, hwnd, msg, wParam, lParam);
-        if (first) Native.PostMessage(s_owner, WM_APP_TYPED, 0, 0);
+        if (typed) Native.PostMessage(s_owner, WM_APP_TYPED, first ? 1u : 0u, 0);
         if (msg is WM_PAINT or WM_SETFOCUS or WM_KILLFOCUS && Native.GetWindowTextLength(hwnd) == 0) PaintPlaceholder(hwnd);
         if (msg == WM_CHAR) Native.InvalidateRect(hwnd, null, 1);   // the placeholder goes with the first letter
         return r;

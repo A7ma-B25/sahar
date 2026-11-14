@@ -59,24 +59,37 @@ internal sealed class EngineTools
     private readonly MindEngine _m;
     private readonly Dictionary<string, IEngineTool> _tools = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Windows.System.DispatcherQueueTimer> _reminders = [];
-    private int _reminderSeq;
+    private readonly ReminderBook _book;
+    private readonly Func<bool> _gateOpen;
+    private string? _herTimer;               // the timer she started (its token): any other running timer is his
+    private long _hiddenUntil;               // the hiding she started (unix ms)
+    private long _musicSeq;                  // each music press of hers; an older undo never flips a newer state
 
-    public EngineTools(MindEngine m, IActivityTools? acts)
+    /// <summary>Who started the call being run (her own reminders wait for the gate).</summary>
+    public Sahar.Core.Mind.Autonomy.ActSource Source { get; set; }
+
+    public EngineTools(MindEngine m, IActivityTools? acts, Sahar.Core.Mind.Memory.ISecretBox box, Func<bool> gateOpen)
     {
         _m = m;
+        _book = new ReminderBook(box, () => DateTimeOffset.Now);
+        _gateOpen = gateOpen;
         Add("timer.start", c =>
         {
             int minutes = Int(c, "minutes") ?? 25;
+            var before = End();
             _m.Timer.Start(TimeSpan.FromMinutes(minutes));
-            return Ok(c, TimerToken());
-        }, t => TimerMatches(t) && Do(_m.Timer.Cancel), TimerMatches);
+            _herTimer = TimerToken();
+            return Ok(c, _herTimer + "|" + before.ToString(CultureInfo.InvariantCulture));
+        }, UndoTimerStart, t => TimerMatches(t.Split('|')[0]));
         Add("timer.cancel", c =>
         {
             if (!_m.Timer.Running) return ToolOutcome.Fail("unavailable", "ما في مؤقت شغّال.");
+            var before = End();
             _m.Timer.Cancel();
-            return Ok(c);
-        });
-        Add("reminder.set", Remind, t => _reminders.Remove(t, out var timer) && Do(timer.Stop), t => _reminders.ContainsKey(t));
+            return Ok(c, "timer-was:" + before.ToString(CultureInfo.InvariantCulture));
+        }, UndoTimerCancel, t => !_m.Timer.Running && Was(t) > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1000);
+        Add("reminder.set", Remind, t => Id(t) is { } id && _book.Remove(id) && Do(() => { if (_reminders.Remove(id, out var timer)) timer.Stop(); }),
+            t => Id(t) is { } id && _book.Has(id));
         Add("note.save", c =>
         {
             if (!_m.Notes.Save(Str(c, "text") ?? "")) return ToolOutcome.Fail("failed", ToolTemplates.Failed);
@@ -89,15 +102,17 @@ internal sealed class EngineTools
         {
             int? minutes = Int(c, "minutes");
             _m.Dnd.TurnOn(minutes is { } mm ? TimeSpan.FromMinutes(mm) : null);
-            return Ok(c, "hush");
-        }, _ => _m.Dnd.On && Do(_m.Dnd.TurnOff), _ => _m.Dnd.On);
+            return Ok(c, HushToken());
+        }, t => HushMatches(t) && Do(_m.Dnd.TurnOff), HushMatches);
         Add("hush.off", c => { _m.Dnd.TurnOff(); return Ok(c); });
         Add("sleep.hide", c =>
         {
             _m.Menu.Close();
-            _m.Director.HideFor(TimeSpan.FromMinutes(Int(c, "minutes") ?? 60));
-            return Ok(c, "hidden");
-        }, _ => _m.Director.Hidden && Do(() => _m.Director.HideFor(TimeSpan.Zero)), _ => _m.Director.Hidden);
+            var span = TimeSpan.FromMinutes(Int(c, "minutes") ?? 60);
+            _m.Director.HideFor(span);
+            _hiddenUntil = (DateTimeOffset.UtcNow + span).ToUnixTimeMilliseconds();
+            return Ok(c, "hidden:" + _hiddenUntil.ToString(CultureInfo.InvariantCulture));
+        }, t => HiddenMatches(t) && Do(() => { _hiddenUntil = 0; _m.Director.HideFor(TimeSpan.Zero); }), HiddenMatches);
         Add("game.start", c =>
         {
             var kind = Str(c, "game") switch { "chase" => GameKind.Chase, "hide" => GameKind.HideSeek, "ball" => GameKind.Ball, _ => GameKind.Stars };
@@ -139,7 +154,8 @@ internal sealed class EngineTools
             if (op == "pause" && !_m.Media.MusicPlaying) return new ToolOutcome(true, "الموسيقى واقفة أصلاً");
             bool wasPlaying = _m.Media.MusicPlaying;
             _m.Music.Press(op switch { "next" => "music-next", "prev" => "music-prev", _ => "music-toggle" });
-            return Ok(c, op is "pause" or "toggle" ? (wasPlaying ? "music:was-playing" : "music:was-paused") : null);
+            var stamp = (++_musicSeq).ToString(CultureInfo.InvariantCulture) + ":" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture);
+            return Ok(c, op is "pause" or "toggle" ? (wasPlaying ? "music:was-playing:" : "music:was-paused:") + stamp : null);
         }, t => MusicUndoable(t) && Do(() => _m.Music.Press("music-toggle")), MusicUndoable);
         Add("quran.open", c => { _m.Menu.Close(); _m.Quran.Open(); return Ok(c); });
         Add("quran.stop", c =>
@@ -220,12 +236,67 @@ internal sealed class EngineTools
         return new(t[(colon + 1)..], new DateTimeOffset(ticks, TimeSpan.Zero));
     }
 
-    private bool MusicUndoable(string t) => t switch
+    /// <summary>"music:was-playing:&lt;seq&gt;:&lt;ms&gt;": only her last press, within 10 minutes, and only while the state is still hers.</summary>
+    private bool MusicUndoable(string t)
     {
-        "music:was-playing" => _m.Media.HasSession && !_m.Media.MusicPlaying,
-        "music:was-paused" => _m.Media.HasSession && _m.Media.MusicPlaying,
-        _ => false,
-    };
+        var p = t.Split(':');
+        if (p.Length != 4 || p[0] != "music" || !long.TryParse(p[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seq)
+            || !long.TryParse(p[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out long at)) return false;
+        if (seq != _musicSeq || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - at > 600_000 || !_m.Media.HasSession) return false;
+        return p[1] == "was-playing" ? !_m.Media.MusicPlaying : _m.Media.MusicPlaying;
+    }
+
+    /// <summary>Is a timer running that she did not start (his)? Then hers asks before replacing or stopping it.</summary>
+    public bool HisTimerRunning => _m.Timer.Running && !(_herTimer is { } t && TimerMatches(t));
+
+    /// <summary>The running timer's end (unix ms), 0 when none.</summary>
+    private long End() => _m.Timer.Remaining is { } left ? (DateTimeOffset.UtcNow + left).ToUnixTimeMilliseconds() : 0;
+
+    private static long Was(string t) =>
+        t.StartsWith("timer-was:", StringComparison.Ordinal) && long.TryParse(t.AsSpan(10), NumberStyles.Integer, CultureInfo.InvariantCulture, out long v) ? v : 0;
+
+    /// <summary>Undo of her timer: stop it and give back the one it replaced, if that one still had time.</summary>
+    private bool UndoTimerStart(string t)
+    {
+        var parts = t.Split('|');
+        if (!TimerMatches(parts[0])) return false;
+        _m.Timer.Cancel();
+        _herTimer = null;
+        if (parts.Length == 2 && long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long prev)) Restore(prev);
+        return true;
+    }
+
+    private bool UndoTimerCancel(string t)
+    {
+        if (_m.Timer.Running) return false;
+        return Restore(Was(t));
+    }
+
+    private bool Restore(long end)
+    {
+        var left = TimeSpan.FromMilliseconds(end - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        if (end == 0 || left < TimeSpan.FromSeconds(1)) return false;
+        _m.Timer.Start(left);
+        return true;
+    }
+
+    /// <summary>"hush:&lt;end ms&gt;" or "hush:off" (until he says): the same hush, still on.</summary>
+    private string HushToken() => _m.Dnd.Remaining is { } left
+        ? "hush:" + (DateTimeOffset.UtcNow + left).ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture) : "hush:off";
+
+    internal bool HushMatches(string t)
+    {
+        if (!_m.Dnd.On || !t.StartsWith("hush:", StringComparison.Ordinal)) return false;
+        if (t == "hush:off") return _m.Dnd.UntilOff;
+        return long.TryParse(t.AsSpan(5), NumberStyles.Integer, CultureInfo.InvariantCulture, out long end) && _m.Dnd.Remaining is { } left
+            && Math.Abs((DateTimeOffset.UtcNow + left).ToUnixTimeMilliseconds() - end) < 2000;
+    }
+
+    private bool HiddenMatches(string t) =>
+        t.StartsWith("hidden:", StringComparison.Ordinal) && long.TryParse(t.AsSpan(7), NumberStyles.Integer, CultureInfo.InvariantCulture, out long until)
+        && until == _hiddenUntil && _m.Director.Hidden && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < until;
+
+    private static string? Id(string t) => t.StartsWith("reminder:", StringComparison.Ordinal) ? t[9..] : null;
 
     private async Task<ToolOutcome> MusicNowAsync(ToolCall c)
     {
@@ -241,34 +312,58 @@ internal sealed class EngineTools
     private ToolOutcome Remind(ToolCall c)
     {
         var text = Str(c, "text") ?? "";
-        TimeSpan wait;
-        if (Int(c, "inMinutes") is { } m) wait = TimeSpan.FromMinutes(m);
+        DateTimeOffset due;
+        if (Int(c, "inMinutes") is { } m) due = DateTimeOffset.Now.AddMinutes(m);
         else
         {
             var at = TimeOnly.ParseExact(Str(c, "at")!, "HH:mm", CultureInfo.InvariantCulture);
             var now = DateTime.Now;
             var when = now.Date + at.ToTimeSpan();
             if (when <= now) when = when.AddDays(1);   // a time already past today is tomorrow's
-            wait = when - now;
+            due = new DateTimeOffset(when);
         }
-        var token = "reminder:" + (++_reminderSeq).ToString(CultureInfo.InvariantCulture);
+        var r = _book.Add(text, due, Source == Sahar.Core.Mind.Autonomy.ActSource.Self);
+        Arm(r);
+        return Ok(c, "reminder:" + r.Id);
+    }
+
+    /// <summary>Her reminders after a restart: each is armed again (one that came due while she was off speaks now).</summary>
+    public void ArmSaved()
+    {
+        foreach (var r in _book.Pending()) Arm(r);
+    }
+
+    private void Arm(Reminder r)
+    {
+        if (_reminders.Remove(r.Id, out var old)) old.Stop();
         var timer = _m.Ui.CreateTimer();
         timer.IsRepeating = false;
-        timer.Interval = wait;
+        var wait = r.Due - DateTimeOffset.Now;
+        timer.Interval = wait > TimeSpan.FromMilliseconds(200) ? wait : TimeSpan.FromMilliseconds(200);
         timer.Tick += (_, _) =>
         {
-            try
-            {
-                _reminders.Remove(token);
-                Log.Write("mind: reminder due");
-                _m.Director.Post(EventKind.Reminder, TimeSpan.FromSeconds(60));
-                _m.Speech.Say("⏰ " + text);
-            }
+            try { Fire(r); }
             catch (Exception e) { Log.Write($"mind: reminder error {e.GetType().Name}"); }
         };
-        _reminders[token] = timer;
+        _reminders[r.Id] = timer;
         timer.Start();
-        return Ok(c, token);
+    }
+
+    /// <summary>His reminder speaks on time; one she set on her own waits (a minute at a time) for the gate.</summary>
+    private void Fire(Reminder r)
+    {
+        _reminders.Remove(r.Id);
+        if (!_book.Has(r.Id)) return;
+        if (!ReminderBook.MaySpeak(r, _gateOpen()))
+        {
+            Log.Write("mind: her reminder waits for a calm moment");
+            Arm(r with { Due = DateTimeOffset.Now.AddMinutes(1) });
+            return;
+        }
+        _book.Remove(r.Id);
+        Log.Write("mind: reminder due");
+        _m.Director.Post(EventKind.Reminder, TimeSpan.FromSeconds(60));
+        _m.Speech.Say("⏰ " + r.Text);
     }
 
     // ---- settings.set: the settings app's own path (SettingsPatch → settings.json → settings-reload) ----
