@@ -154,7 +154,8 @@ jobs:
         with:
           name: ui
           path: artifacts/ui/
-      # The signing key (an Actions secret) reaches this step only, and only main may use it.
+      # The signing key (an Actions secret) reaches this step only, and only main may use it. A build that does not
+      # publish never signs (no key needed); publishing without the key stops here, before anything is released.
       - name: Sign the update manifest (main only)
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         shell: pwsh
@@ -162,6 +163,7 @@ jobs:
           SAHAR_UPDATE_KEY: ${{ secrets.SAHAR_UPDATE_KEY }}
         run: |
           if ($env:GITHUB_REF -ne 'refs/heads/main') { throw "only main signs and publishes (this run is $env:GITHUB_REF)" }
+          if (-not $env:SAHAR_UPDATE_KEY) { throw 'SAHAR_UPDATE_KEY (an Actions secret) is not set: a release cannot be published unsigned' }
           ./packaging/installer/manifest.ps1 -Version $env:SAHAR_VERSION -Setup "artifacts/installer/Sahar-Setup-$env:SAHAR_VERSION.exe" -Out artifacts/installer
       - name: Publish the "test-build" pre-release
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish

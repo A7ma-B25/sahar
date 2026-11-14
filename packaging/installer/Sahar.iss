@@ -1,9 +1,13 @@
 ﻿; سَحَر · Sahar — the installer (owner roadmap item: installer + auto-update, 2026-11-13).
 ; Built by packaging/installer/build.ps1 with the pinned official Inno Setup 6.7.4:
-;   ISCC /DAppVersion=0.11.0 /DAppNumeric=0.11.0 /DEngineDir=... /DReadmeFile=... /DOutputDir=... Sahar.iss
+;   ISCC /DAppVersion=0.14.0 /DAppNumeric=0.14.0 /DEngineDir=... /DRuntimeDir=... /DReadmeFile=... /DThirdPartyFile=... /DOutputDir=... Sahar.iss
+; 0.14.0: beside the engine, the settings app (Sahar.Settings\, self-contained, web\ inside), her brain's process
+; (Sahar.Mind.exe) and the pinned llama.cpp runtime (runtime\vulkan, runtime\cpu). Models are never bundled: she
+; downloads them in the app; CUDA only on his yes (both into %LocalAppData%\Sahar).
 ; Per user, no admin: %LocalAppData%\Programs\Sahar. Settings (%AppData%\Sahar) and the log (%LocalAppData%\Sahar)
 ; are never touched by an install or an upgrade; uninstall asks before removing them (default: keep).
-; A running Sahar is closed with her own pipe quit ("Sahar.Engine.exe --quit"), never killed.
+; A running Sahar is closed with her own pipe quit ("Sahar.Engine.exe --quit"), never killed; the same --quit closes an
+; open settings window (it saves first) and waits for her brain's process.
 ; Silent upgrade (the in-app update): /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- — she is started again after.
 
 #ifndef AppVersion
@@ -14,6 +18,12 @@
 #endif
 #ifndef EngineDir
   #define EngineDir "..\..\artifacts\engine"
+#endif
+#ifndef RuntimeDir
+  #define RuntimeDir EngineDir + "\runtime"
+#endif
+#ifndef ThirdPartyFile
+  #define ThirdPartyFile "..\THIRD-PARTY.txt"
 #endif
 #ifndef ReadmeFile
   #define ReadmeFile "..\README-test-build.txt"
@@ -76,6 +86,11 @@ Name: "startup"; Description: "{cm:StartWithWindows}"
 
 [Files]
 Source: "{#EngineDir}\Sahar.Engine.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#EngineDir}\Sahar.Mind.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#EngineDir}\Sahar.Settings\*"; DestDir: "{app}\Sahar.Settings"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#RuntimeDir}\vulkan\*"; DestDir: "{app}\runtime\vulkan"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#RuntimeDir}\cpu\*"; DestDir: "{app}\runtime\cpu"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ThirdPartyFile}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReadmeFile}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
@@ -88,6 +103,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\Sahar.Engine.exe"; Description: "{cm:LaunchSahar}"; WorkingDir: "{app}"; Flags: nowait postinstall
 
+[UninstallRun]
+Filename: "{app}\Sahar.Engine.exe"; Parameters: "--unlink-claude"; Flags: runhidden; RunOnceId: "SaharUnlinkClaude"
+
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
 ; The in-app update's downloads (each in its own random folder).
@@ -96,6 +114,7 @@ Type: filesandordirs; Name: "{%TEMP}\Sahar-update"
 [Code]
 const
   EngineMutex = 'Local\Sahar.Engine';
+  SettingsMutex = 'Local\Sahar.Settings';   { the settings app (0.12): its window is closed by the same --quit }
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B24750DD-9A27-4894-8A97-D099CBA9B19C}_is1';
 
 var
@@ -154,23 +173,23 @@ begin
   end;
 end;
 
-{ Asks a running Sahar to quit with her own pipe command and waits for her (Exe --quit waits up to 20 s).
-  True when she is not running afterwards. Never kills her: a save is never cut short. }
+{ Asks a running Sahar (and an open settings window) to quit with her own pipe command and waits (Exe --quit waits
+  up to 20 s for her, 10 s for the window). True when neither is running afterwards. Never kills: a save is never cut short. }
 function QuitSahar(const Exe: String): Boolean;
 var
   Code: Integer;
 begin
-  if not CheckForMutexes(EngineMutex) then
+  if not CheckForMutexes(EngineMutex + ',' + SettingsMutex) then
   begin
     Result := True;
     Exit;
   end;
-  Log('Sahar is running: asking her to quit');
+  Log('Sahar or her settings are running: asking them to quit');
   if not Exec(Exe, '--quit', '', SW_HIDE, ewWaitUntilTerminated, Code) then
     Log('could not run ' + Exe + ' --quit')
   else
     Log('--quit exit code ' + IntToStr(Code));
-  Result := not CheckForMutexes(EngineMutex);
+  Result := not CheckForMutexes(EngineMutex + ',' + SettingsMutex);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -178,10 +197,12 @@ var
   Code: Integer;
   Lines: TArrayOfString;
   Note: String;
+  EngineWas: Boolean;
 begin
   Result := '';
-  if CheckForMutexes(EngineMutex) then
+  if CheckForMutexes(EngineMutex + ',' + SettingsMutex) then
   begin
+    EngineWas := CheckForMutexes(EngineMutex);
     { The new engine's --quit (works for any older Sahar: the pipe quit is as old as the pipe); --remember notes
       which exe she ran from, so a setup that does not finish can start her again. }
     ExtractTemporaryFile('Sahar.Engine.exe');
@@ -192,10 +213,11 @@ begin
     else
       Log('--quit exit code ' + IntToStr(Code));
     if LoadStringsFromFile(Note, Lines) and (GetArrayLength(Lines) > 0) then WasRunning := Trim(Lines[0]);
-    if CheckForMutexes(EngineMutex) then
+    { The settings window closes with the same --quit (it saves first); only Sahar herself is started again. }
+    if CheckForMutexes(EngineMutex + ',' + SettingsMutex) then
       Result := CustomMessage('StillRunning')
     else
-      QuitByUs := True;
+      QuitByUs := EngineWas;
   end;
 end;
 

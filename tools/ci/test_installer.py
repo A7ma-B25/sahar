@@ -106,6 +106,62 @@ class InstallerScriptTests(unittest.TestCase):
         self.assertIn(r"<ApplicationIcon>assets\sahar.ico</ApplicationIcon>", read("src", "Sahar.Engine", "Sahar.Engine.csproj"))
 
 
+class Release014Tests(unittest.TestCase):
+    """0.14.0: the setup carries everything the 0.12-0.14 test build does — the settings app, her brain's process and
+    the pinned llama.cpp runtime (Vulkan + CPU), never a model — and an uninstall also removes Claude Code's hooks."""
+
+    def setUp(self):
+        self.iss = read(*ISS).replace("\r\n", "\n")
+
+    def test_uninstall_removes_claude_codes_hooks(self):
+        self.assertIn('[UninstallRun]\nFilename: "{app}\\Sahar.Engine.exe"; Parameters: "--unlink-claude"; Flags: runhidden; RunOnceId: "SaharUnlinkClaude"', self.iss)
+        self.assertIn('args.Contains("--unlink-claude")) return Activities.HookMode.Unlink();', read("src", "Sahar.Engine", "Program.cs"))
+
+    def test_installs_the_settings_app_the_brain_and_the_runtime(self):
+        files = re.search(r"(?ms)^\[Files\]\n(.*?)^\[", self.iss).group(1)
+        for line in (
+            r'Source: "{#EngineDir}\Sahar.Mind.exe"; DestDir: "{app}"; Flags: ignoreversion',
+            r'Source: "{#EngineDir}\Sahar.Settings\*"; DestDir: "{app}\Sahar.Settings"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs',
+            r'Source: "{#RuntimeDir}\vulkan\*"; DestDir: "{app}\runtime\vulkan"; Flags: ignoreversion recursesubdirs createallsubdirs',
+            r'Source: "{#RuntimeDir}\cpu\*"; DestDir: "{app}\runtime\cpu"; Flags: ignoreversion recursesubdirs createallsubdirs',
+            r'Source: "{#ThirdPartyFile}"; DestDir: "{app}"; Flags: ignoreversion',
+        ):
+            self.assertIn(line, files)
+        self.assertNotRegex(files, r"(?i)gguf|models|cuda")   # models are downloaded in the app; CUDA on his yes
+
+    def test_build_checks_every_part_and_says_the_size(self):
+        ps = read("packaging", "installer", "build.ps1")
+        for part in ("Sahar.Mind.exe", r"Sahar.Settings\Sahar.Settings.exe", r"Sahar.Settings\web\index.html",
+                     r"vulkan\llama-server.exe", r"cpu\llama-server.exe", "THIRD-PARTY.txt", "/DRuntimeDir=", "/DThirdPartyFile="):
+            self.assertIn(part, ps)
+        self.assertIn("*.gguf", ps)
+        self.assertIn("setup size:", ps)
+
+    def test_ui_test_builds_the_setup_with_both_runtimes(self):
+        yml = read(".github", "workflows", "ui-test.yml")
+        self.assertIn("-Runtime artifacts/mind/runtime", yml)
+
+    def test_the_settings_app_is_closed_too_on_upgrade_and_uninstall(self):
+        self.assertIn(r"SettingsMutex = 'Local\Sahar.Settings';", self.iss)
+        for fn in ("function PrepareToInstall(", "function QuitSahar("):
+            body = self.iss[self.iss.index(fn):]
+            body = body[:body.index("\nend;")]
+            self.assertIn("EngineMutex + ',' + SettingsMutex", body, fn)
+        cs = read("src", "Sahar.Engine", "Host", "QuitRunning.cs")
+        self.assertIn('"SaharSettingsWindow"', cs)
+        self.assertIn(r'@"Local\Sahar.Settings"', cs)
+        self.assertIn('"Sahar.Mind"', cs)
+        self.assertNotRegex(cs, r"\.Kill\(")
+        self.assertIn('ClassName = "SaharSettingsWindow"', read("src", "Sahar.Settings", "HostWindow.cs"))
+
+    def test_signing_is_skipped_unless_publishing_and_fails_loudly_without_the_key(self):
+        yml = read(".github", "workflows", "test-build.yml")
+        sign = re.search(r"- name: Sign the update manifest[\s\S]*?(?=\n      - )", yml).group(0)
+        self.assertIn("if: startsWith(github.ref, 'refs/tags/') || inputs.publish", sign)
+        self.assertIn("if (-not $env:SAHAR_UPDATE_KEY) { throw", sign)
+        self.assertIn("throw 'SAHAR_UPDATE_KEY is not set", read("packaging", "installer", "manifest.ps1"))
+
+
 class BuildScriptTests(unittest.TestCase):
     def test_review_retries_the_inno_download(self):
         ps = read("packaging", "installer", "build.ps1")

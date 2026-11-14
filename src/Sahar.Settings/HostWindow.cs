@@ -38,7 +38,7 @@ internal sealed unsafe class HostWindow
                 lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_proc),
                 hInstance = instance,
                 hCursor = Native.LoadCursorW(0, Native.IDC_ARROW),
-                hIcon = Native.LoadIconW(instance, AppIconId),   // the exe's icon (assets/sahar.ico, when the build has it)
+                hIcon = Native.LoadIconW(instance, AppIconId),   // the exe's icon (src/Sahar.Engine/assets/sahar.ico)
                 lpszClassName = cls,
             };
             Native.RegisterClassExW(&wc);

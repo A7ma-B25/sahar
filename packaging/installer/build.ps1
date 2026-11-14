@@ -1,10 +1,13 @@
-# Builds Sahar-Setup-<version>.exe and its .sha256 ("<hex>  <name>", as sha256sum writes) from the published engine.
+# Builds Sahar-Setup-<version>.exe and its .sha256 ("<hex>  <name>", as sha256sum writes) from the published engine
+# folder as the 0.14 build lays it out: Sahar.Engine.exe, Sahar.Mind.exe, Sahar.Settings\ (self-contained, web\ inside),
+# and the pinned llama.cpp runtime (-Runtime: vulkan\ and cpu\, default <engine>\runtime). Never a model (*.gguf).
 # Inno Setup is not on the windows-latest image (runner-images #11644): the pinned official build is downloaded from
 # its release page (linked from jrsoftware.org), its SHA-256 checked, and installed into a tools folder of its own —
 # never an unknown copy, so every build uses the same compiler and the same Arabic.isl.
 param(
     [Parameter(Mandatory)][string]$Version,
     [string]$Engine = "$PSScriptRoot\..\..\artifacts\engine",
+    [string]$Runtime = "",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\installer",
     [string]$Tools = $(if ($env:RUNNER_TEMP) { "$env:RUNNER_TEMP\inno-6.7.4" } else { "$env:TEMP\inno-6.7.4" })
 )
@@ -34,13 +37,22 @@ if (-not (Test-Path $iscc)) {
 if (-not (Test-Path (Join-Path $Tools 'Languages\Arabic.isl'))) { throw "Arabic.isl missing from $Tools\Languages" }
 
 $engineDir = (Resolve-Path $Engine).Path
-if (-not (Test-Path (Join-Path $engineDir 'Sahar.Engine.exe'))) { throw "no Sahar.Engine.exe in $engineDir" }
+$runtimeDir = (Resolve-Path $(if ($Runtime) { $Runtime } else { Join-Path $engineDir 'runtime' })).Path
+foreach ($part in 'Sahar.Engine.exe', 'Sahar.Mind.exe', 'Sahar.Settings\Sahar.Settings.exe', 'Sahar.Settings\web\index.html') {
+    if (-not (Test-Path (Join-Path $engineDir $part))) { throw "no $part in $engineDir" }
+}
+foreach ($part in 'vulkan\llama-server.exe', 'cpu\llama-server.exe') {
+    if (-not (Test-Path (Join-Path $runtimeDir $part))) { throw "no $part in $runtimeDir" }
+}
+$models = @(Get-ChildItem $engineDir, $runtimeDir -Recurse -Filter *.gguf -ErrorAction SilentlyContinue)
+if ($models.Count) { throw "a model would be bundled ($($models.Name -join ', ')): models are downloaded in the app" }
+$thirdParty = (Resolve-Path "$PSScriptRoot\..\THIRD-PARTY.txt").Path
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $outDir = (Resolve-Path $Out).Path
 $readme = (Resolve-Path "$PSScriptRoot\..\README-test-build.txt").Path
 $numeric = ($Version -split '[-+]')[0]
 
-& $iscc /Qp "/DAppVersion=$Version" "/DAppNumeric=$numeric" "/DEngineDir=$engineDir" "/DReadmeFile=$readme" "/DOutputDir=$outDir" "$PSScriptRoot\Sahar.iss"
+& $iscc /Qp "/DAppVersion=$Version" "/DAppNumeric=$numeric" "/DEngineDir=$engineDir" "/DRuntimeDir=$runtimeDir" "/DReadmeFile=$readme" "/DThirdPartyFile=$thirdParty" "/DOutputDir=$outDir" "$PSScriptRoot\Sahar.iss"
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed (exit $LASTEXITCODE)" }
 
 $name = "Sahar-Setup-$Version.exe"
@@ -48,4 +60,6 @@ $setup = Join-Path $outDir $name
 if (-not (Test-Path $setup)) { throw "$name was not written" }
 $sha = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText("$setup.sha256", "$sha  $name`n", [System.Text.UTF8Encoding]::new($false))
-Write-Host "$name $((Get-Item $setup).Length) bytes, sha256 $sha"
+$bytes = (Get-Item $setup).Length
+Write-Host "$name $bytes bytes, sha256 $sha"
+Write-Host ("setup size: {0:0.0} MB" -f ($bytes / 1MB))

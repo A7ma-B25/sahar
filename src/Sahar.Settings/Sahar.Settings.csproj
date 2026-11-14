@@ -12,9 +12,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
-  <!-- The window and file icon: drawn on the installer branch (assets/sahar.ico); the build works without it. -->
+  <!-- The window and file icon: the installer's assets/sahar.ico (tools/art/app_icon.py), the engine's own file. -->
   <PropertyGroup>
-    <ApplicationIcon Condition="Exists('..\..\assets\sahar.ico')">..\..\assets\sahar.ico</ApplicationIcon>
+    <ApplicationIcon>..\Sahar.Engine\assets\sahar.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>true</SelfContained>

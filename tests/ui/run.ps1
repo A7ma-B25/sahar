@@ -4381,6 +4381,23 @@ $LocalData = Join-Path $env:LOCALAPPDATA 'Sahar'
 $EngineLog = Join-Path $LocalData 'engine.log'
 $MoveMarker = Join-Path $LocalData 'moved-to-installer.txt'
 $UpdateTemp = Join-Path ([System.IO.Path]::GetTempPath()) 'Sahar-update'
+$SettingsLog = Join-Path $LocalData 'settings.log'
+$InstalledSettings = Join-Path $InstallDir 'Sahar.Settings\Sahar.Settings.exe'
+$ClaudeSettings = Join-Path $env:USERPROFILE '.claude\settings.json'
+
+# 0.14.0: the installed settings app, open the way a person leaves it open (its test pipe, so the stage knows it is ready).
+function Open-InstalledSettings {
+    $keep = $script:SettingsExe
+    $script:SettingsExe = $InstalledSettings
+    try { Start-SettingsApp | Out-Null } finally { $script:SettingsExe = $keep }
+    $script:settingsApp
+}
+function SettingsLog-Lines { if (Test-Path $SettingsLog) { @(Get-Content $SettingsLog -Encoding utf8).Count } else { 0 } }
+function Assert-SettingsClosed($app, [int]$before, [string]$when) {
+    if (-not $app.WaitForExit(15000)) { throw "${when}: the settings app is still open" }
+    $since = (Get-Content $SettingsLog -Encoding utf8 | Select-Object -Skip $before) -join "`n"
+    if ($since -notmatch '(?m) close\s*$' -or $since -notmatch '(?m) exit 0\s*$') { throw "${when}: the settings app did not close itself:`n$since" }
+}
 
 Add-Type -Namespace SaharIcons -Name Shell -MemberDefinition @'
 [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint n);
@@ -4482,9 +4499,14 @@ function Stage-Install {
     Step 'silent install: files, Start-menu shortcut, uninstall entry, start with Windows, and she starts' {
         Run-Setup -Name 'setup-install' | Out-Null
         $script:installed = Wait-Sahar 'after the install'
-        foreach ($f in 'Sahar.Engine.exe', 'README-test-build.txt', 'unins000.exe') {
+        foreach ($f in 'Sahar.Engine.exe', 'README-test-build.txt', 'unins000.exe', 'THIRD-PARTY.txt', 'Sahar.Mind.exe',
+                'Sahar.Settings\Sahar.Settings.exe', 'Sahar.Settings\web\index.html', 'runtime\vulkan\llama-server.exe', 'runtime\cpu\llama-server.exe') {
             if (-not (Test-Path (Join-Path $InstallDir $f))) { throw "$f not in $InstallDir" }
         }
+        $models = @(Get-ChildItem $InstallDir -Recurse -Filter *.gguf)
+        if ($models.Count) { throw "a model was installed: $($models.Name -join ', ')" }
+        $mb = (Get-ChildItem $InstallDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+        Write-Host ("    installed: {0:0.0} MB; setup {1:0.0} MB" -f $mb, ((Get-Item $script:setupExe).Length / 1MB))
         if (-not (Test-Path -LiteralPath $StartMenuLink)) { throw "no Start-menu shortcut $StartMenuLink" }
         # Shell.Application reads the link as Unicode (WScript.Shell's CreateShortcut gives '' for an Arabic name).
         $folder = (New-Object -ComObject Shell.Application).NameSpace((Split-Path $StartMenuLink))
@@ -4507,11 +4529,14 @@ function Stage-Install {
         }
     }
 
-    Step 'upgrade over a running Sahar: she is asked to quit (no kill), comes back, settings and log kept' {
+    Step 'upgrade over a running Sahar and an open settings window: both asked to close (no kill), she comes back, settings and log kept' {
         $old = (Wait-Sahar 'before the upgrade').Id
+        $app = Open-InstalledSettings
+        $sBefore = SettingsLog-Lines
         $before = Log-Lines
         Run-Setup -Name 'setup-upgrade' | Out-Null
         Wait-Gone $old 5 'the old Sahar'
+        Assert-SettingsClosed $app $sBefore 'the upgrade'
         $script:installed = Wait-Sahar 'after the upgrade' -notPid $old
         $since = Log-Since $before
         if ($since -notmatch '(?m) exit 0\s*$') { throw "the old run did not end with exit 0:`n$since" }
@@ -4723,9 +4748,18 @@ function Stage-Install {
     }
     if ($script:server -and -not $script:server.HasExited) { $script:server.Kill() }
 
-    Step 'silent uninstall: Sahar asked to quit; files, shortcut, entry, Run value, downloads gone; settings and log kept' {
+    Step 'silent uninstall: Sahar and her settings asked to close; files, shortcut, entry, Run value, downloads, Claude hooks gone; settings and log kept' {
         $p = Start-Process -FilePath $InstalledExe -PassThru
         $id = (Wait-Sahar 'before the uninstall').Id
+        $app = Open-InstalledSettings
+        $sBefore = SettingsLog-Lines
+        # Claude Code linked to the installed Sahar (as «اربطها» leaves it), beside a setting of his own that must stay.
+        $claudeBackup = Join-Path $Out 'claude-settings-before-install.json'
+        if (Test-Path $ClaudeSettings) { Copy-Item $ClaudeSettings $claudeBackup -Force }
+        New-Item -ItemType Directory -Force -Path (Split-Path $ClaudeSettings) | Out-Null
+        $hook = @{ type = 'command'; command = $InstalledExe; args = @('hook'); async = $true; timeout = 10 }
+        $linked = @{ theme = 'dark'; hooks = @{ PreToolUse = @(@{ hooks = @($hook) }); Stop = @(@{ hooks = @($hook) }) } }
+        Set-Content $ClaudeSettings ($linked | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
         $p = Start-Process -FilePath (Join-Path $InstallDir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
         if (-not $p.WaitForExit(120000)) { throw 'uninstall did not finish' }
         Wait-Gone $id 30 'Sahar during the uninstall'
@@ -4737,6 +4771,13 @@ function Stage-Install {
         if ($null -ne (Get-ItemProperty $RunKey -ErrorAction SilentlyContinue).Sahar) { throw 'the Run value is still there' }
         if (Test-Path $UpdateTemp) { throw "$UpdateTemp is still there" }
         if (Sahars) { throw 'a Sahar is still running' }
+        Assert-SettingsClosed $app $sBefore 'the uninstall'
+        $claude = Get-Content $ClaudeSettings -Raw -Encoding utf8
+        Write-Host "    ~/.claude/settings.json after: $($claude -replace '\s+', ' ')"
+        $c = $claude | ConvertFrom-Json
+        if ($c.theme -ne 'dark') { throw "his own Claude setting is gone: $claude" }
+        if ($c.PSObject.Properties.Name -contains 'hooks' -or $claude -match 'Sahar\.Engine') { throw "Sahar's hooks are still in Claude Code: $claude" }
+        if (Test-Path $claudeBackup) { Copy-Item $claudeBackup $ClaudeSettings -Force } else { Remove-Item $ClaudeSettings }
         Assert-DataKept 'after the uninstall'
         if (@(Get-Content $EngineLog -Encoding utf8)[-1] -notmatch ' exit 0$') { throw 'her last run did not end with exit 0' }
     }
