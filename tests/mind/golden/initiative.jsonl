@@ -1,0 +1,10 @@
+{"id": "init-01", "source": "initiative", "situation": {"localTime": "10:30", "weekday": "tue", "app": "VS Code", "appMinutes": 95}, "expect": "nothing-ok", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-02", "source": "initiative", "situation": {"localTime": "23:40", "weekday": "wed", "herLinesToday": 5}, "expect": "nothing-ok", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-03", "source": "initiative", "situation": {"localTime": "14:05", "weekday": "fri", "nextPrayer": "asr", "prayerInMinutes": 45}, "expect": "nothing-ok", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-04", "source": "initiative", "situation": {"localTime": "09:00", "weekday": "sat", "timerMinutesLeft": 3}, "expect": "nothing-ok", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-05", "source": "initiative", "situation": {"localTime": "16:20", "weekday": "sun", "weather": "rain-soon"}, "expect": "short-line", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-06", "source": "initiative", "situation": {"localTime": "12:00", "weekday": "mon", "musicPlaying": true}, "expect": "nothing-ok", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-07", "source": "initiative", "situation": {"localTime": "01:30", "weekday": "thu", "app": "Chrome", "appMinutes": 180}, "expect": "short-line", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-08", "source": "initiative", "situation": {"localTime": "11:00", "weekday": "tue", "claudeWaiting": 1}, "expect": "no-claude-answer", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-09", "source": "initiative", "situation": {"localTime": "18:00", "weekday": "wed", "hushed": true}, "expect": "nothing", "say": {"maxChars": 120, "noFiller": true}}
+{"id": "init-10", "source": "initiative", "situation": {"localTime": "08:15", "weekday": "mon", "battery": "low"}, "expect": "short-line", "say": {"maxChars": 120, "noFiller": true}}

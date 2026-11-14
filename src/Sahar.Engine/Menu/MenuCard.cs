@@ -20,7 +20,7 @@ namespace Sahar.Engine.Menu;
 /// (play, hush, timer, listen, music) show it in place; the others close the card and raise <see cref="Pressed"/>.
 /// While it is open her orbiting moon rests on the card's corner nearest her (the clasp).
 /// </summary>
-internal sealed class MenuCard : IDisposable
+internal sealed partial class MenuCard : IDisposable
 {
     private readonly CardVisual _visual;
     private readonly ChatField _chat;
@@ -89,6 +89,7 @@ internal sealed class MenuCard : IDisposable
             if (_focus == "chat") _chat.Focus();
         });
         _chat.Submitted += text => Safe(() => Send(text));
+        _chat.Typed += () => Safe(() => ChatTyped?.Invoke());
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
         _chat.Deactivated += next => Safe(() => { if (next != _catcher.Hwnd && !Win.Own.Contains(next)) Close(restoreFocus: false); });
@@ -167,6 +168,7 @@ internal sealed class MenuCard : IDisposable
     {
         if (!IsOpen) return;
         IsOpen = false;
+        MindClosing();   // 0.14: a question still in the header is a «لا»
         _openGen++;
         _tick.Stop();
         _catcher.Hide();
@@ -188,6 +190,7 @@ internal sealed class MenuCard : IDisposable
     public void Press(string id)
     {
         if (!IsOpen) return;
+        if (MindPress(id)) return;   // 0.14: the Ask drill in the header (MenuCard.Mind.cs)
         if (id == "back") { Show("main", fade: true); return; }
         if (id == "fact")
         {
@@ -267,12 +270,14 @@ internal sealed class MenuCard : IDisposable
         var state = State();
         var drill = view == "main" ? null : MenuCatalog.Drill(view, state);
         if (view != "main" && drill is null) view = "main";
-        var fact = MenuHeaderFact.Pick(Facts(), HeaderMode);
+        var fact = MenuHeaderFact.Pick(Facts(), HeaderMode) ?? MindFact(view);
+        bool asking = MindAsking(view);
+        if (asking) fact = null;   // 0.14: her question and its «إي» / «لا» take the fact's line
         bool dark = Dark();
         _view = new MenuView(view, Visible, MicAvailable(), SettingsAvailable(), fact is not null, drill);
-        _layout = MenuCardLayout.Layout(_view);
+        _layout = MindLayout(MenuCardLayout.Layout(_view), asking);
         _content = new CardContent(_layout, _view, Tokens.For(dark), Tokens.HeaderTint(Mood(), dark),
-            MenuHeaderFact.Greeting(false, _reply, state.HushOn), fact, state.HushOn, true);
+            MindLine(view) ?? MenuHeaderFact.Greeting(false, _reply, state.HushOn), fact, state.HushOn, true, asking);
     }
 
     /// <summary>Everything the drawing depends on (the same key = the same pixels).</summary>
@@ -280,7 +285,7 @@ internal sealed class MenuCard : IDisposable
     {
         var c = _content!;
         return string.Join('|', c.View.View, string.Join(',', c.Layout.FocusOrder), c.Line1, c.Fact?.Text ?? "", c.Hushed, c.T == Tokens.Dark,
-            c.Tint, _dpi, Address.You);
+            c.Tint, _dpi, Address.You, c.Ask);
     }
 
     /// <summary>The card plus its shadow (e1: 32 DIP blur, 12 down) and the clasp, in screen px.</summary>
@@ -337,6 +342,7 @@ internal sealed class MenuCard : IDisposable
     private void Key(MenuKey key)
     {
         if (_layout is null || _view is null) return;
+        if (MindKey(key)) return;   // 0.14: 1 = «إي», 2 = «لا» while she asks
         var r = MenuKeys.Handle(_layout, _view, _focus, key, rtl: true, inChat: false);
         if (r.Close) { Close(); return; }
         if (r.Back) { Show("main", fade: true); return; }

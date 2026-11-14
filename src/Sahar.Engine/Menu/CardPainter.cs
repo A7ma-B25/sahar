@@ -9,7 +9,7 @@ namespace Sahar.Engine.Menu;
 
 /// <summary>Everything the card draws from (one frame of it).</summary>
 internal sealed record CardContent(CardLayout Layout, MenuView View, ThemeTokens T, Rgba Tint, string Line1, HeaderFact? Fact, bool Hushed,
-    bool Rtl);
+    bool Rtl, bool Ask = false);
 
 /// <summary>
 /// Draws the Porcelain menu card (spec §5 and the approved mockups PMenuSoul / PMenuSoulDark) with Direct2D, in DIPs
@@ -37,6 +37,7 @@ internal static class CardPainter
         if (c.View.Drill is null && c.Hushed && l.Rects.TryGetValue("dnd", out var dnd))
             dc.FillRoundedRect(R(dnd), 12, dc.SolidBrush(new D2DColor(t.AccentSoft)));
         if (l.Rects.TryGetValue("track", out var track)) dc.FillRoundedRect(R(track), 12, dc.SolidBrush(new D2DColor(t.Sunken)));
+        if (c.Ask) MindHeader.Background(dc, c);   // 0.14: the Ask drill's track in the header
     }
 
     public static void Foreground(D2DContext dc, CardContent c)
@@ -50,6 +51,7 @@ internal static class CardPainter
         var round = dc.StrokeStyle("round");
 
         dc.TextLayout(Address.ToYou(c.Line1), 17, 600, R(l.Rects["line1"]), ink, TextAlign.Start, rtl);
+        if (c.Ask) MindHeader.Foreground(dc, c);   // 0.14: «إي» / «لا»
         if (c.Fact is { } fact && l.Rects.TryGetValue("fact", out var fr))
         {
             float dotX = rtl ? fr.Right - 4 : fr.X + 4;
@@ -143,5 +145,5 @@ internal static class CardPainter
         return p;
     }
 
-    private static D2DRect R(RectF r) => new() { Left = r.X, Top = r.Y, Right = r.Right, Bottom = r.Bottom };
+    internal static D2DRect R(RectF r) => new() { Left = r.X, Top = r.Y, Right = r.Right, Bottom = r.Bottom };
 }
