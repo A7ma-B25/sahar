@@ -1707,6 +1707,7 @@ function Stage-Menu {
         if ($open - $before -gt 5MB) { throw ("the open menu adds {0:N1} MB" -f (($open - $before) / 1MB)) }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
         $first = (State).workingSetBytes
+        $rounds = [System.Collections.Generic.List[string]]::new()
         foreach ($i in 1..15) {
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
             Press 'play'
@@ -1716,9 +1717,14 @@ function Stage-Menu {
             $edit = [IntPtr][long](Kv 'debug-bubble').edit
             if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
             Start-Sleep -Milliseconds 150
+            $ri = Info
+            $rounds.Add(("{0}:{1:N1}/{2}/{3}" -f $i, ((State).workingSetBytes / 1MB), $ri.privateMB, $ri.gcHeapMB))
         }
         Start-Sleep -Seconds 3
         $after = (State).workingSetBytes
+        $ri = Info
+        Write-Host "    per round (working set MB / private MB / managed heap MB): $($rounds -join ' ')"
+        Write-Host ("    first {0:N1} MB; settled: private {1} MB, managed heap {2} MB" -f ($first / 1MB), $ri.privateMB, $ri.gcHeapMB)
         Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
         if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
     }
@@ -4717,12 +4723,12 @@ function Stage-Install {
         if ((Update-State).installed -ne 'false') { throw 'the zip Sahar thinks she is installed' }
         Ask-Again
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
-        Wait-Update { param($u) $u.status -eq 'installing' } 60 'no setup started' | Out-Null
-        $deadline = (Get-Date).AddSeconds(30)
-        while ((Get-Date) -lt $deadline -and (Wizard-Title) -notmatch 'تثبيت') { Start-Sleep -Milliseconds 500 }
-        Write-Host "    wizard: $(Wizard-Title)"
-        Screenshot 'update-wizard-portable.png' | Out-Null
         try {
+            Wait-Update { param($u) $u.status -eq 'installing' } 60 'no setup started' | Out-Null
+            $deadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $deadline -and (Wizard-Title) -notmatch 'تثبيت') { Start-Sleep -Milliseconds 500 }
+            Write-Host "    wizard: $(Wizard-Title)"
+            Screenshot 'update-wizard-portable.png' | Out-Null
             if ((Wizard-Title) -notmatch 'تثبيت') { throw 'no visible wizard for a portable Sahar' }
             if ($script:engine.HasExited) { throw 'she quit before the wizard installed anything' }
             if (-not (Test-Path $MoveMarker)) { throw 'no note for the installed her' }

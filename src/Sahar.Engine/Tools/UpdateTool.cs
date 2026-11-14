@@ -145,20 +145,29 @@ internal sealed class UpdateTool : IDisposable
                 return;
             }
             if (!Installed) try { File.WriteAllText(_marker, UpdateRules.MoveMarker(DateTimeOffset.Now)); } catch (Exception) { }
-            var process = Updater.Launch(setup, silent: Installed);
-            if (process is null)
-            {
-                _status = "failed";
-                Forget();
-                _say("ما قدرت ثبّت التحديث هلق، بجرّب بكرا");
-                return;
-            }
-            _status = "installing";
-            Log.Write($"update: installing {offer.Version} ({(Installed ? "silent" : "wizard: portable")})");
-            _say(Installed ? "عم ثبّت النسخة الجديدة، رح ارجع بعد شوي 💜"
-                : "رح يطلعلك المثبّت ✨ بعدو بسكن بقائمة ابدأ: «سحر»");
-            _ = process.WaitForExitAsync().ContinueWith(_ => _ui.TryEnqueue(() => Safe(() => SetupEnded(process))), TaskScheduler.Default);
+            // Starting the setup is off her UI thread: Windows scans a new 60 MB exe before it runs (5.3 s on CI run
+            // 43598507492), and she must keep drawing and answering meanwhile.
+            bool silent = Installed;
+            _ = Task.Run(() => Updater.Launch(setup, silent)).ContinueWith(l => _ui.TryEnqueue(() => Safe(() =>
+                Started(offer, l.IsCompletedSuccessfully ? l.Result : null))), TaskScheduler.Default);
         })), TaskScheduler.Default);
+    }
+
+    /// <summary>On her UI thread again: the setup started (or could not).</summary>
+    private void Started(UpdateOffer offer, Process? process)
+    {
+        if (process is null)
+        {
+            _status = "failed";
+            Forget();
+            _say("ما قدرت ثبّت التحديث هلق، بجرّب بكرا");
+            return;
+        }
+        _status = "installing";
+        Log.Write($"update: installing {offer.Version} ({(Installed ? "silent" : "wizard: portable")})");
+        _say(Installed ? "عم ثبّت النسخة الجديدة، رح ارجع بعد شوي 💜"
+            : "رح يطلعلك المثبّت ✨ بعدو بسكن بقائمة ابدأ: «سحر»");
+        _ = process.WaitForExitAsync().ContinueWith(_ => _ui.TryEnqueue(() => Safe(() => SetupEnded(process))), TaskScheduler.Default);
     }
 
     /// <summary>The setup ended and she is still here: it did not install (it closes her when it does).</summary>
