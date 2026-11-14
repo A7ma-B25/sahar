@@ -31,6 +31,9 @@ internal sealed class WeatherSource
     }
 
     /// <summary>Rain is coming now (her leaf droops like an umbrella).</summary>
+    /// <summary>0.14 (her brain's weather.now): today's line as the tag says it, or null when there is no forecast.</summary>
+    public string? Summary => _last is { } f ? ActivityText.WeatherToday(f) : null;
+
     public bool RainSoon => _last is { } f && WeatherAlerts.Find(f, DateTimeOffset.Now).Contains(WeatherAlert.Rain);
     public event Action? Changed;
 

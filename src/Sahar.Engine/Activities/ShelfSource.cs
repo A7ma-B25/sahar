@@ -105,6 +105,26 @@ internal sealed partial class ShelfSource : IDisposable
         catch (Exception e) { Log.Write($"shelf: screenshot wait failed ({e.GetType().Name})"); }
     }
 
+    /// <summary>0.14 (her brain's shelf tools): whether anything is on her shelf; tidy (drop what is gone); empty it.</summary>
+    public bool HasItems => _shelf.Items.Count > 0;
+
+    public bool Tidy()
+    {
+        int before = _shelf.Items.Count;
+        Show();
+        return _shelf.Items.Count != before;
+    }
+
+    public bool Empty()
+    {
+        if (_shelf.Items.Count == 0) return false;
+        _shelf.Clear();
+        _selected.Clear();
+        Log.Write("shelf: emptied (asked)");
+        Show();
+        return true;
+    }
+
     private void Prune() => _shelf.Prune(p => File.Exists(p) || Directory.Exists(p));
 
     private void Show()

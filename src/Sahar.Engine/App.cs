@@ -857,6 +857,8 @@ internal sealed unsafe class App
             Bubble = bubble, ListBubble = listBubble, Timer = timerTool, Dnd = dndTool, Notes = notes, Director = director,
             Games = games, Motion = motion, Soul = soul, Prayer = prayer, Music = music, Quran = quran, Media = media, Idle = idle,
             CameraMic = cameraMic, Activities = acts, Express = Express, SinceKeyboard = () => tray.SinceKeyboard,
+            ActivityTools = new Sahar.Engine.Mind.ActivityToolsAdapter(weatherSource, claudeSource, shelfSource, acts, () => settings),
+            IsDraftAsk = t => Sahar.Core.Mind.Drafts.DraftAsk.Parse(t) is not null,
         };
         mind.Attach();
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));

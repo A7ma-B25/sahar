@@ -139,12 +139,12 @@ internal sealed class MindHost : ITurnIO
                 Send(new MindMsg { T = "state", Phase = "thinking" });
                 if (source == "draft")
                 {
-                    var draft = await MindParts.Drafter(_runtime.Llm, Store).DraftAsync(new Sahar.Core.Mind.Drafts.DraftRequest(turn.Text ?? ""), cts.Token);
+                    var draft = await MindParts.Drafter(new LazyLlm(_runtime), Store).DraftAsync(new Sahar.Core.Mind.Drafts.DraftRequest(turn.Text ?? ""), cts.Token);
                     Send(draft is null ? new MindMsg { T = "error", Id = id, Error = "bad-output" } : new MindMsg { T = "draft", Id = id, Text = draft.Text, Kind = draft.Label });
                 }
                 else
                 {
-                    var runner = MindParts.TurnRunner(_runtime.Llm, MindParts.PromptParts(Store), Store);
+                    var runner = MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
                     await runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
             }
