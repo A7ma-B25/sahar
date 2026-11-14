@@ -1,102 +1,52 @@
-سَحَر · Sahar — نسخة تجريبية 0.12.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.14.0 (ويندوز)
 =============================================
 
-شو الجديد بـ 0.14 — «عقلها»: بتفكّر من جوّا جهازك 🌙
+شو الجديد بـ 0.14.0 — مثبّت، إعداداتها، نشاطاتها، وعقلها 🌙
 -------------------------------------------------
-- عقل محلّي: سحر بتشغّل نموذج لغة على جهازك بلا نت (llama.cpp، نسخة b12207 الرسمية، Vulkan، جوّا هالـ zip بمجلد runtime).
-  بيشتغل بس وقت الحاجة: أول ما تكتبلها بالقائمة بيصحى، وبعد ٥ دقايق بلا حكي (أو دقيقة عالبطارية) بيطلع من الذاكرة كلياً — ٠ ميغا وهو نايم.
-  إذا سكّرت سحر، العقل بيروح معها.
-- التنزيل من جوّاها، بإذنك بس: من «النماذج» («نزّليه») أو من فقاعتها لما تسألك («إي، نزّليه» / «بعدين» / «لا»). بتقلك الحجم أول
-  (Gemma 4 E4B ≈ ٤٫٩٨ غيغا). بتجرّب أول إذا Hugging Face بيفتح عندك؛ إذا مسكّر بتقلك بوضوح واقترح تشغّل الـ VPN.
-  بيوقف وبيكمّل حتى بعد ما تطفي الجهاز، وبتتأكّد من الملف (SHA-256) قبل ما تستعمله. الفقاعة بتخبّرك وين صار (ربع، نص، تلت تربع).
-- أي نموذج بدك: المقترحة (Gemma 4 E4B الأساسي، Jais 3 المنافس، Gemma 4 E2B الخفيف)، أو «زيدي نموذج» برابط أو اسم من
-  Hugging Face (بتثبّت النسخة والـ SHA-256 وقتها)، أو ملف ‎.gguf‎ عندك. كل نموذج إله «جرّبيه»: السرعة، كرت الشاشة، الحكي الشامي
-  (٣٠ سؤال)، والأوامر (٣٠ أمر). إذا ما بيعرف ينفّذ أوامر بيطلعلو «حكي بس» والأوامر («مؤقت ٥») بتضل متل قبل.
-  تغيير النموذج ما بيمسح ذاكرتها ولا شو فهمت عنك.
-- جهازك: بتعرف لحالها شو بيلبقلو (٣٢ غيغا + RTX 4050 لابتوب ← Gemma 4 E4B كلو عكرت الشاشة). «استعملي كرت الشاشة» و«طريقة
-  التشغيل» (تلقائي / Vulkan / CUDA — CUDA تنزيل زيادة ≈ ٦٨٠ ميغا بس إذا قلت إي). إذا الكرت ما زبط بترجع للمعالج لحالها.
-- صفحات جديدة بالإعدادات: «عقلي» و«النماذج» (والصفحتين «عنك» و«شو عملت اليوم»). «عن سحر» بتذكر llama.cpp (MIT) والنماذج (Apache 2.0).
-- السجل (engine.log و mind.log) بيكتب أنواع وأرقام وأوقات بس — أبداً شو كتبت ولا شو جاوبت ولا اسم ملف.
+هالنسخة بتجمع كل شي اشتغلنا عليه من بعد 0.11: المثبّت والتحديثات، برنامج «إعداداتي»، «النشاطات»، و«عقلها».
 
-جرّب بإيدك: افتح «النماذج» وكبّس «نزّليه» (≈ ٥ غيغا)؛ وقّفه وكمّله؛ سكّر سحر وافتحها وكمّل؛ لما يخلص كبّس «جرّبيه» وصوّرلنا
-الأرقام؛ جرّب كمان مع الـ VPN مطفي إذا Hugging Face مسكّر عندك (لازم تقلك بوضوح).
+📦 المثبّت والتحديثات
+- صار في مثبّت: Sahar-Setup-0.14.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
+  بيحطها بـ %LocalAppData%\Programs\Sahar، وبيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
+  بيثبّت معها برنامج الإعدادات وعقلها (Sahar.Mind.exe وملفات llama.cpp: Vulkan والمعالج). النموذج ما بيجي بالمثبّت:
+  بتنزّلو من جوّاها لما تقلها (تحت).
+- لما تطلع نسخة جديدة بتقلك بفقاعتها «في نسخة جديدة مني …، بدك ثبّتها؟» — «إي» أو «بعدين». أبداً ما بتحدّث حالها بلا «إي».
+  «إي»: بتنزّلها وبتتأكد إنها منّا (توقيع رقمي) ونفس الملف بالضبط، وبيسكّرها المثبّت وبيرجّعها بعد ثواني.
+  إذا ما زبط، بترجع متل ما كانت وبتقلك. «بعدين»: بتسألك بكرا. وبإيدك: كبسة يمين على أيقونتها ← «دوّر على تحديث».
+- وقت التحديث أو التثبيت فوقها: إذا نافذة «إعداداتي» مفتوحة بتنحفظ وبتتسكّر لحالها، وإعداداتك وملاحظاتك وسجلّها بيضلّوا متل ما هنن.
+- الإزالة: إعدادات الويندوز ← التطبيقات ← سَحَر ← إزالة. بتشيل كل ملفاتها وبرنامج الإعدادات وعقلها،
+  وإذا كنت رابط Claude Code بتشيل الـ hooks تبعها من إعداداته (وإعداداتك التانية بتضل). بتسألك إذا بدك تمسح إعداداتها كمان (العادي «لا»).
+- صار إلها أيقونة: وجّها 🌱 (قائمة ابدأ، جنب الساعة، «إعداداتي»، والتطبيقات).
 
-شو الجديد بـ 0.13 — «النشاطات»: بتحمل معها شو عم يصير 🏷️
--------------------------------------------------
-- تعليقة صغيرة بتتعلّق بخيط تحتها، فيها شي واحد بسطر: الأغنية (مع غلافها ومشوارها)، الطقس، Claude Code، الرف، النسخ،
-  الصوت، البطارية، الكاميرا والمايك، «وإنت غايب»، ووقت الشاشة. الباقي حبّات عالخيط (لحد ٣ وبعدين عقدة).
-  عجلة الماوس فوق التعليقة بتقلّب بينهن، وكبسة عالحبّة بتجيبها قدّام. كبسة عالتعليقة بتفتح كرتها جنبها (Esc بيسكّر).
-  إذا ما في مطرح تحتها (جنب شريط المهام) بتتعلّق عالجنب. وقت القائمة أو الكرت مفتوح، أو وهي مخبّاية أو عم تنسحب، بتختفي.
-- الترتيب: Claude ناطر جوابك، بعدين اللحظات القصيرة (٦ ثواني؛ الصوت ثانية ونص)، النسخ والمؤقت، Claude عم يشتغل، الموسيقى،
-  الكاميرا والمايك، الرف، الموسيقى الواقفة (١٠ دقايق)، والطقس بس إذا ما في شي تاني.
-- الموسيقى: من أي برنامج (أحداث الويندوز، بلا فحص كل ثانيتين). الكرت فيه الغلاف والوقت ويلي قبل / شغّل-وقّف / يلي بعد.
-  «الكلمات» مطفية من الأول: أول مرة بتسألك قبل ما يطلع شي عالإنترنت (lrclib.net، بس اسم الأغنية والفنان وطولها).
-  وهي عم تسمع: السماعات، وهالتها بلون الغلاف (فاتح)، وبتتمايل شوي عالإيقاع.
-- الطقس: اليوم عالتعليقة وكرت فيه الساعات الخمس الجاية، وتحذير مرة وحدة لكل موجة: مطر، عاصفة، ريح، حر، صقيع، هوا مو نضيف.
-  إذا ما اخترت مدينة للطقس بياخد مدينة الصلاة (قرارك). مع المطر ورقتها بتنزل شوي متل الشمسية.
-- Claude Code: «اربطها» من الإعدادات بتزيد hooks على إعداداته (بتحفظ نسخة من القديم). بتشوف شو عم يعمل ومن قديش،
-  ولما يسألك إذن بتطلع «Claude ناطر جوابك» أول شي مع وجهها المنتبه — بس الجواب دايماً من نافذة Claude نفسها (قرارك: بلا أزرار).
-- الرف: افلت ملفات عليها بتمسكهن (بتنعصر شوي). اللقطات الجديدة بتنزل لحالها. من الكرت: اسحب وحدة لبرا (نسخة بس، الأصل بيضل)،
-  انسخ النص يلي بالصورة، صغّرها، اضغطهن، أو شارك (بيفتح المستكشف عالملف).
-- الجهاز، النسخ (نافذة النسخ تبع الويندوز، النسبة والوقت الباقي)، «وإنت غايب» (لما ترجع بعد دقيقتين وأكتر بتقلك شو صار
-  وبتنط من الفرح)، ووقت الشاشة (مطفي من الأول، بيضل على جهازك ٧ أيام).
-- ملء الشاشة على شاشتها: بس الأشيا المهمة (Claude بدّه إذنك، عاصفة/ريح/حر، بطارية ضعيفة) بتدق من فوق الشاشة ٤ ثواني وبترجع،
-  بلا أزرار. يلي بيخلص وقتها بينحفظ لـ«وإنت غايب».
-- صفحة جديدة بالإعدادات: «النشاطات» — كل نشاط بينطفى لحالو، الكلمات، قديش تضل الموسيقى الواقفة، مدينة الطقس، ربط Claude Code،
-  واللقطات الجديدة عالرف. الخصوصية صارت تسمّي كل موقع بيحكي معه: open-meteo.com و lrclib.net.
-- السجل بيكتب أنواع وأعداد بس — أبداً اسم أغنية ولا ملف ولا أمر ولا مدينة.
+⚙️ «إعداداتي»
+- زر «إعداداتي» بقائمتها وبقائمة أيقونتها بيفتح نافذة هادية بألوانها، فاتحة أو غامقة متل الويندوز. كل تغيير بيتطبّق فوراً.
+- الصفحات: سحورة (اسمك، شب ولا صبية، حجمها، نشاطها، شو بتعمل لحالها) · القائمة (شو بيطلع فيها واختصار الكيبورد) · الصلاة ·
+  الاستماع · النشاطات · عقلي · النماذج · عنك · شو عملت اليوم · عام · الخصوصية («امسح كل شي عني») · عن سحر.
+- إذا ملف إعداداتها خرب: ملاحظة هادية مع «نبلّش من جديد» (بتسألك «أكيد؟» أول، والملف الخربان بيضل على جنب .bad).
+- بيحتاج "WebView2" من مايكروسوفت (موجود بويندوز 11 وبأغلب ويندوز 10). إذا مش موجود، زر «إعداداتي» ما بيطلع.
 
-جرّب بإيدك: شغّل أغنية؛ افلت ملف عليها؛ خود لقطة شاشة؛ انسخ مجلد كبير؛ قفّل الجهاز دقيقتين وارجع؛ اربط Claude Code وخلّيه يشتغل
-وبعدين يسألك إذن؛ شغّل فيديو ملء شاشة وخلّي Claude يسألك (لازم تدق من فوق).
+🏷️ «النشاطات»
+- تعليقة صغيرة تحتها بخيط، فيها شي واحد بسطر: الأغنية، الطقس، Claude Code، الرف، النسخ، الصوت، البطارية، الكاميرا والمايك،
+  «وإنت غايب»، ووقت الشاشة. عجلة الماوس فوقها بتقلّب، وكبسة عليها بتفتح كرتها (Esc بيسكّر).
+- الموسيقى من أي برنامج (الكلمات مطفية من الأول، وبتسألك قبل ما تطلع على lrclib.net). الطقس مع تحذير مرة وحدة لكل موجة.
+- Claude Code: «اربطها» من «النشاطات» — بتشوف شو عم يعمل، ولما يسألك إذن بتطلع «Claude ناطر جوابك» أول شي (الجواب من نافذة Claude نفسها).
+- الرف: افلت ملفات عليها بتمسكهن. ملء الشاشة: بس الأشيا المهمة بتدق من فوق ٤ ثواني.
 
-شو الجديد بـ 0.12.0 — «إعداداتي»: برنامج إعدادات إلها ⚙️
--------------------------------------------------
-- زر «إعداداتي» بقائمتها (وبقائمة أيقونتها جنب الساعة) بيفتح نافذة إعدادات هادية بنفس ألوانها، فاتحة أو غامقة متل الويندوز.
-  كل تغيير بيتطبّق فوراً، بلا زر حفظ. النافذة وحدة بس: إذا فتحتها مرة تانية بتجيك يلي مفتوحة. ولما تسكّرها بتطلع كلياً.
-  ما بتفتح الإنترنت أبداً: البحث عن مدينتك بيمرق من سَحَر نفسها.
-- الصفحات: سحورة · القائمة / الصلاة · الاستماع / عام · الخصوصية / عن سحر. (الأصوات و Claude Code مخبّايين لحد ما يشتغلوا.)
-- سحورة: سَحَر صغيرة حيّة بالصفحة بتنط وبتحكيلك كلمة مع كل تغيير. اسمك، شب ولا صبية (كلامها بيتغيّر معك: «اكتبي اسمك»)،
-  حجمها (صغيرة / وسط / كبيرة — وهي عالشاشة بتكبر وبتصغر فوراً)، نشاطها، وشو بتعمل لحالها: تعلّق على شغلك، مزاجها يتغيّر لحالو،
-  تلعب لحالها، تحس بالطقس — والنجوم جواتها.
-- القائمة: شو بيطلع بقائمتها (كل شي بينطفى ويشتغل)، شو بيبيّن فوق، بشو بتنفتح ووين، واختصار الكيبورد
-  (اكبس «غيّر» واكبس الاختصار الجديد؛ إذا مأخود أو بتستعمله البرامج بتقلّك ليش وبتضل عالقديم).
-- الصلاة: أوقات اليوم الخمسة والجاية مع عدّاد، المدينة أو موقع الويندوز، طريقة الحساب، العصر (الجمهور / حنفي)، والتذكير وقديش قبل.
-- الاستماع: مين القارئ. عام: فاتح / غامق / متل الويندوز، واللغة (عربي أو English — هلق للإعدادات بس).
-- الخصوصية: امسح يلي نسخته، الطقس، و«امسح كل شي عني» (بتنسى كل شي وبترجع تتعرّف عليك من جديد).
-- إذا ملف إعداداتها خرب وما عم تقدر تقراه: بتطلع ملاحظة هادية فوق كل صفحة مع «نبلّش من جديد».
-  بتسألك «أكيد؟»، وبعدين بترجع لإعداداتها الأولى وبتسألك عن اسمك من جديد. الملف الخربان بيضل على جنب (.bad) وملاحظاتك متل ما هي.
-- حجمها من الإعدادات صار يتطبّق فعلاً (قبل كان دايماً وسط).
-- الملف المضغوط صار أكبر بحوالي 30 ميغا: برنامج الإعدادات جوّا مجلد Sahar.Settings جنب Sahar.Engine.exe — خلّيهن سوا.
-  بيحتاج "WebView2" من مايكروسوفت (موجود بويندوز 11 وبأغلب ويندوز 10). إذا مش موجود، زر «إعداداتي» ما بيطلع.
+🌙 «عقلها» — بتفكّر من جوّا جهازك
+- نموذج لغة على جهازك بلا نت (llama.cpp b12207 الرسمية). بيصحى أول ما تكتبلها، وبعد ٥ دقايق بلا حكي (دقيقة عالبطارية) بيطلع من الذاكرة.
+- التنزيل بإذنك بس: من «النماذج» («نزّليه») أو لما تسألك بفقاعتها. بتقلك الحجم أول (Gemma 4 E4B ≈ ٤٫٩٨ غيغا)،
+  وإذا Hugging Face مسكّر عندك بتقلك بوضوح واقترح تشغّل الـ VPN. بيوقف وبيكمّل، وبتتأكّد من الملف قبل ما تستعملو.
+- أي نموذج بدك (المقترحة، رابط من Hugging Face، أو ملف ‎.gguf‎ عندك)، وكل نموذج إله «جرّبيه». CUDA تنزيل زيادة (≈ ٦٨٠ ميغا) بس إذا قلت إي.
+- السجل (engine.log و mind.log و settings.log) بيكتب أنواع وأرقام وأوقات بس — أبداً شو كتبت ولا اسم أغنية ولا ملف.
 
-شو جرّب: افتح «إعداداتي» وغيّر حجمها وشوفها عالشاشة؛ طفّي «نلعب؟» من صفحة القائمة وافتح قائمتها؛ غيّر الاختصار لـ Ctrl+Alt+K
-وجرّبه؛ خلّي الويندوز غامق وشوف النافذة؛ سكّر النافذة وتأكد إنها راحت من مدير المهام.
+جرّب بإيدك:
+  ١. ثبّتها من Sahar-Setup-0.14.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
+  ٢. افتح «إعداداتي» وغيّر حجمها؛ وبعدين شغّل المثبّت مرة تانية والنافذة مفتوحة (لازم تتسكّر هي وسحر وترجع سحر، وإعداداتك متل ما هي).
+  ٣. شغّل أغنية؛ افلت ملف عليها؛ اربط Claude Code وخلّيه يسألك إذن.
+  ٤. افتح «النماذج» وكبّس «نزّليه» (≈ ٥ غيغا)؛ وقّفه وكمّله؛ لما يخلص كبّس «جرّبيه» وصوّرلنا الأرقام.
+  ٥. «دوّر على تحديث» من أيقونتها؛ وبالآخر أزلها من الإعدادات وجاوب «لا» (لما ترجع تثبّتها لازم ترجع متل ما كانت).
 
 من 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
-الجديد بالنسخة الجاية — مثبّت، وتحديثات بتسألك عنها 📦
--------------------------------------------------
-- صار في مثبّت: Sahar-Setup-0.11.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط.
-  بيتثبّت إلك انت بس (بلا صلاحيات أدمن) بمجلد %LocalAppData%\Programs\Sahar،
-  بيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
-- لما تطلع نسخة جديدة، سَحَر بتقلك بفقاعتها: «في نسخة جديدة مني …، بدك ثبّتها؟» وتحتها «إي» و«بعدين».
-  «إي»: بتنزّلها، بتتأكد إنها منّا نحنا (توقيع رقمي) وإنها نفس الملف بالضبط، والمثبّت بيسكّرها وبيثبّت وبيرجّعها بعد ثواني.
-  إذا ما زبط التثبيت لأي سبب، بترجع متل ما كانت وبتقلك «ما زبط التحديث».
-  إذا كنت مشغّلها من الـ zip: بيطلعلك المثبّت لتشوف وين رح تنحط وتختار إذا بدها تشتغل مع الويندوز، وبعدها بتقلك وين صارت ساكنة.
-  «بعدين» (أو إذا سكّرت الفقاعة): بتسألك مرة تانية بكرا. أبداً ما بتحدّث حالها بلا ما تقلها «إي».
-- بتدوّر دقيقتين بعد ما تشتغل، وبعدين كل 12 ساعة. وبإيدك: كبسة يمين على أيقونتها ← «دوّر على تحديث».
-- إعداداتك وملاحظاتك وسجلّها بيضلّوا متل ما هنن وقت التحديث أو لما تثبّتها فوق حالها.
-- الإزالة: إعدادات الويندوز ← التطبيقات ← سَحَر ← إزالة. بتسألك إذا بدك تمسح إعداداتها كمان (الجواب العادي «لا»).
-- صار إلها أيقونة: وجّها 🌱 (بقائمة ابدأ، جنب الساعة، وبالإعدادات ← التطبيقات). شوف docs/design/icon/icon-sheet.png
-- إذا شغّلت مثبّت أقدم من النسخة يلي عندك، بيسألك قبل ما يبدّلها.
-- النت: بتحكي بس مع github.com (ملفات النسخة)، وما بتبعت شي عنك غير اسمها ورقم نسختها.
-  إذا ما في نت بتسكت وبتجرّب بعدين (والسجل بيكتب سطر واحد).
-
-جرّب بإيدك: ثبّتها من Sahar-Setup-0.11.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها؛
-شغّل المثبّت مرة تانية وهي شغّالة (لازم تسكّر وترجع، وإعداداتك متل ما هي)؛ «دوّر على تحديث» من أيقونتها؛
-وأزلها من الإعدادات وجاوب «لا» (لازم ترجع متل ما كانت إذا رجعت ثبّتها).
-شكل المثبّت بالعربي (من سيرفر الفحص): docs/design/installer/wizard-ar.png
-
-شو الجديد بـ 0.11.0 — قائمتها الجديدة وصندوق الحكي 💬
 -------------------------------------------------
 - القائمة الدائرية راحت. كبسة يمين عليها (أو Ctrl+Alt+S من أي مكان) بتفتح بطاقة هادية جنبها:
   فوق سطرها هي «شو بدك نعمل؟» وتحتو أهم شي هلق (المؤقت، الصلاة الجاية، القرآن، أو قديش باقي لترجع تحكي)،
@@ -246,17 +196,13 @@
 
 كيف تثبّتها
 -----------
-1. فك الضغط عن الملف Sahar-0.12.0-test-win-x64.zip بأي مجلد.
-2. شغّل Sahar.Engine.exe — سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   إذا طلع تحذير ويندوز (SmartScreen): "More info" ← "Run anyway". النسخة مش موقّعة لسا.
-3. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
-1. نزّل Sahar-Setup-0.11.0.exe من صفحة النسخة على GitHub وشغّلو.
+1. نزّل Sahar-Setup-0.14.0.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
 2. الويندوز رح يقلك «Windows protected your PC» (هاد SmartScreen) لأن النسخة مش موقّعة لسا. طبيعي:
    كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
    هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
 3. اختار إذا بدك ياها تشتغل مع الويندوز ← «التالي» ← «إنهاء». سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.11.0-test-win-x64.zip وشغّل Sahar.Engine.exe (نفس تحذير SmartScreen).
-   إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
+   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.14.0-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
+   (نفس تحذير SmartScreen؛ خلّي كل الملفات والمجلدات يلي جنبها سوا). إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
 4. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
    "إخفاء ساعة" بيخبّيها ساعة وبترجع لحالها.
 
@@ -300,7 +246,7 @@
 - 🎵 شغّل أغنية بسبوتيفاي وجرّب ⏮️ ⏯️ ⏭️ من قائمتها، وشوف إذا الفقاعة بتقول اسم الأغنية.
 - 📖 شغّل سورة والسماعات بأذنيك وأغنية شغالة: لازم توقف الأغنية وتبلش التلاوة، وسَحَر تهدى. وبآخر السورة بترجع عادي.
 
-بهالنسخة لسا ما في: الأصوات وربط Claude. هدول بالخطط الجاية.
+بهالنسخة لسا ما في: الأصوات. هي بالخطط الجاية.
 
 إذا صار شي غلط
 --------------
@@ -310,53 +256,27 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.12.0 (Windows)
+Sahar — test build 0.14.0 (Windows)
 ==================================
 
-What's new in 0.12.0 — «إعداداتي»: her own settings app ⚙️
+What's new in 0.14.0 — the installer, her settings, her activities and her brain 🌙
 -----------------------------------------------
-- «إعداداتي» in her menu (and in her tray icon's menu) opens a quiet settings window in her colours, light or dark like
-  Windows. Every change applies at once, no Save button. Only one window: opening it again brings the open one to the
-  front; closing it ends it completely. It never goes online: your city is searched through Sahar herself.
-- Pages: Sahar · Menu / Prayer · Listening / General · Privacy / About. (Sounds and Claude Code stay hidden until they work.)
-- Sahar: a small living Sahar on the page hops and says a word on every change. Your name, guy or girl (her words follow
-  you), her size (small / medium / large — she resizes on screen at once), how lively she is, and what she does by
-  herself: comment on your work, change mood by herself, play by herself, feel the weather — and the stars inside her.
-- Menu: what her menu shows (each item on or off), what shows at the top, what opens it and where, and the keyboard
-  shortcut (press «غيّر», then the new keys; one that is taken or common is refused with the reason, the old one stays).
-- Prayer: today's five times and the next with a countdown, the city or Windows location, the method, Asr, the reminder.
-- Listening: the reciter. General: light / dark / like Windows, and the language (Arabic or English — the settings only, for now).
-- Privacy: clear what you copied, the weather, and «امسح كل شي عني» (she forgets everything and gets to know you again).
-- If her settings file is damaged and can't be read: a calm note above every page offers «نبلّش من جديد». She asks «أكيد؟»,
-  then goes back to her first settings and asks your name again. The damaged file is kept aside (.bad); your notes stay.
-- Her size from the settings now really applies (before, she was always medium).
-- The zip is about 30 MB bigger: the settings app is in the Sahar.Settings folder next to Sahar.Engine.exe — keep them
-  together. It needs Microsoft "WebView2" (in Windows 11 and most of Windows 10); without it «إعداداتي» does not show.
-
-What to try: open «إعداداتي» and change her size while watching her; turn «نلعب؟» off on the Menu page and open her
-menu; change the shortcut to Ctrl+Alt+K and try it; switch Windows to dark and look at the window; close it and check
-Task Manager that it is gone.
+Everything since 0.11 in one build:
+- Installer: Sahar-Setup-0.14.0.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
+  Windows (ticked). It installs the settings app and her brain (Sahar.Mind.exe and the pinned llama.cpp runtime, Vulkan
+  and CPU) beside her; no model is bundled — she downloads one in the app when you say yes.
+- Updates: she asks in her bubble (yes / later) and never updates without a yes; the setup is checked against a signed
+  manifest. By hand: right-click her icon → «دوّر على تحديث». An update or a reinstall closes an open settings window
+  (it saves first) and keeps your settings, notes and log. Uninstall (Settings → Apps) removes everything she installed
+  and Sahar's Claude Code hooks (your other Claude settings stay); it asks before deleting her data (default: no).
+- «إعداداتي»: her own settings window (WebView2), every change applied at once; pages for Sahar, Menu, Prayer, Listening,
+  Activities, Brain, Models, About you, Today, General, Privacy and About.
+- Activities: a small tag under her with one thing at a time (music, weather, Claude Code, the shelf, copies, volume,
+  battery, camera/mic, while you were away, screen time); cards on click; only urgent things over a fullscreen app.
+- Her brain: a local language model (llama.cpp b12207), downloaded only on your yes (Gemma 4 E4B ≈ 4.98 GB), resumable,
+  hash-checked; any model you like; unloads after 5 minutes idle. Logs hold kinds, counts and times only.
 
 From 0.11.0 — her new menu and a chat box 💬
-New in the next version — an installer, and updates she asks you about 📦
------------------------------------------------
-- An installer: Sahar-Setup-0.11.0.exe. Run it once; nothing to unzip. It installs for you only (no admin) into
-  %LocalAppData%\Programs\Sahar, puts «سحر» in the Start menu and asks whether she starts with Windows (ticked).
-- When a new version is out she says so in her bubble («في نسخة جديدة مني …، بدك ثبّتها؟») with yes and later.
-  Yes: she downloads it, checks it is ours (a digital signature) and exactly that file; the installer closes her,
-  installs it and starts her again a few seconds later. If the install does not work out, she is back as she was and
-  tells you. Running from the zip: you get the installer's wizard (you see where she goes and choose start-with-
-  Windows), and afterwards she tells you where she lives now. Later (or closing the bubble): she asks again the next
-  day. She never updates without a yes.
-- She looks 2 minutes after she starts, then every 12 hours; by hand: right-click her icon → «دوّر على تحديث».
-- Your settings, notes and her log stay as they are through an update or a reinstall.
-- Uninstall: Windows Settings → Apps → سَحَر → Uninstall. It asks whether to delete her settings too (default: no).
-- She has an icon now: her face 🌱 (Start menu, by the clock, Settings → Apps). See docs/design/icon/icon-sheet.png
-- An older setup over a newer Sahar asks before replacing her.
-- Network: only github.com (the release's files); nothing about you but her name and version.
-  No internet: she stays quiet and tries later (one line in the log).
-
-What's new in 0.11.0 — her new menu and a chat box 💬
 -----------------------------------------------
 - The radial ring is gone. A right-click on her (or Ctrl+Alt+S from anywhere) opens a quiet card beside her: her
   line «شو بدك نعمل؟», under it the one most urgent thing (a running timer, the next prayer, the Quran, or how long
@@ -500,20 +420,15 @@ Still here from 0.2.0
 - Away for 5 minutes: she naps in the corner and wakes when you are back.
 - To reset what she learned: quit her and delete %AppData%\Sahar\life.json
 
-Run it
-------
-1. Unzip Sahar-0.12.0-test-win-x64.zip anywhere.
-2. Run Sahar.Engine.exe. Sahar appears bottom-right, above the taskbar.
-   If Windows SmartScreen warns you: "More info" → "Run anyway" (the build is not signed yet).
-3. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
 Install it
 ----------
-1. Download Sahar-Setup-0.11.0.exe from the release page on GitHub and run it.
+1. Download Sahar-Setup-0.14.0.exe from the release page ("test-build") on GitHub and run it.
 2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
    click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
 3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.
-   Portable instead: unzip Sahar-0.11.0-test-win-x64.zip and run Sahar.Engine.exe (same SmartScreen warning).
-   Running her from the zip: the installer closes her for you; delete the old folder afterwards.
+   Portable instead: unzip Sahar-0.14.0-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
+   keep the files and folders beside it together). Running her from the zip: the installer closes her for you;
+   delete the old folder afterwards.
 4. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
    "Hide 1 h" hides her for an hour.
 
@@ -557,7 +472,7 @@ Manual checks (GitHub cannot test these)
 - 📖 Play a surah with headphones on while a song plays: the song pauses, the recitation starts, Sahar goes quiet,
   and at the end of the surah she is back to normal.
 
-Not in this build yet: sounds and the Claude link (later plans).
+Not in this build yet: sounds (a later plan).
 
 If something goes wrong
 -----------------------

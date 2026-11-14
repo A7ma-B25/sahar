@@ -7,7 +7,7 @@ A small magical companion who lives on your Windows desktop. Arabic-first, light
 
 ## تثبيتها · Install
 
-1. نزّل `Sahar-Setup-0.11.0.exe` من صفحة النسخة («test-build») على GitHub وشغّلو. بيتثبّت إلك انت بس، بلا أدمن.
+1. نزّل `Sahar-Setup-0.14.0.exe` من صفحة النسخة («test-build») على GitHub وشغّلو. بيتثبّت إلك انت بس، بلا أدمن.
 2. إذا قلك الويندوز «Windows protected your PC» (هاد SmartScreen، لأن النسخة مش موقّعة لسا):
    كبّس «More info» (معلومات إضافية) ← وبعدين «Run anyway» (تشغيل على أي حال).
 3. «التالي» ← «إنهاء». بتلاقي «سحر» بقائمة ابدأ. التحديثات الجاية بتسألك عنها هي بفقاعتها.
@@ -26,6 +26,10 @@ release key — `Sahar-update.json` + `.sig`, signed on `main` only — is run).
 
 ```
 dotnet test tests/Sahar.Core.Tests
-dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine   # on Windows
-./packaging/installer/build.ps1 -Version 0.11.0                             # on Windows: Sahar-Setup-0.11.0.exe
+# on Windows: the engine, the settings app, her brain's process and the pinned llama.cpp runtime, then the setup
+dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+dotnet publish src/Sahar.Settings -c Release -r win-x64 -o artifacts/engine/Sahar.Settings
+dotnet publish src/Sahar.Mind -c Release -r win-x64 -o artifacts/mind-exe; cp artifacts/mind-exe/Sahar.Mind.exe artifacts/engine/
+./tools/mind/fetch.ps1 -Runtime vulkan,cpu -Out artifacts/mind
+./packaging/installer/build.ps1 -Version 0.14.0 -Runtime artifacts/mind/runtime   # Sahar-Setup-0.14.0.exe (no models inside)
 ```
