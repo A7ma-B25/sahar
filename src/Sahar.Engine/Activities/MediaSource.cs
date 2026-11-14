@@ -159,16 +159,27 @@ internal sealed class MediaSource
 
     private void Show()
     {
-        if (_song is not { } s) { _hub.Remove("music"); return; }
+        if (_song is not { } s) { Hide(); return; }
         var now = DateTimeOffset.Now;
-        if (!s.Playing && s.PausedAt is { } at && !MediaNow.KeepPaused(at, now, _settings().MusicPausedKeep)) { _hub.Remove("music"); return; }
+        if (!s.Playing && s.PausedAt is { } at && !MediaNow.KeepPaused(at, now, _settings().MusicPausedKeep)) { Hide(); return; }
         var pos = MediaNow.Position(s.Position, s.Updated, now, s.Playing, s.End);
         float? progress = s.End > TimeSpan.Zero ? (float)(pos / s.End) : null;
         var a = s.Playing
             ? new Activity("music", ActivityKind.Music, s.Title, null, "notes", progress)
             : new Activity("music", ActivityKind.MusicPaused, s.Title, ActivityText.Paused, "notes");
         _hub.Set(a, Card);
+        _shown = true;
     }
+
+    /// <summary>Takes down only the tag this source hung (never another «music», e.g. a test's).</summary>
+    private void Hide()
+    {
+        if (!_shown) return;
+        _shown = false;
+        _hub.Remove("music");
+    }
+
+    private bool _shown;
 
     private CardData? Card()
     {

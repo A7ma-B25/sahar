@@ -4267,6 +4267,7 @@ function Stage-Activities {
         if ($r.code -ne 0 -or $r.out -ne '') { throw "the permission hook printed '$($r.out)' (notify only: it must never answer)" }
         Start-Sleep -Milliseconds 300
         if ((Acts).front -ne 'ClaudeAsk') { throw "asking is not first ($((Acts).front))" }
+        Start-Sleep -Milliseconds 2200   # a tool hook within 2 s of the ask is that same tool, landing late (review #3)
         Run-Hook (Hook-Json 'PostToolUse' ',"tool_name":"Bash","tool_input":{"command":"x"},"tool_response":{"stdout":"' + ('y' * 200000) + '"}') | Out-Null
         Start-Sleep -Milliseconds 300
         if ((Acts).front -ne 'ClaudeWorking') { throw "the ask did not end when Claude went on ($((Acts).front))" }
@@ -4298,6 +4299,9 @@ function Stage-Activities {
         Act 'activity-card-press' '{"id":"act-zip"}' | Out-Null
         Wait-Until { [int](Kv 'debug-shelf').zipped -ge 1 } 8000 'the zip' | Out-Null
         if (-not (Test-Path (Join-Path $dir 'big.zip')) -or (Get-ChildItem $dir -Filter '*.part')) { throw "zip: $((Get-ChildItem $dir).Name -join ',')" }
+        Act 'activity-card' '{"id":"shelf"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Act 'activity-card-press' '{"id":"shelf-clear"}' | Out-Null   # the shelf is kept on disk: empty it for the next steps
         Act 'activity-clear' | Out-Null
     }
     Step 'privacy: no title, path, command or project name in engine.log' {
