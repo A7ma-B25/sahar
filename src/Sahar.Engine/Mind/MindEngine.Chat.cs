@@ -193,8 +193,15 @@ internal sealed partial class MindEngine
 
     private static ToolCall Call(string tool, string args) => new(tool, JsonDocument.Parse(args).RootElement.Clone());
 
-    private ActionEntry Append(string tool, ToolCall call, ActSource source, string? why, ActionOutcome outcome, string? undo, string? summary = null) =>
-        _log.Append(tool, summary ?? ToolTemplates.Done(call), source, why, outcome, undo);
+    private ActionEntry Append(string tool, ToolCall call, ActSource source, string? why, ActionOutcome outcome, string? undo, string? summary = null)
+    {
+        var e = _log.Append(tool, summary ?? ToolTemplates.Done(call), source, why, outcome, undo);
+        if (outcome is ActionOutcome.Done or ActionOutcome.AskedYes && _doneDay == DateOnly.FromDateTime(DateTime.Now)) _doneToday++;
+        return e;
+    }
+
+    private DateOnly _doneDay;
+    private int _doneToday;
 
     private static string? Clip(string? s, int max) => s is null ? null : s.Length <= max ? s.Trim() : s[..max].Trim() + "…";
 
@@ -212,11 +219,15 @@ internal sealed partial class MindEngine
         if (_todayFactShown) { _todayFactDay = DateOnly.FromDateTime(DateTime.Now); _todayFactShown = false; }
     }
 
+    /// <summary>The once-a-day fact, only with her brain there (it is about what her brain did). The count is read from
+    /// the box once a day and kept up to date by her own appends, never on every redraw.</summary>
     private HeaderFact? TodayFact()
     {
+        if (!MindReady()) return null;
         var today = DateOnly.FromDateTime(DateTime.Now);
         if (_todayFactDay == today && !_todayFactShown) return null;
-        int n = ActionLogView.DoneToday(_log, DateTimeOffset.Now);
+        if (_doneDay != today) { _doneDay = today; _doneToday = ActionLogView.DoneToday(_log, DateTimeOffset.Now); }
+        int n = _doneToday;
         if (n == 0) return null;
         _todayFactShown = true;
         return new HeaderFact("today", ActionLogView.DoneLine(n), "settings");

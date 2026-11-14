@@ -10,6 +10,17 @@ function Mind-Line([string]$json) {
     if (-not $r.ok) { throw "mind-test-msg refused: $($r.error)" }
 }
 function Mind-Sent { "$((Kv 'mind-test-sent').sent)" }
+function Notes-Text {
+    # the engine may be writing it this very moment: read with sharing, try again shortly
+    for ($k = 0; $k -lt 10; $k++) {
+        try {
+            $fs = [System.IO.File]::Open($notesFile, 'Open', 'Read', 'ReadWrite')
+            try { return ([System.IO.StreamReader]::new($fs)).ReadToEnd() } finally { $fs.Dispose() }
+        }
+        catch [System.IO.IOException] { Start-Sleep -Milliseconds 100 }
+    }
+    ''
+}
 function Mind-Log([string]$day = 'today') {
     $r = Kva 'mind-log' ('{"day":"' + $day + '"}')
     (Text64 $r.json64) | ConvertFrom-Json
@@ -43,7 +54,7 @@ function Card-Shot([string]$name) {
 function Stage-MindAutonomy {
     Stop-Engine
     $kept = Settings-Json
-    $notesFile = Join-Path $env:APPDATA 'Sahar\notes.json'
+    $script:notesFile = Join-Path $env:APPDATA 'Sahar\notes.json'
     $notesKept = if (Test-Path $notesFile) { Get-Content $notesFile -Raw } else { $null }
     Write-Settings '{ "helloDone": true }'
     Start-Engine
@@ -121,7 +132,7 @@ function Stage-MindAutonomy {
         if ((Auto).hush -ne 'true') { throw 'no hush' }
         Mind-Line ('{"v":1,"t":"call","id":"' + $script:c1 + '","call":3,"tool":"note.save","data":"{\"text\":\"SENTINEL-NOTE\"}","why":"x"}')
         Start-Sleep -Milliseconds 300
-        if (-not ((Get-Content $notesFile -Raw) -match 'SENTINEL-NOTE')) { throw 'the note was not saved' }
+        if (-not ((Notes-Text) -match 'SENTINEL-NOTE')) { throw 'the note was not saved' }
         Mind-Line ('{"v":1,"t":"say","id":"' + $script:c1 + '","text":"شغّلت مؤقت ربع ساعة وسكتّ","final":true}')
         Start-Sleep -Milliseconds 300
         $log = Mind-Log
@@ -271,7 +282,7 @@ function Stage-MindAutonomy {
         $noteLine = @((Mind-Log).entries | Where-Object { $_.tool -eq 'note.save' -and $_.undo })[0]
         if (-not $noteLine) { throw 'no note to delete' }
         SClick ('#undo-' + $noteLine.id)
-        Wait-Until { -not ((Get-Content $notesFile -Raw) -match 'SENTINEL-NOTE') } 3000 'the note deleted from the page'
+        Wait-Until { -not ((Notes-Text) -match 'SENTINEL-NOTE') } 3000 'the note deleted from the page'
         SClick ('#fb-up-' + $noteLine.id)
         Wait-Until { (@((Mind-Log).entries | Where-Object id -eq $noteLine.id)[0]).feedback -eq 1 } 3000 'the thumbs-up kept'
         SClick '#today-days-1'
