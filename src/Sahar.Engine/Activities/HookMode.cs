@@ -25,6 +25,31 @@ internal static class HookMode
         }
     }
 
+    /// <summary>Takes our hooks out of Claude Code's settings (only when some are there; nothing else is touched).</summary>
+    public static int Unlink()
+    {
+        try
+        {
+            ClaudeLinkFile.Apply(ClaudeLinkFile.DefaultPath, j => ClaudeLink.Follow(j, Exe).Error == "not-linked"
+                ? new LinkResult(false, null, "not-linked") : ClaudeLink.Remove(j, Exe));
+        }
+        catch (Exception) { }
+        return 0;
+    }
+
+    /// <summary>At her start: linked hooks that point at an older place follow her here.</summary>
+    public static void Follow()
+    {
+        try
+        {
+            var r = ClaudeLinkFile.Apply(ClaudeLinkFile.DefaultPath, j => ClaudeLink.Follow(j, Exe));
+            if (r.Ok) Diagnostics.Log.Write("claude: hooks follow her new place");
+        }
+        catch (Exception e) { Diagnostics.Log.Write($"claude: follow failed ({e.GetType().Name})"); }
+    }
+
+    private static string Exe => Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, ClaudeLink.ExeName);
+
     private static bool Send(IReadOnlyDictionary<string, string> args)
     {
         using var pipe = new NamedPipeClientStream(".", Pipe.PipeServer.Name, PipeDirection.InOut, PipeOptions.CurrentUserOnly);

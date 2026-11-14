@@ -72,20 +72,21 @@ public class LocalSourcesTests
     }
 
     [Fact]
-    public void Away_CountsKindsOnly_RowCapFive()
+    public void Away_CountsKindsOnly()
     {
         var a = new AwayLog();
         a.Lock(T);
         a.Note(ActivityKind.ClaudeDone, T.AddMinutes(1));
         a.Note(ActivityKind.ClaudeDone, T.AddMinutes(5));
-        foreach (var (k, m) in new[] { (ActivityKind.CopyDone, 2), (ActivityKind.WeatherAlert, 3), (ActivityKind.Charging, 4),
-                     (ActivityKind.Screenshot, 6), (ActivityKind.BatteryLow, 7), (ActivityKind.Back, 8) }) a.Note(k, T.AddMinutes(m));
+        a.Note(ActivityKind.CopyDone, T.AddMinutes(2));
+        a.Note(ActivityKind.WeatherAlert, T.AddMinutes(8), WeatherAlert.Frost);
+        a.Note(ActivityKind.Screenshot, T.AddMinutes(6));   // not kept (review #5)
         var s = a.Unlock(T.AddMinutes(70))!;
         Assert.Equal(TimeSpan.FromMinutes(70), s.Away);
-        Assert.Equal(5, s.Rows.Count);
-        Assert.Equal(2, s.More);
-        Assert.Equal(8, s.Total);
-        Assert.Equal((ActivityKind.Back, 1), (s.Rows[0].Kind, s.Rows[0].Count));
+        Assert.Equal(3, s.Rows.Count);
+        Assert.Equal(0, s.More);
+        Assert.Equal(4, s.Total);
+        Assert.Equal((ActivityKind.WeatherAlert, 1), (s.Rows[0].Kind, s.Rows[0].Count));
         Assert.Contains(s.Rows, r => r.Kind == ActivityKind.ClaudeDone && r.Count == 2);
         Assert.Null(a.Unlock(T.AddMinutes(80)));   // once
     }

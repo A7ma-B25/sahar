@@ -13,6 +13,8 @@ internal static class Program
     {
         // Claude Code's hooks (0.13): one line to her pipe, then exit — no mutex, no log, no window, nothing printed.
         if (args.Length > 0 && args[0] == "hook") return Activities.HookMode.Run();
+        // The uninstaller (review #6): our Claude Code hooks go with her; anything else in that file stays.
+        if (args.Contains("--unlink-claude")) return Activities.HookMode.Unlink();
         if (args.Contains("--version"))
         {
             // WinExe has no console; attach to the parent's so the output is visible in a terminal.

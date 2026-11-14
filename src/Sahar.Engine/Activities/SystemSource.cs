@@ -22,7 +22,7 @@ internal sealed unsafe class SystemSource
     private nint _volume;
     private int? _level;
     private bool? _muted;
-    private int _failures;
+    private int _failures, _ticks;
     private int? _battery;
     private bool _charging;
 
@@ -41,7 +41,11 @@ internal sealed unsafe class SystemSource
 
     private void ReadVolume()
     {
+        // The default device can change (headphones in): take it again every 10 s; after failures, try once a minute.
+        if (++_ticks % 20 == 0) Com.Release(ref _volume);
+        if (_failures > 20 && _ticks % 120 != 0) return;
         if (_volume == 0 && !Acquire()) return;
+        _failures = 0;
         float v;
         int muted;
         if (((delegate* unmanaged[Stdcall]<nint, float*, int>)Com.Slot(_volume, 9))(_volume, &v) < 0
@@ -62,7 +66,6 @@ internal sealed unsafe class SystemSource
 
     private bool Acquire()
     {
-        if (_failures > 20) return false;
         nint enumerator = 0, device = 0, volume = 0;
         try
         {

@@ -18,7 +18,7 @@ internal sealed class Weather : IDisposable
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private readonly string? _stub;
     private readonly DispatcherQueue _ui;
-    private DateTimeOffset? _lastFetch;
+    private readonly Sahar.Core.Activities.FetchGate _gate = new();   // once an hour; a failure may retry (review #9)
 
     public double? Latitude { get; private set; }
     public double? Longitude { get; private set; }
@@ -69,7 +69,7 @@ internal sealed class Weather : IDisposable
     public void Use(GeoResult place)
     {
         (Latitude, Longitude) = (place.Latitude, place.Longitude);
-        _lastFetch = null;
+        _gate.Reset();
         Log.Write("weather: on");
         _ = CheckAsync();
     }
@@ -83,8 +83,7 @@ internal sealed class Weather : IDisposable
     {
         try
         {
-            if (!On || !WeatherRules.ShouldFetch(DateTimeOffset.Now, _lastFetch)) return;
-            _lastFetch = DateTimeOffset.Now;
+            if (!On || !_gate.TryStart(DateTimeOffset.Now)) return;
             double lat = Latitude!.Value, lon = Longitude!.Value;
             var json = _stub is not null
                 ? await File.ReadAllTextAsync(Path.Combine(_stub, "forecast.json"))
@@ -97,7 +96,7 @@ internal sealed class Weather : IDisposable
                     : await _http.GetStringAsync(Sahar.Core.Activities.OpenMeteo.AirUrl(lat, lon));
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException) { Log.Write($"weather: air quality failed ({e.GetType().Name})"); }
-            if (Sahar.Core.Activities.OpenMeteo.Parse(json, air, DateTimeOffset.Now) is not { } f) { Log.Write("weather: forecast not understood"); return; }
+            if (Sahar.Core.Activities.OpenMeteo.Parse(json, air, DateTimeOffset.Now) is not { } f) { _gate.Failed(); Log.Write("weather: forecast not understood"); return; }
             Log.Write("weather: forecast");
             _ui.TryEnqueue(() =>
             {
@@ -107,6 +106,7 @@ internal sealed class Weather : IDisposable
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or JsonException)
         {
+            _gate.Failed();
             Log.Write($"weather: forecast failed ({e.GetType().Name})");
         }
     }

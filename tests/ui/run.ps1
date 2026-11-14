@@ -4267,6 +4267,7 @@ function Stage-Activities {
         if ($r.code -ne 0 -or $r.out -ne '') { throw "the permission hook printed '$($r.out)' (notify only: it must never answer)" }
         Start-Sleep -Milliseconds 300
         if ((Acts).front -ne 'ClaudeAsk') { throw "asking is not first ($((Acts).front))" }
+        Start-Sleep -Milliseconds 2200   # a tool hook within 2 s of the ask is that same tool, landing late (review #3)
         Run-Hook (Hook-Json 'PostToolUse' ',"tool_name":"Bash","tool_input":{"command":"x"},"tool_response":{"stdout":"' + ('y' * 200000) + '"}') | Out-Null
         Start-Sleep -Milliseconds 300
         if ((Acts).front -ne 'ClaudeWorking') { throw "the ask did not end when Claude went on ($((Acts).front))" }
@@ -4275,6 +4276,33 @@ function Stage-Activities {
         if ((Acts).front -ne 'ClaudeDone') { throw "no done moment ($((Acts).front))" }
         $g = Run-Hook 'this is not json'
         if ($g.code -ne 0 -or $g.out -ne '') { throw 'garbage made the hook speak' }
+    }
+    Step 'the shelf: shrink a big picture and zip it, next to the original (review #7, #8)' {
+        $dir = Join-Path $env:TEMP 'sahar-shelf'
+        Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $png = Join-Path $dir 'big.png'
+        $bmp = [System.Drawing.Bitmap]::new(3000, 2000); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::SteelBlue); $g.Dispose()
+        $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+        Act 'activity-clear' | Out-Null
+        Act 'shelf-add' ('{"path64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($png)) + '"}') | Out-Null
+        Act 'activity-card' '{"id":"shelf"}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        Act 'activity-card-press' '{"id":"act-shrink"}' | Out-Null
+        Wait-Until { [int](Kv 'debug-shelf').shrunk -ge 1 } 8000 'the shrunk copy' | Out-Null
+        $small = Get-ChildItem $dir -Filter '*.jpg' | Select-Object -First 1
+        if (-not $small) { throw 'no jpg next to the original' }
+        $img = [System.Drawing.Image]::FromFile($small.FullName); $w = $img.Width; $h = $img.Height; $img.Dispose()
+        if ($w -ne 1920 -or $h -ne 1280) { throw "shrunk to ${w}x$h" }
+        Act 'activity-card' '{"id":"shelf"}' | Out-Null
+        Start-Sleep -Milliseconds 500
+        Act 'activity-card-press' '{"id":"act-zip"}' | Out-Null
+        Wait-Until { [int](Kv 'debug-shelf').zipped -ge 1 } 8000 'the zip' | Out-Null
+        if (-not (Test-Path (Join-Path $dir 'big.zip')) -or (Get-ChildItem $dir -Filter '*.part')) { throw "zip: $((Get-ChildItem $dir).Name -join ',')" }
+        Act 'activity-card' '{"id":"shelf"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        Act 'activity-card-press' '{"id":"shelf-clear"}' | Out-Null   # the shelf is kept on disk: empty it for the next steps
+        Act 'activity-clear' | Out-Null
     }
     Step 'privacy: no title, path, command or project name in engine.log' {
         Act 'activity-sim' '{"kind":"music"}' | Out-Null
