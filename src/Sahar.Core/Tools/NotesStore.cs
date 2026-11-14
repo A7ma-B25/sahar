@@ -112,8 +112,19 @@ public sealed class NotesStore
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
             string tmp = _path + ".tmp";
             File.WriteAllText(tmp, JsonSerializer.Serialize(_notes, NotesJson.Default.ListNote));
-            if (File.Exists(_path)) File.Replace(tmp, _path, destinationBackupFileName: null);
-            else File.Move(tmp, _path);
+            // A reader that holds notes.json for a moment (a backup tool, the settings app, a test) makes Replace fail:
+            // try a few times before giving up, or a deleted note would come back (0.14 test-build run 43595077286).
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    if (File.Exists(_path)) File.Replace(tmp, _path, destinationBackupFileName: null);
+                    else File.Move(tmp, _path);
+                    break;
+                }
+                catch (IOException) when (attempt < 4) { Thread.Sleep(40); }
+                catch (UnauthorizedAccessException) when (attempt < 4) { Thread.Sleep(40); }
+            }
             SaveFailed = false;
         }
         catch (IOException) { SaveFailed = true; }

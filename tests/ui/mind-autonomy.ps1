@@ -14,7 +14,7 @@ function Notes-Text {
     # the engine may be writing it this very moment: read with sharing, try again shortly
     for ($k = 0; $k -lt 10; $k++) {
         try {
-            $fs = [System.IO.File]::Open($notesFile, 'Open', 'Read', 'ReadWrite')
+            $fs = [System.IO.FileStream]::new($notesFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)   # never in the way of her save (File.Replace)
             try { return ([System.IO.StreamReader]::new($fs)).ReadToEnd() } finally { $fs.Dispose() }
         }
         catch [System.IO.IOException] { Start-Sleep -Milliseconds 100 }

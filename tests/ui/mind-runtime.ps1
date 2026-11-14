@@ -102,7 +102,9 @@ function Stage-MindRuntime {
             Start-Sleep -Seconds 3
             Send '{"type":"cmd","name":"menu-close"}' | Out-Null
             foreach ($f in (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'), (Join-Path $home0 'mind.log')) {
-                if ((Test-Path $f) -and ((Get-Content $f -Raw) -match 'SENTINELWORDS|gemma-3-270m|\\Users\\')) { throw "$f holds text, a file name or a path" }
+                if (-not (Test-Path $f)) { continue }
+                $bad = @(Get-Content $f | Where-Object { $_ -match 'SENTINELWORDS|gemma-3-270m|\\Users\\' } | ForEach-Object { $_ -replace [regex]::Escape($env:USERNAME), '<user>' -replace 'RUNNER~1', '<user>' })
+                if ($bad.Count) { throw "$(Split-Path $f -Leaf) holds text, a file name or a path:`n      $($bad -join "`n      ")" }
             }
         }
         Step 'mind: when the engine quits, the Mind and llama-server go too' {
