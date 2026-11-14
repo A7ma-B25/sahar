@@ -33,6 +33,7 @@ internal sealed class MindHost : ITurnIO
     private CancellationTokenSource? _download;
     private DateTimeOffset _lastUse = DateTimeOffset.UtcNow;
     private IMindStore? _store;
+    private ITurnRunner? _runner;
     private int _busy;   // a bench running: never unloaded under it
 
     public MindHost(NamedPipeClientStream pipe, string? script)
@@ -52,6 +53,13 @@ internal sealed class MindHost : ITurnIO
 
     public void Send(MindMsg msg)
     {
+        if (msg.T == "say")
+        {
+            // Review X4: the last check on her words (risk high → the fixed reply; labels and diagnoses rewritten).
+            var checkedSay = SayGuard.Check(msg, english: _hello.Lang == "en");
+            if (checkedSay.Kind != SayGuard.Kept) MindLog.Write($"say: {checkedSay.Kind}");
+            msg = checkedSay.Msg;
+        }
         var line = MindWire.Encode(msg);
         lock (_write)
         {
@@ -105,7 +113,7 @@ internal sealed class MindHost : ITurnIO
             case "warm": _ = Warm(); break;
             case "unload": _ = Unload(); break;
             case "quit": _quit.Cancel(); break;
-            case "store-changed": _store = null; break;
+            case "store-changed": _store = null; _runner = null; break;
             case "download": Download(m); break;
             case "bench": _ = Bench(m.Model == "quick"); break;
             case "model": Model(m); break;
@@ -122,7 +130,9 @@ internal sealed class MindHost : ITurnIO
             else { Send(new MindMsg { T = "error", Id = id, Error = "busy" }); return; }
         }
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_quit.Token);
-        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromSeconds(25));   // the runner's own budget is 20 s
+        // A last-resort net only: the runner keeps its own 20 s budget for the model, and an Ask may wait up to 150 s for
+        // his «إي»/«لا» (review X1: a 25 s net cut the confirmation after his yes).
+        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMinutes(3));
         _turn = (id, source, cts);
         _lastUse = DateTimeOffset.UtcNow;
         _ = Task.Run(async () =>
@@ -132,23 +142,30 @@ internal sealed class MindHost : ITurnIO
             {
                 if (!_runtime.Loaded)
                 {
-                    Send(new MindMsg { T = "state", Phase = "loading" });
+                    Send(new MindMsg { T = "state", Id = id, Phase = "loading" });
                     var ready = await _runtime.WarmAsync(cts.Token);
                     Send(new MindMsg { T = "ready", Ready = ready });
                 }
-                Send(new MindMsg { T = "state", Phase = "thinking" });
-                if (source == "draft")
+                Send(new MindMsg { T = "state", Id = id, Phase = "thinking" });
+                if (source == "draft" && MindParts.PromptParts(Store).Distress(turn.Text ?? "") is { } hurt)
+                {
+                    // Review X3: a distress cue is never drafted; the fixed reviewed reply comes first.
+                    MindLog.Write("turn: distress (fixed reply)");
+                    Send(new MindMsg { T = "say", Id = id, Text = hurt.Text + "\n" + string.Join("\n", hurt.Help), Mood = "calm", Final = true });
+                }
+                else if (source == "draft")
                 {
                     var draft = await MindParts.Drafter(new LazyLlm(_runtime), Store).DraftAsync(new Sahar.Core.Mind.Drafts.DraftRequest(turn.Text ?? ""), cts.Token);
                     Send(draft is null ? new MindMsg { T = "error", Id = id, Error = "bad-output" } : new MindMsg { T = "draft", Id = id, Text = draft.Text, Kind = draft.Label });
                 }
                 else
                 {
-                    var runner = MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
-                    await runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
+                    // Review X2: one runner per session, so she remembers the last lines (a new store starts a new one).
+                    _runner ??= MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
+                    await _runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
             }
-            catch (OperationCanceledException) { Send(new MindMsg { T = "error", Id = id, Error = _quit.IsCancellationRequested || cts.IsCancellationRequested && sw.Elapsed < TimeSpan.FromSeconds(24) ? "cancelled" : "timeout" }); }
+            catch (OperationCanceledException) { Send(new MindMsg { T = "error", Id = id, Error = _quit.IsCancellationRequested || sw.Elapsed < TimeSpan.FromMinutes(3) ? "cancelled" : "timeout" }); }
             catch (MindRuntimeException e) { Send(new MindMsg { T = "error", Id = id, Error = e.Code }); }
             catch (Exception e) { MindLog.Write($"turn: failed ({e.GetType().Name})"); Send(new MindMsg { T = "error", Id = id, Error = "bad-output" }); }
             finally
@@ -156,7 +173,7 @@ internal sealed class MindHost : ITurnIO
                 MindLog.Write($"turn: {source} {sw.ElapsedMilliseconds}ms");
                 if (_turn?.Id == id) _turn = null;
                 _lastUse = DateTimeOffset.UtcNow;
-                Send(new MindMsg { T = "state", Phase = "idle" });
+                Send(new MindMsg { T = "state", Id = id, Phase = "idle" });   // always: the header's «عم فكّر…» ends
             }
         });
     }

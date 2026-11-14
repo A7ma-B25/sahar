@@ -223,6 +223,7 @@ internal sealed partial class MindEngine
         {
             case "state" when m.Id is not null && m.Id == _chatTurn:
                 if (m.Phase == "thinking") Menu.MindThinking(true);
+                else if (m.Phase == "idle") Menu.MindThinking(false);   // review X1: «عم فكّر…» always ends
                 break;
             case "partial" when m.Id is not null && m.Id == _chatTurn && m.Text is { } partial:
                 Menu.MindStream(Words(partial));
