@@ -18,6 +18,7 @@ using Sahar.Engine.Life;
 using Sahar.Engine.Menu;
 using Sahar.Engine.Tools;
 using Sahar.Core.Tools;
+using Sahar.Core.Update;
 using Sahar.Core.Senses;
 using Sahar.Core.Life;
 using Sahar.Engine.Motion;
@@ -696,6 +697,24 @@ internal sealed unsafe class App
             menu.SetReply(reply);
             ChatHop();
         });
+        // A newer version (owner roadmap: installer + auto-update): she asks in her bubble; yes runs the signed setup.
+        // Test mode reaches only a fake GitHub given with --update-host, and checks only when the pipe says so.
+        string updateKey = UpdateKeys.Production;
+        if (_options.TestMode && _options.UpdateKeyFile is { } keyFile)
+            try { updateKey = File.ReadAllText(keyFile).Trim(); } catch (Exception e) { Log.Write($"update: test key not read ({e.GetType().Name})"); }
+        string? updateHost = _options.TestMode ? _options.UpdateHost : null;
+        using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), listBubble, () => motion.Body,
+            line => speech.Say(line), () => settings, Save,
+            busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
+                listBubble.IsOpen || bubble.IsOpen || Sulking(),
+            automatic: !_options.TestMode, reachable: !_options.TestMode || updateHost is not null,
+            installed: InstallInfo.Installed(), marker: Path.Combine(Log.Folder, "moved-to-installer.txt"));
+        var movedTimer = ui.CreateTimer();
+        movedTimer.IsRepeating = false;
+        movedTimer.Interval = TimeSpan.FromSeconds(_options.TestMode ? 1 : 6);
+        movedTimer.Tick += (_, _) => Safe(updates.SayIfMoved);
+        movedTimer.Start();
+        tray.CheckUpdate += () => Safe(() => updates.Check(manual: true));
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
         tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
         // The PC just started (or a test says so): she flies in and says hello (motion 18).
@@ -1055,6 +1074,22 @@ internal sealed unsafe class App
                 return new PipeReply(true);
             });
             pipe.Register("debug-music", _ => new PipeReply(true, music.Describe()));
+            pipe.Register("update-check", r =>
+            {
+                if (!updates.Reachable) return new PipeReply(false, "no --update-host: test mode never reaches GitHub");
+                updates.Check(manual: r.Args?.TryGetValue("manual", out var m) == true && m == "true");
+                return new PipeReply(true, updates.Describe());
+            });
+            pipe.Register("update-answer", r =>
+            {
+                string? answer = r.Args?.TryGetValue("answer", out var a) == true ? a : null;
+                if (answer is not ("yes" or "later")) return new PipeReply(false, "update-answer needs answer yes or later");
+                listBubble.Close();
+                if (answer == "yes") updates.Install(); else updates.Later();
+                return new PipeReply(true, updates.Describe());
+            });
+            pipe.Register("debug-update", _ => new PipeReply(true, updates.Describe()));
+            pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")}"));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>
             {

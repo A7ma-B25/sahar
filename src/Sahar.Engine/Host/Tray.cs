@@ -18,7 +18,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdSettings = 7, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdSettings = 7, CmdUpdate = 8, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -63,6 +63,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public Func<bool> SettingsAvailable { get; set; } = () => false;
     /// <summary>"مين أنا؟": she asks your name and whether you are a man or a woman again.</summary>
     public event Action? WhoAmI;
+    /// <summary>«دوّر على تحديث»: look for a newer version now.</summary>
+    public event Action? CheckUpdate;
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
     /// <summary>Windows is shutting down, logging off or restarting for an update.</summary>
@@ -79,7 +81,10 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         Native.WTSRegisterSessionNotification(Hwnd, 0 /* this session */);
         var keyboard = new RAWINPUTDEVICE { UsagePage = 1, Usage = 6, Flags = RIDEV_INPUTSINK, HwndTarget = Hwnd };
         if (Native.RegisterRawInputDevices(&keyboard, 1, (uint)sizeof(RAWINPUTDEVICE)) == 0) Log.Write("keyboard raw input not registered");
-        _icon = MakeIcon();
+        nint app = AppIcon();
+        _icon = app != 0 ? app : MakeIcon();
+        IconFromResource = app != 0;
+        if (app == 0) Log.Write("tray icon: drawn (no icon resource in the exe)");
         Add();
         if (Native.AddClipboardFormatListener(Hwnd) == 0) Log.Write("clipboard listener not added");
     }
@@ -168,6 +173,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — {Sahar.Core.Settings.Address.ToYou("وقّف")} / Weather: {city} — off" : "الطقس… / Weather…")
         fixed (char* who = "مين أنا؟ (اسمي) / Who am I?")
         fixed (char* settings = "إعداداتي / Settings")
+        fixed (char* update = "دوّر على تحديث / Check for update")
         fixed (char* quit = "إغلاق / Quit")
         {
             if (SettingsAvailable()) Native.AppendMenu(menu, MF_STRING, CmdSettings, settings);
@@ -178,6 +184,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             Native.AppendMenu(menu, MF_STRING, CmdWeather, weather);
             Native.AppendMenu(menu, MF_STRING, CmdWho, who);
             Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
+            Native.AppendMenu(menu, MF_STRING, CmdUpdate, update);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
         }
@@ -192,6 +199,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         else if (cmd == CmdWeather) WeatherClicked?.Invoke();
         else if (cmd == CmdWho) WhoAmI?.Invoke();
         else if (cmd == CmdSettings) SettingsClicked?.Invoke();
+        else if (cmd == CmdUpdate) CheckUpdate?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 
@@ -201,6 +209,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         switch (item)
         {
             case "who": WhoAmI?.Invoke(); return true;
+            case "update": CheckUpdate?.Invoke(); return true;
             case "settings" when SettingsAvailable(): SettingsClicked?.Invoke(); return true;
             default: return false;
         }
@@ -219,7 +228,19 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         catch (Exception e) { Log.Write($"open folder failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}"); }
     }
 
-    /// <summary>Placeholder icon (board icon C to come): a lavender Sahar-coloured disc with two eyes.</summary>
+    /// <summary>The app icon (tools/art/app_icon.py) at the small-icon size for this DPI: the exe's icon group
+    /// (the C# compiler names it 32512), or 0.</summary>
+    private static nint AppIcon()
+    {
+        const int SM_CXSMICON = 49, SM_CYSMICON = 50;
+        return Native.LoadImage(Native.GetModuleHandle(null), 32512, 1 /* IMAGE_ICON */,
+            Native.GetSystemMetrics(SM_CXSMICON), Native.GetSystemMetrics(SM_CYSMICON), 0);
+    }
+
+    /// <summary>The tray shows the app icon (test mode reports it); false = the drawn fallback.</summary>
+    public bool IconFromResource { get; }
+
+    /// <summary>Fallback when the exe has no icon: a lavender Sahar-coloured disc with two eyes.</summary>
     private static nint MakeIcon()
     {
         const int n = 32;

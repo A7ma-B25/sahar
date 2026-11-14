@@ -580,6 +580,9 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     public static partial int DestroyIcon(nint icon);
 
+    [LibraryImport("user32.dll", EntryPoint = "LoadImageW")]
+    public static partial nint LoadImage(nint instance, nint name, uint type, int cx, int cy, uint flags);
+
     [LibraryImport("gdi32.dll")]
     public static partial nint CreateDIBSection(nint hdc, BITMAPINFOHEADER* info, uint usage, void** bits, nint section, uint offset);
 

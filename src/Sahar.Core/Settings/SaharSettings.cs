@@ -1,5 +1,6 @@
 using Sahar.Core.Activities;
 using Sahar.Core.Prayer;
+using Sahar.Core.Update;
 
 namespace Sahar.Core.Settings;
 
@@ -67,7 +68,12 @@ public sealed record SaharSettings
     public string? UserName { get; set; }
     public Gender UserGender { get; set; } = Gender.Unknown;
     public bool HelloDone { get; set; }
+    /// <summary>Automatic update checks (2 min after start, then every 12 h); the tray item works either way.</summary>
     public bool UpdateCheckEnabled { get; set; } = true;
+    /// <summary>Which release she reads for updates (the "test-build" pre-release for now).</summary>
+    public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.TestBuild;
+    /// <summary>She asked about an update: not again before this time (a day later; "later" or a closed bubble).</summary>
+    public DateTimeOffset? UpdateAskAfter { get; set; }
     public SeasonalIcon Seasonal { get; set; } = SeasonalIcon.Auto;
     /// <summary>The little night sky with stars inside her (0.10a); on unless you turn it off.</summary>
     public bool InnerStars { get; set; } = true;

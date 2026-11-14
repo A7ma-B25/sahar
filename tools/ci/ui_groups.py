@@ -1,7 +1,7 @@
 """Turns the ui-test `stages` input into the matrix of parallel Windows jobs (GitHub Actions output `groups=<json>`).
 
 Groups are balanced from the stage times of run 42868496323 (seconds): motion 285 | smoke 2 + idle 10 + gallery 31
-+ life 198 + face (new, ~30) | events 28 + menu 109 + prayer 112 | perf 92 + senses 75 + games 49 + shell (new, ~90)
++ life 198 + face (new, ~30) | events 28 + menu 109 + prayer 112 + install (new, ~120) | perf 92 + senses 75 + games 49 + shell (new, ~90)
 | settings (0.12, new: the settings app and the engine applying settings live, its own job)
 | activities (0.13, new: every tag and card in light and dark, the knock, Claude Code's hooks; its own job)
 | mind (0.14, new: her brain with a tiny pinned model; its own job).
@@ -12,7 +12,7 @@ import sys
 GROUPS = [
     ("motion", ["motion"]),
     ("life", ["smoke", "idle", "gallery", "life", "face"]),
-    ("menu", ["events", "menu", "prayer"]),
+    ("menu", ["events", "menu", "prayer", "install"]),
     ("senses", ["perf", "senses", "games", "shell"]),
     ("settings", ["settings"]),
     ("activities", ["activities"]),

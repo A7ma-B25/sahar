@@ -23,6 +23,13 @@ internal static class Program
             return 0;
         }
 
+        // The installer and the uninstaller: ask a running Sahar to quit (her own pipe command) and wait; never a kill.
+        if (args.Contains("--quit"))
+        {
+            int r = Array.IndexOf(args, "--remember");
+            return Sahar.Engine.Host.QuitRunning.Run(r >= 0 && r + 1 < args.Length ? args[r + 1] : null);
+        }
+
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Sahar.Engine", out bool first);
         if (!first) return ExitAlreadyRunning;
         // An erase that could not finish (a file was in use) finishes now, before anything reads her data.

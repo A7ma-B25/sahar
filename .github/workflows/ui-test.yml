@@ -62,6 +62,15 @@ jobs:
           name: engine
           path: artifacts/engine/
           retention-days: 3
+      # Sahar-Setup-<version>.exe (+ .sha256) for the "install" stage: pinned official Inno Setup, hash checked.
+      - name: Installer
+        shell: pwsh
+        run: ./packaging/installer/build.ps1 -Version (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: artifacts/installer/
+          retention-days: 3
 
   ui:
     needs: [plan, build]
@@ -100,6 +109,10 @@ jobs:
         if: contains(matrix.group.stages, 'mind')
         shell: pwsh
         run: ./tools/mind/fetch.ps1 -Model -Out artifacts/mind
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: artifacts/installer
       - name: UI tests (${{ matrix.group.stages }})
         shell: pwsh
         env:

@@ -18,6 +18,21 @@ class ReadmeTests(unittest.TestCase):
         self.assertTrue(names)
         self.assertEqual({version}, set(names))
 
+    def test_every_setup_name_is_this_version(self):
+        version = re.search(r"<Version>([^<]+)</Version>", read("Directory.Build.props")).group(1)
+        for doc in (("packaging", "README-test-build.txt"), ("README.md",)):
+            names = re.findall(r"Sahar-Setup-([0-9.]+)\.exe", read(*doc))
+            self.assertTrue(names, doc)
+            self.assertEqual({version}, set(names), doc)
+
+    def test_the_smartscreen_steps_are_in_arabic(self):
+        for doc in (("packaging", "README-test-build.txt"), ("README.md",)):
+            text = read(*doc)
+            self.assertIn("More info", text, doc)
+            self.assertIn("Run anyway", text, doc)
+            self.assertIn("SmartScreen", text, doc)
+            self.assertIn("دوّر على تحديث", read("packaging", "README-test-build.txt"))
+
 
 if __name__ == "__main__":
     unittest.main()
