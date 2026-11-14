@@ -16,9 +16,8 @@ namespace Sahar.Engine.Mind;
 internal sealed partial class MindEngine
 {
     private NamedPipeServerStream? _mindPipe;
-    private StreamWriter? _mindOut;
+    private System.Threading.Channels.Channel<string>? _outbox;
     private Process? _mindProc;
-    private readonly List<string> _queued = [];
     private readonly object _mindGate = new();
     private string _phase = "none";
     private DownloadProgress? _lastProgress;
@@ -38,12 +37,7 @@ internal sealed partial class MindEngine
         Send = EnsureAndSend;
         SendIfRunning = m =>
         {
-            lock (_mindGate)
-            {
-                if (_mindOut is not { } w) return false;
-                try { w.WriteLine(MindWire.Encode(m)); return true; }
-                catch (Exception e) when (e is IOException or ObjectDisposedException) { Disconnected(); return false; }
-            }
+            lock (_mindGate) return _outbox is { } o && _mindProc is { HasExited: false } && o.Writer.TryWrite(MindWire.Encode(m));
         };
         Ready = () => Settings().MindEnabled && (Script is not null || ActiveModel() is not null);
         Received += OnRuntimeMessage;
@@ -90,31 +84,26 @@ internal sealed partial class MindEngine
         if (Ready()) EnsureAndSend(new MindMsg { T = "warm" });
     }
 
-    /// <summary>Starts the Mind if needed and sends the line (queued until it connects). False when there is no Mind.</summary>
+    /// <summary>Starts the Mind if needed and sends the line (queued until it connects). Never blocks the caller: lines
+    /// go through an outbox that a writer task drains, while a reader task always drains the other way (run 43586768997:
+    /// both sides writing at once on unbuffered pipes deadlocked the UI thread). False when there is no Mind.</summary>
     private bool EnsureAndSend(MindMsg msg)
     {
         if (!File.Exists(MindExe)) return false;
         var line = MindWire.Encode(msg);
         lock (_mindGate)
         {
-            if (_mindOut is { } w)
-            {
-                try { w.WriteLine(line); return true; }
-                catch (IOException) { Disconnected(); }
-                catch (ObjectDisposedException) { Disconnected(); }
-            }
-            _queued.Add(line);
-            if (_mindProc is { HasExited: false }) return true;
-            StartMind();
+            if (_outbox is null || _mindProc is not { HasExited: false }) StartMind();
+            return _outbox?.Writer.TryWrite(line) == true;
         }
-        return true;
     }
 
     private void StartMind()
     {
+        _outbox?.Writer.TryComplete();
+        _outbox = null;
         var name = "sahar-mind-" + Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
-        var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        _mindPipe = pipe;
+        var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 1 << 16, 1 << 16);
         var psi = new ProcessStartInfo(MindExe) { UseShellExecute = false, CreateNoWindow = true };
         psi.ArgumentList.Add("--pipe");
         psi.ArgumentList.Add(name);
@@ -122,45 +111,50 @@ internal sealed partial class MindEngine
         psi.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (Script is { } script) { psi.ArgumentList.Add("--script"); psi.ArgumentList.Add(script); }
         try { _mindProc = Process.Start(psi); }
-        catch (Exception e) { Log.Write($"mind: could not start ({e.GetType().Name})"); pipe.Dispose(); _mindPipe = null; _queued.Clear(); return; }
+        catch (Exception e) { Log.Write($"mind: could not start ({e.GetType().Name})"); pipe.Dispose(); return; }
         _starts++;
         Log.Write("mind: started");
+        var outbox = System.Threading.Channels.Channel.CreateUnbounded<string>(new() { SingleReader = true });
+        _outbox = outbox;
+        _mindPipe = pipe;
         // The first line on the connection, before anything queued: the tools this engine has (stream C's registry),
         // none for a model the bench marked chat-only (its commands stay with the parser).
-        var hello = MindWire.Encode(Hello(toolCalls: Script is not null || ActiveModel()?.Ability != ModelAbility.ChatOnly));
+        outbox.Writer.TryWrite(MindWire.Encode(Hello(toolCalls: Script is not null || ActiveModel()?.Ability != ModelAbility.ChatOnly)));
         _ = Task.Run(async () =>
         {
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await pipe.WaitForConnectionAsync(cts.Token);
-                var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-                lock (_mindGate)
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                    await pipe.WaitForConnectionAsync(cts.Token);
+                var reading = Task.Run(async () =>
                 {
-                    _mindOut = writer;
-                    writer.WriteLine(hello);
-                    foreach (var q in _queued) writer.WriteLine(q);
-                    _queued.Clear();
-                }
-                using var reader = new StreamReader(pipe, Encoding.UTF8);
-                while (await reader.ReadLineAsync() is { } line)
+                    using var reader = new StreamReader(pipe, Encoding.UTF8, false, 1 << 16, leaveOpen: true);
+                    while (await reader.ReadLineAsync() is { } line)
+                    {
+                        if (MindWire.Decode(line) is not { } m) { Log.Write("mind: dropped a line"); continue; }
+                        Ui.TryEnqueue(() => { try { Raise(m); } catch (Exception e) { Log.Write($"mind: handler failed ({e.GetType().Name})"); } });
+                    }
+                });
+                var writer = new StreamWriter(pipe, new UTF8Encoding(false), 1 << 16, leaveOpen: true) { NewLine = "\n" };
+                var writing = Task.Run(async () =>
                 {
-                    if (MindWire.Decode(line) is not { } m) { Log.Write("mind: dropped a line"); continue; }
-                    Ui.TryEnqueue(() => { try { Raise(m); } catch (Exception e) { Log.Write($"mind: handler failed ({e.GetType().Name})"); } });
-                }
+                    await foreach (var l in outbox.Reader.ReadAllAsync())
+                    {
+                        await writer.WriteLineAsync(l);
+                        await writer.FlushAsync();
+                    }
+                });
+                await Task.WhenAny(reading, writing);
             }
             catch (Exception e) when (e is IOException or OperationCanceledException or ObjectDisposedException) { }
-            lock (_mindGate) Disconnected();
+            lock (_mindGate)
+            {
+                outbox.Writer.TryComplete();
+                if (ReferenceEquals(_outbox, outbox)) { _outbox = null; _mindPipe = null; }
+            }
+            try { pipe.Dispose(); } catch (Exception) { }
             Ui.TryEnqueue(() => { _phase = "none"; Log.Write("mind: gone"); });
         });
-    }
-
-    private void Disconnected()
-    {
-        try { _mindOut?.Dispose(); } catch (Exception) { }
-        try { _mindPipe?.Dispose(); } catch (Exception) { }
-        _mindOut = null;
-        _mindPipe = null;
     }
 
     private void OnRuntimeMessage(MindMsg m)
@@ -242,7 +236,7 @@ internal sealed partial class MindEngine
         var active = ActiveModel();
         var p = _lastProgress;
         var sb = new StringBuilder();
-        sb.Append($"enabled={(s.MindEnabled ? "true" : "false")} running={(_mindOut is not null ? "true" : "false")} phase={_phase}");
+        sb.Append($"enabled={(s.MindEnabled ? "true" : "false")} running={(_outbox is not null ? "true" : "false")} phase={_phase}");
         sb.Append($" active={active?.Id ?? "-"}");
         if (p is not null) sb.Append(System.FormattableString.Invariant($" dlModel={p.Model} dlState={p.State} dlDone={p.Done} dlTotal={p.Total} dlBps={p.Bps} dlError={p.Error ?? "-"}"));
         return sb.ToString();
