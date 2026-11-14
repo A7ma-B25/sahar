@@ -3,32 +3,40 @@
 import { h, title, sub, section, group, switchRow, note, pri, dng, ghost } from '../controls.js';
 import '../strings/mind-memory.js';
 
-export function render({ S, tx, set, ask, render: rerender }) {
+// Which «أكيد؟» is open and what each action last said: kept across a redraw (the window coming back redraws).
+const kept = { open: null, status: {} };
+
+/** Going to another page closes an open «أكيد؟». */
+export function away() { kept.open = null; }
+
+export function render({ S, tx, set, ask, reload }) {
   // An action row that asks «أكيد؟» in place: [yes] [لا].
   function confirmable({ id, label, hint, danger, confirmText, yes, run, extra }) {
     const holder = h('div', { id });
-    let status = hint;
     function ask0() {
+      kept.open = kept.open === id ? null : kept.open;
       const labelEl = h('span', { class: danger ? 'action-label danger' : 'action-label', text: label });
       const btn = h('button', { class: 'action-row hv', type: 'button', id: `${id}-ask` }, labelEl,
-        h('span', { class: 'desc', 'aria-live': 'polite', id: `${id}-status`, text: status }));
+        h('span', { class: 'desc', 'aria-live': 'polite', id: `${id}-status`, text: kept.status[id] ?? hint }));
       btn.addEventListener('click', confirm);
       holder.replaceChildren(btn);
     }
     function confirm() {
+      kept.open = id;
       const yesBtn = (danger ? dng : pri)(yes, async () => {
         yesBtn.disabled = true;
-        status = await run();
+        kept.open = null;
+        kept.status[id] = await run();
         ask0();
         document.getElementById(`${id}-ask`)?.focus();
       }, { id: `${id}-yes`, class: danger ? 'dng' : 'pri' });
       holder.replaceChildren(h('div', { class: 'row', role: 'group', 'aria-label': label },
         h('span', { class: 'label-col' }, h('span', { class: 'label', text: tx('confirmTitle') }), h('span', { class: 'desc pr', text: confirmText })),
-        h('span', { class: 'btn-row' }, yesBtn, ghost(tx('no'), () => { ask0(); document.getElementById(`${id}-ask`)?.focus(); }, { id: `${id}-no` }))),
+        h('span', { class: 'btn-row' }, yesBtn, ghost(tx('no'), () => { kept.open = null; ask0(); document.getElementById(`${id}-ask`)?.focus(); }, { id: `${id}-no` }))),
         ...(extra ? [extra()] : []));
       yesBtn.focus();
     }
-    ask0();
+    if (kept.open === id) confirm(); else ask0();
     return holder;
   }
 
@@ -45,8 +53,15 @@ export function render({ S, tx, set, ask, render: rerender }) {
     run: async () => {
       const model = !!document.getElementById('erase-model')?.checked;
       await ask('mind-forget', { model });
+      const wasRunning = !!S.caps.engine;
       const r = await ask('erase');
-      return r.ok ? tx('eraseDone') : tx('engineOff');
+      if (!r.ok) return tx('engineOff');
+      const left = r.left ?? [];
+      let line = left.length ? tx('eraseLeft', { names: left.join('، ') }) : tx('eraseDone');
+      if (wasRunning && r.restarted === false) line += ' ' + tx('eraseNoRestart');
+      kept.status.erase = line;
+      await reload();   // the page shows her as she is now: nothing about you
+      return line;
     },
   });
   const weather = switchRow(tx('swWeatherNet'), tx('swWeatherNetHint'), !!S.value.weatherEnabled, async (on, btn) => {

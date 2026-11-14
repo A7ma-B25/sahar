@@ -340,4 +340,39 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("[\"keep me\"]", File.ReadAllText(notes));
         Assert.True(SettingsStore.TrySave(PathOf, new SaharSettings { Size = SaharSize.Small }));   // saves work again
     }
+
+    // ---- Review fix pass (2026-11-13): a reset never loses a file; a lock is not "unreadable" ----
+
+    [Fact]
+    public void Reset_AHealthyFile_IsAlsoKeptAside()
+    {
+        File.WriteAllText(PathOf, """{ "userName": "Sami" }""");
+        SettingsStore.Reset(PathOf);
+        Assert.Contains("Sami", File.ReadAllText(PathOf + ".bad"));
+        Assert.Null(SettingsStore.Load(PathOf).UserName);
+    }
+
+    [Fact]
+    public void Reset_AnOlderBadCopy_IsKept_AndTheNewOneGetsATimestamp()
+    {
+        File.WriteAllText(PathOf + ".bad", "older");
+        File.WriteAllText(PathOf, "{ not json");
+        SettingsStore.Reset(PathOf);
+        Assert.Equal("older", File.ReadAllText(PathOf + ".bad"));
+        var stamped = Directory.GetFiles(_dir, "settings.json.bad-*");
+        Assert.Single(stamped);
+        Assert.Equal("{ not json", File.ReadAllText(stamped[0]));
+    }
+
+    [Fact]
+    public void Health_ALockedFile_IsBusy_NotUnreadable()
+    {
+        File.WriteAllText(PathOf, """{ "size": "Large" }""");
+        Assert.Equal(SettingsHealth.Busy, SettingsStore.Health(PathOf, _ => throw new IOException("in use")));
+        Assert.Equal(SettingsHealth.Ok, SettingsStore.Health(PathOf));
+        File.WriteAllText(PathOf, "{ not json");
+        Assert.Equal(SettingsHealth.Unreadable, SettingsStore.Health(PathOf));
+        File.Delete(PathOf);
+        Assert.Equal(SettingsHealth.Ok, SettingsStore.Health(PathOf));
+    }
 }

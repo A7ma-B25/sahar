@@ -125,6 +125,9 @@ internal sealed partial class MindEngine
         catch (Exception e) { Log.Write($"mind: could not start ({e.GetType().Name})"); pipe.Dispose(); _mindPipe = null; _queued.Clear(); return; }
         _starts++;
         Log.Write("mind: started");
+        // The first line on the connection, before anything queued: the tools this engine has (stream C's registry),
+        // none for a model the bench marked chat-only (its commands stay with the parser).
+        var hello = MindWire.Encode(Hello(toolCalls: Script is not null || ActiveModel()?.Ability != ModelAbility.ChatOnly));
         _ = Task.Run(async () =>
         {
             try
@@ -135,7 +138,7 @@ internal sealed partial class MindEngine
                 lock (_mindGate)
                 {
                     _mindOut = writer;
-                    Ui.TryEnqueue(() => RuntimeHello());   // the first line, before anything queued
+                    writer.WriteLine(hello);
                     foreach (var q in _queued) writer.WriteLine(q);
                     _queued.Clear();
                 }
@@ -158,18 +161,6 @@ internal sealed partial class MindEngine
         try { _mindPipe?.Dispose(); } catch (Exception) { }
         _mindOut = null;
         _mindPipe = null;
-    }
-
-    /// <summary>The first line on every connection. At integration it carries stream C's announced tools (C's Hello()).</summary>
-    private void RuntimeHello()
-    {
-        var s = Settings();
-        var hello = new MindMsg
-        {
-            T = "hello", Version = "1", Lang = s.Language == UiLanguage.English ? "en" : "ar", Address = new MindAddress(s.UserGender, s.UserName),
-            Caps = new MindCaps(s.MindInitiative != Sahar.Core.Mind.Initiative.InitiativeLevel.Off, s.MindLearnChats, s.MindVoice), Tools = [],
-        };
-        lock (_mindGate) _mindOut?.WriteLine(MindWire.Encode(hello));
     }
 
     private void OnRuntimeMessage(MindMsg m)

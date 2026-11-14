@@ -50,6 +50,9 @@ public sealed record MindMsg
     /// <summary>state: loading | thinking | speaking | idle | unloaded.</summary>
     public string? Phase { get; init; }
     public string? Mood { get; init; }
+    /// <summary>say: the model's risk tag from the decision JSON (field <c>risk</c>: none | high; spec §7.4.2). "high"
+    /// always becomes the fixed, reviewed distress reply (<see cref="SayGuard"/>), whatever the say was.</summary>
+    public string? Risk { get; init; }
     public bool? Final { get; init; }
     /// <summary>propose: profile | routine | goal | lesson | memory.</summary>
     public string? Kind { get; init; }

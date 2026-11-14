@@ -83,6 +83,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         var p = Process.Start(psi) ?? throw new MindRuntimeException("load-failed");
         Native.KillWithMe(p.Handle);
         try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception) { }
+        p.EnableRaisingEvents = true;
+        p.Exited += (_, _) => { try { if (ReferenceEquals(_server, p)) MindLog.Write($"runtime: server exited by itself (code {p.ExitCode})"); } catch (Exception) { } };
         p.ErrorDataReceived += (_, e) => Read(e.Data);
         p.OutputDataReceived += (_, e) => Read(e.Data);
         p.BeginErrorReadLine();

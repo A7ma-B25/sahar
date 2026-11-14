@@ -104,7 +104,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         _timer.Tick += (_, _) =>
         {
             try { Tick(DateTimeOffset.Now); }
-            catch (Exception e) { Log.Write($"life error: {e}"); }
+            catch (Exception e) { Log.Write($"life error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         };
         _timer.Start();
     }
@@ -389,7 +389,7 @@ internal sealed unsafe class LifeDirector : IDisposable
     {
         _lastSave = DateTimeOffset.Now;
         try { LifeStore.Save(_path, new LifeState(1, _prefs.ToState(), _routine.ProfileToState(), _lastDecay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))); }
-        catch (Exception e) { Log.Write($"life.json not saved: {e.Message}"); }
+        catch (Exception e) { Log.Write($"life.json not saved: {Sahar.Core.Diagnostics.LogRules.Kind(e)}"); }
     }
 
     /// <summary>Test-mode diagnostics: space-separated key=value pairs.</summary>
@@ -409,9 +409,12 @@ internal sealed unsafe class LifeDirector : IDisposable
         return string.Create(CultureInfo.InvariantCulture, $"{s.X + s.Width / 2:0},{s.Y + s.Height / 2:0}");
     }
 
+    /// <summary>False after «امسح كل شي عني»: what she learned is not written back on the way out.</summary>
+    public bool KeepOnExit { get; set; } = true;
+
     public void Dispose()
     {
         _timer.Stop();
-        Save();
+        if (KeepOnExit) Save();
     }
 }

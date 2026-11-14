@@ -23,7 +23,7 @@ internal sealed class Network
         }
         catch (Exception e)
         {
-            Log.Write($"network status unavailable: {e.Message}");
+            Log.Write($"network status unavailable: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
         }
     }
 

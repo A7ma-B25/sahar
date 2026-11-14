@@ -51,7 +51,7 @@ internal sealed class Director
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Diagnostics.Log.Write($"director error: {e}"); }
+        catch (Exception e) { Diagnostics.Log.Write($"director error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     public void Post(EventKind k) => Post(k, null);

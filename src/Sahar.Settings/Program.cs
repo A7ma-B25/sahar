@@ -1,4 +1,5 @@
 using Sahar.Core;
+using Sahar.Core.Diagnostics;
 using Sahar.Core.Settings;
 
 namespace Sahar.Settings;
@@ -11,6 +12,13 @@ internal static class Program
 {
     public const int ExitWebView2 = 2;
     public static int ExitCode { get; set; }
+
+    private static bool RuntimeMissing()
+    {
+        try { return string.IsNullOrEmpty(Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString()); }
+        catch (Microsoft.Web.WebView2.Core.WebView2RuntimeNotFoundException) { return true; }
+        catch (Exception) { return false; }
+    }
 
     [STAThread]
     private static int Main(string[] args)
@@ -35,7 +43,7 @@ internal static class Program
             SynchronizationContext.SetSynchronizationContext(ui);
             var window = new HostWindow(ui);
             var engine = new EngineLink(options.TestMode);
-            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now)
+            var bridge = new SettingsBridge(SettingsStore.DefaultPath, engine, new Locator(), () => DateTimeOffset.Now, CleanStart.RoamingFolder)
             {
                 // 0.13: Claude Code's hooks run the engine next to this app («اربطها»); only when it is really there.
                 EnginePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Sahar.Engine.exe")) is var exe && File.Exists(exe) ? exe : null,
@@ -43,9 +51,13 @@ internal static class Program
             // 0.14 «النماذج»: «اختاري ملف» opens Windows' own file dialog for a .gguf.
             MindBridges.PickGguf = () => Task.FromResult(GgufDialog.Pick(window.Hwnd));
             var web = new WebHost(window, options, bridge);
-            window.CloseRequested += () =>
+            bool closing = false;
+            window.CloseRequested += async () =>
             {
+                if (closing) return;
+                closing = true;
                 SettingsLog.Write("close");
+                await web.FlushAsync();   // a name typed a moment ago is saved first (review fix m8)
                 web.Close();
                 window.Close();
             };
@@ -60,10 +72,12 @@ internal static class Program
                 }
                 catch (Exception e)
                 {
-                    SettingsLog.Write($"webview2: failed ({e.GetType().Name})");
+                    // WebView2 is named only when it is really missing (review fix m9).
+                    bool missing = RuntimeMissing();
+                    SettingsLog.Write($"webview2: failed ({(missing ? "runtime missing" : "runtime present")}, {LogRules.Kind(e)})");
                     ExitCode = ExitWebView2;
                     if (!options.TestMode)
-                        Native.MessageBoxW(0, "ما قدرت افتح الإعدادات: بدي \"WebView2\" من مايكروسوفت.", HostWindow.Title,
+                        Native.MessageBoxW(0, SettingsAppPolicy.StartFailed(missing), HostWindow.Title,
                             Native.MB_OK | Native.MB_ICONINFORMATION | Native.MB_RTLREADING | Native.MB_RIGHT);
                     window.Close();
                 }
@@ -74,7 +88,7 @@ internal static class Program
         }
         catch (Exception e)
         {
-            SettingsLog.Write($"fatal: {e.GetType().Name}");
+            SettingsLog.Write($"fatal: {LogRules.Kind(e)}");
             return 1;
         }
         finally

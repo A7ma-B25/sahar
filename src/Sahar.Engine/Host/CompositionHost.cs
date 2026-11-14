@@ -139,7 +139,7 @@ internal sealed unsafe class CompositionHost : IDisposable
         }
         catch (Exception e)
         {
-            Log.Write($"device recreation failed: {e.Message}");
+            Log.Write($"device recreation failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
         }
         finally
         {

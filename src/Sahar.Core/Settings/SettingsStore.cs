@@ -3,6 +3,9 @@ using Sahar.Core.Json;
 
 namespace Sahar.Core.Settings;
 
+/// <summary>How settings.json is: fine (or missing), not settings JSON, or held by another program right now.</summary>
+public enum SettingsHealth { Ok, Unreadable, Busy }
+
 /// <summary>Saving was refused: the file on disk could not be read, and writing would replace it with defaults.</summary>
 public sealed class SettingsSaveRefusedException() : IOException("settings file unreadable: kept a .bad copy, not overwritten");
 
@@ -141,6 +144,22 @@ public static class SettingsStore
         }
     }
 
+    /// <summary>Whether the file is usable, unreadable (not settings JSON), or only busy: a file another program holds
+    /// through every retry is not "unreadable" (review fix: a lock must never offer «نبلّش من جديد»).</summary>
+    public static SettingsHealth Health(string path, Func<string, string>? read = null)
+    {
+        read ??= File.ReadAllText;
+        if (!File.Exists(path)) return SettingsHealth.Ok;
+        string text;
+        try
+        {
+            using (Lock()) text = Retry(() => read(path));
+        }
+        catch (FileNotFoundException) { return SettingsHealth.Ok; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return SettingsHealth.Busy; }
+        return string.IsNullOrWhiteSpace(text) || Parse(text) is not null ? SettingsHealth.Ok : SettingsHealth.Unreadable;
+    }
+
     /// <summary>Whether the file can be used: missing, blank, or JSON settings. False for a file that does not parse
     /// (or cannot be read at all): the settings page then offers «نبلّش من جديد».</summary>
     public static bool Readable(string path)
@@ -156,24 +175,27 @@ public static class SettingsStore
         return string.IsNullOrWhiteSpace(text) || Parse(text) is not null;
     }
 
-    /// <summary>«نبلّش من جديد» (owner ruling 2026-11-13): the unreadable file is kept aside as ".bad" and fresh defaults
-    /// are written (she asks your name again: HelloDone is false). Only settings.json: notes and the rest stay.</summary>
+    /// <summary>«نبلّش من جديد» (owner ruling 2026-11-13): the file is moved aside — always, so nothing is ever lost — as
+    /// ".bad", or ".bad-&lt;time&gt;" when an older ".bad" holds something else; then fresh defaults are written (she asks
+    /// your name again: HelloDone is false). Only settings.json: notes and the rest stay. When the file cannot be moved
+    /// (held by another program), nothing is written and the IO error goes to the caller.</summary>
     public static SaharSettings Reset(string path)
     {
         string full = Path.GetFullPath(path);
         using var gate = Lock();
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        if (File.Exists(path))
+        if (File.Exists(path) && new FileInfo(path).Length > 0)
         {
-            try
+            string bad = path + ".bad";
+            if (File.Exists(bad))
             {
-                string text = Retry(() => File.ReadAllText(path));
-                if (!string.IsNullOrWhiteSpace(text) && Parse(text) is null) KeepBad(path, text);
+                bool same;
+                try { same = Retry(() => File.ReadAllBytes(bad)).AsSpan().SequenceEqual(Retry(() => File.ReadAllBytes(path))); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { same = false; }
+                if (!same) bad = $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}";
+                if (bad == path + ".bad") Retry(() => { File.Delete(path); return 0; });   // the same bytes are kept already
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                try { File.Copy(path, path + ".bad", overwrite: true); } catch (Exception) { /* a courtesy */ }
-            }
+            if (File.Exists(path)) Retry(() => { File.Move(path, bad, overwrite: false); return 0; });
         }
         var fresh = new SaharSettings();
         WriteLocked(path, fresh);

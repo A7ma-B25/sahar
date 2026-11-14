@@ -30,6 +30,13 @@ public static partial class LogRules
     /// <summary>The time at the start of a log line (never the rest of it), or null.</summary>
     public static string? Timestamp(string line) => Stamp().Match(line) is { Success: true } m ? m.Value : null;
 
+    /// <summary>An exception for a log line: its type and its inner one's, never the message (messages carry paths, and a
+    /// path carries the user name: review fix 2026-11-13).</summary>
+    public static string Kind(Exception e) => e.InnerException is { } inner ? $"{e.GetType().Name} ← {inner.GetType().Name}" : e.GetType().Name;
+
+    /// <summary><see cref="Kind"/> and the stack (method names; never the message).</summary>
+    public static string Describe(Exception e) => e.StackTrace is { Length: > 0 } st ? $"{Kind(e)}{Environment.NewLine}{st}" : Kind(e);
+
     /// <summary>What kind of waiting this is: "next turn at 12:00:01" and "next turn at 12:07:40" are one kind.</summary>
     public static string WaitKind(string reason) => reason.StartsWith("next turn at ", StringComparison.Ordinal) ? "next turn" : reason;
 }

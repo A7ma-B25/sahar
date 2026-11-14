@@ -34,7 +34,7 @@ internal sealed class TimerTool
         _check.Tick += (_, _) =>
         {
             try { Check(); }
-            catch (Exception e) { Log.Write($"timer error: {e}"); }
+            catch (Exception e) { Log.Write($"timer error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
         };
     }
 

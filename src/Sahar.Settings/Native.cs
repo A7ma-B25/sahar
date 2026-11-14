@@ -74,6 +74,7 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool GetMonitorInfoW(nint monitor, MONITORINFO* info);
     [LibraryImport("user32.dll")] public static partial uint GetDpiForWindow(nint hwnd);
     [LibraryImport("user32.dll")] public static partial nint LoadCursorW(nint instance, nint name);
+    [LibraryImport("user32.dll")] public static partial nint LoadIconW(nint instance, nint name);
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)] public static partial int MessageBoxW(nint hwnd, string text, string caption, uint type);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool AllowSetForegroundWindow(uint processId);
     [LibraryImport("user32.dll")] public static partial nint GetForegroundWindow();

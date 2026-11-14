@@ -216,7 +216,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             fixed (char* path = Log.Folder)
                 if (Native.ShellExecute(0, verb, path, null, null, 1 /* SW_SHOWNORMAL */) <= 32) Log.Write("open folder failed");
         }
-        catch (Exception e) { Log.Write($"open folder failed: {e.Message}"); }
+        catch (Exception e) { Log.Write($"open folder failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}"); }
     }
 
     /// <summary>Placeholder icon (board icon C to come): a lavender Sahar-coloured disc with two eyes.</summary>

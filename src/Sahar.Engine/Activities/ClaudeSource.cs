@@ -32,6 +32,8 @@ internal sealed class ClaudeSource
         foreach (var m in _board.TakeMoments())
         {
             string session = m.Id["claude-done:".Length..];
+            if (_doneDay != DateOnly.FromDateTime(now.LocalDateTime)) (_doneDay, _doneToday) = (DateOnly.FromDateTime(now.LocalDateTime), 0);
+            _doneToday++;
             _hub.Moment(m, () => new CardData(CardKind.Claude, Claude: _board.Sessions.FirstOrDefault(x => x.Id == session)));
         }
         if (_board.AskingNow && !wasAsking)
@@ -61,4 +63,15 @@ internal sealed class ClaudeSource
     }
 
     public int Sessions => _board.Sessions.Count;
+
+    private int _doneToday;
+    private DateOnly _doneDay;
+
+    /// <summary>0.14 (her brain's claude.status): counts only — sessions working, waiting for you, and done today.</summary>
+    public (int Working, int Waiting, int DoneToday) Counts()
+    {
+        if (_doneDay != DateOnly.FromDateTime(DateTime.Now)) (_doneDay, _doneToday) = (DateOnly.FromDateTime(DateTime.Now), 0);
+        int waiting = _board.Sessions.Count(x => x.Asking);
+        return (_board.Sessions.Count - waiting, waiting, _doneToday);
+    }
 }

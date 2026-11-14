@@ -141,15 +141,19 @@ public static class BenchRunner
         double tps = speed.OutputTokens > 1 ? (speed.OutputTokens - 1) / decodeSec : 0;
         double prefill = speed.FirstToken > TimeSpan.Zero ? speed.PromptTokens / speed.FirstToken.TotalSeconds : 0;
         var (vram, ram) = memory();
-        int dPass = 0, dTotal = 0, tPass = 0, tTotal = 0, done = 0;
+        int dPass = 0, dTotal = 0, tPass = 0, tTotal = 0, done = 0, restarts = 0;
         if (golden)
         {
             foreach (var row in BenchSuite.Rows)
             {
                 ct.ThrowIfCancellationRequested();
-                var reply = await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2, MaxTokens = 96 }), null, ct);
-                if (row.Kind == "tool") { tTotal++; if (ToolScore.Pass(row, reply.Text)) tPass++; }
-                else { dTotal++; if (DialectScore.Pass(DialectScore.SayOf(reply.Text), english: row.Text.Any(char.IsAsciiLetter))) dPass++; }
+                string text;
+                // A row the server cannot answer (bad JSON, a grammar it refuses) counts as a fail; the bench goes on.
+                try { text = (await llm.CompleteAsync(new LlmRequest([system, new ChatMessage("user", row.Text)], schema, Sampling.Chat with { Temperature = 0.2, MaxTokens = 96 }), null, ct)).Text; }
+                catch (MindRuntimeException e) when (e.Code is "bad-output" or "busy") { text = ""; }
+                catch (MindRuntimeException e) when (e.Code == "load-failed" && restarts++ < 3) { text = ""; await warm(); }
+                if (row.Kind == "tool") { tTotal++; if (ToolScore.Pass(row, text)) tPass++; }
+                else { dTotal++; if (DialectScore.Pass(DialectScore.SayOf(text), english: row.Text.Any(char.IsAsciiLetter))) dPass++; }
                 rowsDone?.Report(++done);
             }
         }
