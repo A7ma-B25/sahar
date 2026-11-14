@@ -27,6 +27,11 @@ public static partial class LogRules
     /// it); an empty log (first run) counts as clean.</summary>
     public static bool EndedCleanly(string? lastLine) => string.IsNullOrWhiteSpace(lastLine) || ExitLine().IsMatch(lastLine);
 
+    /// <summary>The start line's arguments: her switches (<c>--…</c>) as they are, every value as «…» (a value can be a
+    /// path holding the user name, or an address).</summary>
+    public static string Args(IReadOnlyList<string> args) =>
+        string.Join(' ', args.Select(a => a.StartsWith('-') ? a : "…"));
+
     /// <summary>The time at the start of a log line (never the rest of it), or null.</summary>
     public static string? Timestamp(string line) => Stamp().Match(line) is { Success: true } m ? m.Value : null;
 
