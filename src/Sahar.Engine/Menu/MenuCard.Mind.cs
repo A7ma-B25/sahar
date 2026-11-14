@@ -6,8 +6,8 @@ namespace Sahar.Engine.Menu;
 
 /// <summary>
 /// 0.14 (stream C): her brain in the card's header (spec §8 "Menu card"). While the Mind thinks the header says
-/// «عم فكّر…», then her words as they come (whole sentences that fit the line); her questions («إي» / «لا», keys
-/// 1/2) sit in the header like a drill's segmented track, in the fact's line. A question still open when the card
+/// «عم فكّر…», then her words as they come (whole sentences that fit the line); her questions («إي» / «لا», by
+/// Enter or a click, never a digit) sit in the header like a drill's segmented track, in the fact's line. A question still open when the card
 /// closes is a «لا». Once a day, when nothing is more urgent, the fact says what she did today.
 /// </summary>
 internal sealed partial class MenuCard
@@ -17,7 +17,11 @@ internal sealed partial class MenuCard
 
     private sealed record Question(string Text, Action<bool> Answer);
 
+    /// <summary>No answer counts this soon after the question appears or after his last letter (a typed "1" or an
+    /// Enter meant for the chat never answers her).</summary>
+    public const int AnswerGuardMs = 800;
     private Question? _question;
+    private long _askAt, _typedAt;
     private bool _thinking;
     private string? _stream;
 
@@ -50,16 +54,25 @@ internal sealed partial class MenuCard
         Refresh();
     }
 
-    /// <summary>Her question in the header; <paramref name="answer"/> gets true for «إي». Focus goes to «لا» (Enter is safe).</summary>
+    /// <summary>Her question in the header; <paramref name="answer"/> gets true for «إي». It is answered by a click or
+    /// Enter on «إي» / «لا» only (never by a digit), after a short guard; the chat field keeps the focus while he
+    /// types there, otherwise the focus rests on «لا».</summary>
     public void MindAsk(string question, Action<bool> answer)
     {
         if (!IsOpen) { answer(false); return; }
         _question = new Question(question, answer);
-        _focus = AskNo;
-        _catcher.Focus();   // 1 and 2 reach the card, not the chat field
+        _askAt = Environment.TickCount64;
+        bool typing = _chat.HasFocus;
+        if (!typing) _focus = AskNo;
         if (View != "main") Show("main", fade: true);
         else Refresh();
-        ShowFocus();
+        if (!typing) ShowFocus();
+    }
+
+    private bool Guarded()
+    {
+        long now = Environment.TickCount64;
+        return now - _askAt < AnswerGuardMs || now - _typedAt < AnswerGuardMs;
     }
 
     /// <summary>Takes the question away (answered elsewhere, or timed out as «لا»).</summary>
@@ -86,7 +99,7 @@ internal sealed partial class MenuCard
     private bool MindPress(string id)
     {
         if (id is not (AskYes or AskNo)) return false;
-        Answer(id == AskYes);
+        if (!Guarded()) Answer(id == AskYes);
         return true;
     }
 
@@ -95,9 +108,8 @@ internal sealed partial class MenuCard
         if (_question is null) return false;
         switch (key)
         {
-            case MenuKey.Digit1: Answer(true); return true;
-            case MenuKey.Digit2 or MenuKey.Escape: Answer(false); return true;
-            case MenuKey.Digit3: return true;
+            case MenuKey.Digit1 or MenuKey.Digit2 or MenuKey.Digit3: return true;   // digits never answer (nor press a tile meanwhile)
+            case MenuKey.Escape: Answer(false); return true;
             default: return false;
         }
     }

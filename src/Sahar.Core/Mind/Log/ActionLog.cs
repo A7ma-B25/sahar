@@ -14,7 +14,8 @@ namespace Sahar.Core.Mind.Log;
 /// </summary>
 public sealed class ActionLog(ISecretBox box, Func<string, ITool?> tool, Func<DateTimeOffset> now) : IActionLog
 {
-    public const string File = "actions.json";
+    /// <summary>The box name (the box takes lower-case letters, digits, - and _ only).</summary>
+    public const string File = "actions";
     public static readonly TimeSpan Keep = TimeSpan.FromDays(30);
     private readonly object _gate = new();
 
@@ -82,11 +83,13 @@ public sealed class ActionLog(ISecretBox box, Func<string, ITool?> tool, Func<Da
         return list?.Where(e => e is not null && e.At >= cut).ToList() ?? [];
     }
 
+    /// <summary>Never throws: a box that cannot be written (locked, forgotten) loses this line, never the turn.</summary>
     private void Save(List<ActionEntry> list)
     {
         var cut = now() - Keep;
         list.RemoveAll(e => e.At < cut);
-        box.Write(File, JsonSerializer.SerializeToUtf8Bytes(list, ActionLogJson.Default.ListActionEntry));
+        try { box.Write(File, JsonSerializer.SerializeToUtf8Bytes(list, ActionLogJson.Default.ListActionEntry)); }
+        catch (Exception) { /* kinds only reach the engine's log; the line is lost */ }
     }
 }
 

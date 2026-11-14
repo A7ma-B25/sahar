@@ -152,8 +152,11 @@ function Stage-MindAutonomy {
         if ((Text64 $m.line64) -ne 'شغّل الطقس؟') { throw "header: $(Text64 $m.line64)" }
         if (-not ($m.buttons | Where-Object id -eq 'ask-yes') -or -not ($m.buttons | Where-Object id -eq 'ask-no')) { throw "buttons: $(Ids $m)" }
         if ($m.focus -ne 'ask-no') { throw "focus: $($m.focus)" }
+        Press 'ask-yes'   # at once (a typed "1" or a stray Enter): the guard keeps the question
+        if ((Auto).ask -ne 'header') { throw 'an answer within the guard was taken' }
         Start-Sleep -Milliseconds 400
         Card-Shot 'app-header-ask'
+        Start-Sleep -Milliseconds 500
         Press 'ask-no'
         Start-Sleep -Milliseconds 300
         if ((Auto).ask -ne 'none') { throw 'the question stayed' }
@@ -164,10 +167,45 @@ function Stage-MindAutonomy {
         # «إي» runs a B change he asked for (language is B: always asked)
         Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":2,"tool":"settings.set","data":"{\"key\":\"language\",\"value\":\"arabic\"}","why":"x"}')
         if ((Auto).ask -ne 'header') { throw 'no second question' }
+        Start-Sleep -Milliseconds 900
         Press 'ask-yes'
         Start-Sleep -Milliseconds 300
         if ((Mind-Sent) -notmatch "tool-result:${id}::2:ok") { throw "sent: $(Mind-Sent)" }
         Wait-Settings '"language"\s*:\s*"arabic"' 3000 'language arabic'
+        # her timer and her hush end (his line asked): the next steps start calm
+        Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":3,"tool":"timer.cancel","data":"{}","why":"x"}')
+        Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":4,"tool":"hush.off","data":"{}","why":"x"}')
+        Start-Sleep -Milliseconds 300
+        if ((Auto).timer -ne 'false' -or (Auto).hush -ne 'false') { throw "timer/hush still on: $((Auto).timer) $((Auto).hush)" }
+        Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"تمام","final":true}')
+    }
+
+    Step 'mind (autonomy): his own timer is never replaced or stopped without his yes; undo gives it back' {
+        Chat-Line 'مؤقت ٥'
+        if ((Kv 'debug-timer').running -ne 'true') { throw 'no timer of his' }
+        Chat-Line 'خلّيه ربع ساعة'
+        $id = Last-Turn
+        Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":1,"tool":"timer.start","data":"{\"minutes\":15}","why":"x"}')
+        $a = Auto
+        if ($a.ask -ne 'header' -or (Text64 $a.ask64) -notmatch 'مؤقتك') { throw "ask: $($a.ask) $(Text64 $a.ask64)" }
+        Start-Sleep -Milliseconds 900
+        Press 'ask-no'
+        Start-Sleep -Milliseconds 300
+        if ([int](Kv 'debug-timer').remaining -gt 300) { throw 'his timer was replaced' }
+        Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":2,"tool":"timer.start","data":"{\"minutes\":15}","why":"x"}')
+        Start-Sleep -Milliseconds 900
+        Press 'ask-yes'
+        Start-Sleep -Milliseconds 300
+        if ([int](Kv 'debug-timer').remaining -lt 880) { throw 'her timer did not start after his yes' }
+        $e = @((Mind-Log).entries | Where-Object { $_.tool -eq 'timer.start' -and $_.outcome -eq 'asked-yes' })[0]
+        if (-not $e.undo) { throw 'no undo for her timer' }
+        if ((Kva 'mind-undo' ('{"id":"' + $e.id + '"}')).ok -ne 'true') { throw 'undo refused' }
+        $left = [int](Kv 'debug-timer').remaining
+        if ($left -gt 300 -or $left -lt 200) { throw "his timer was not given back: $left s" }
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"timer"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"timer-cancel"}}' | Out-Null
+        Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"","final":true}')
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'his timer is still running' }
     }
 
     Step 'mind (autonomy): with the card closed the bubble asks; no answer is «لا»' {
@@ -185,6 +223,21 @@ function Stage-MindAutonomy {
         if ((Mind-Sent) -notmatch "tool-result:${id}::1:no:asked-no") { throw "sent: $(Mind-Sent)" }
         if ((Setting 'awarenessEnabled') -eq $false) { throw 'awareness was switched off' }
         Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"","final":true}')
+    }
+
+    Step 'mind (autonomy): the gate is checked again before she speaks or acts on her own' {
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 2000 'card closed' | Out-Null
+        Kva 'mind-test-initiative' '{"force":"true"}' | Out-Null
+        $id = Last-Turn 'initiative'
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null   # the moment passed: the card is open now
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Mind-Line ('{"v":1,"t":"call","id":"' + $id + '","call":1,"tool":"move.play","data":"{\"move\":\"dance\"}","why":"x"}')
+        if ((Mind-Sent) -notmatch "tool-result:${id}::1:no:refused") { throw "sent: $(Mind-Sent)" }
+        Mind-Line ('{"v":1,"t":"say","id":"' + $id + '","text":"SENTINEL-LATE","final":true}')
+        $c = Kv 'debug-comment'
+        if ($c.showing -eq 'true' -and (Text64 $c.text64) -match 'SENTINEL-LATE') { throw 'she spoke when the gate was closed' }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
     }
 
     Step 'mind (autonomy): Claude Code is never answered; she only tells him' {
@@ -214,15 +267,13 @@ function Stage-MindAutonomy {
         Start-Sleep -Milliseconds 600
         Capture 'app-today-dark'
         SOk 'emulate' '{"theme":""}'
-        # undo the hush from the page
-        if ((Auto).hush -ne 'true') { throw 'no hush to undo' }
-        $undo = Js "[...document.querySelectorAll('[id^=undo-]')].map(b => b.id)"
-        if (-not $undo) { throw 'no undo button' }
-        $hushLine = @((Mind-Log).entries | Where-Object tool -eq 'hush.on')[0]
-        SClick ('#undo-' + $hushLine.id)
-        Wait-Until { (Auto).hush -eq 'false' } 3000 'the hush undone from the page'
-        SClick ('#fb-up-' + $hushLine.id)
-        Wait-Until { (@((Mind-Log).entries | Where-Object id -eq $hushLine.id)[0]).feedback -eq 1 } 3000 'the thumbs-up kept'
+        # «امسحيها» on her note, from the page
+        $noteLine = @((Mind-Log).entries | Where-Object { $_.tool -eq 'note.save' -and $_.undo })[0]
+        if (-not $noteLine) { throw 'no note to delete' }
+        SClick ('#undo-' + $noteLine.id)
+        Wait-Until { -not ((Get-Content $notesFile -Raw) -match 'SENTINEL-NOTE') } 3000 'the note deleted from the page'
+        SClick ('#fb-up-' + $noteLine.id)
+        Wait-Until { (@((Mind-Log).entries | Where-Object id -eq $noteLine.id)[0]).feedback -eq 1 } 3000 'the thumbs-up kept'
         SClick '#today-days-1'
         Start-Sleep -Milliseconds 500
         if ((SText '#today-log') -notmatch 'لسا ما عملت شي هون') { throw 'yesterday is not empty' }

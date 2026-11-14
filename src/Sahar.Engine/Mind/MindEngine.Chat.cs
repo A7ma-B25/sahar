@@ -33,6 +33,7 @@ internal sealed partial class MindEngine
     public Func<string, bool>? IsDraftAsk { get; set; }
 
     private EngineTools _tools = null!;
+    private Sahar.Core.Mind.Memory.ISecretBox _box = null!;
     private IToolRegistry _registry = null!;
     private readonly IAutonomyPolicy _policy = MindParts.Policy();
     private readonly IInitiativeGate _gate = MindParts.Gate();
@@ -61,9 +62,13 @@ internal sealed partial class MindEngine
 
     partial void AttachChat()
     {
-        _tools = new EngineTools(this, ActivityTools);
+        _box = MindParts.SecretBox(MindPaths.Personal);
+        _tools = new EngineTools(this, ActivityTools, _box, () => _gate.Check(GateInputs()).Open);
         _registry = MindParts.ToolRegistry(_tools.Announced());
-        _log = MindParts.ActionLog(MindParts.SecretBox(MindPaths.Personal), name => _tools.Get(name), () => DateTimeOffset.Now);
+        _log = MindParts.ActionLog(_box, name => _tools.Get(name), () => DateTimeOffset.Now);
+        _pausedUntil = LoadPause();
+        IsDraftAsk ??= t => Sahar.Core.Mind.Drafts.DraftAsk.Parse(t) is not null;
+        Ui.TryEnqueue(() => Safe(_tools.ArmSaved));   // her reminders from before a restart
         _ask = new AskDrill(Ui, Menu, ListBubble, () => Motion.Body);
         OfferDownload ??= OfferDownloadQuestion;
         ChatHandler = OnChat;
@@ -90,7 +95,7 @@ internal sealed partial class MindEngine
         return new MindMsg
         {
             T = "hello", Version = "1", Lang = s.Language == UiLanguage.English ? "en" : "ar", Address = new MindAddress(s.UserGender, s.UserName),
-            Caps = new MindCaps(s.MindInitiative != InitiativeLevel.Off, s.MindLearnChats, s.MindVoice),
+            Caps = new MindCaps(s.MindInitiative != InitiativeLevel.Off, s.MindLearnChats && !(_pausedUntil > DateTimeOffset.Now), s.MindVoice),
             Tools = toolCalls ? _registry.Announced : [],
         };
     }
@@ -140,7 +145,7 @@ internal sealed partial class MindEngine
             return false;
         }
         var id = "c" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
-        if (_chatTurn is { } running) SendMind(new MindMsg { T = "cancel", Id = running });
+        if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); }
         var source = draft ? "draft" : "chat";
         if (!SendMind(new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() })) return false;
         _turns[id] = (ActSource.User, Clip(text, 60), source);
@@ -166,10 +171,11 @@ internal sealed partial class MindEngine
                 break;
             case ChatKind.Hush when Dnd.On && !hushBefore:
                 Append("hush.on", c.HushFor is { } h ? Call("hush.on", $$"""{"minutes":{{(int)h.TotalMinutes}}}""") : Call("hush.on", "{}"),
-                    ActSource.User, why, ActionOutcome.Done, "hush");
+                    ActSource.User, why, ActionOutcome.Done, Dnd.Remaining is { } left
+                        ? "hush:" + (DateTimeOffset.UtcNow + left).ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture) : "hush:off");
                 break;
             case ChatKind.Sleep:
-                Append("sleep.hide", Call("sleep.hide", """{"minutes":60}"""), ActSource.User, why, ActionOutcome.Done, "hidden");
+                Append("sleep.hide", Call("sleep.hide", """{"minutes":60}"""), ActSource.User, why, ActionOutcome.Done, null);
                 break;
             case ChatKind.Game when c.Game is { } g:
                 Append("game.start", Call("game.start", $$"""{"game":"{{g switch { Sahar.Core.Games.GameKind.Chase => "chase", Sahar.Core.Games.GameKind.HideSeek => "hide", Sahar.Core.Games.GameKind.Ball => "ball", _ => "stars" }}}"}"""),
@@ -200,6 +206,7 @@ internal sealed partial class MindEngine
         {
             SendMind(new MindMsg { T = "cancel", Id = id });
             Log.Write("mind: cancel (card closed)");
+            _turns.Remove(id);   // her late calls for it are refused
             _chatTurn = null;
         }
         if (_todayFactShown) { _todayFactDay = DateOnly.FromDateTime(DateTime.Now); _todayFactShown = false; }
@@ -241,6 +248,7 @@ internal sealed partial class MindEngine
                     if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Menu.SetReply(Address.For(Address.You, ChatReply.Learning));
                     if (m.Error != "timeout") _chatTurn = null;   // a timeout's line follows
                 }
+                if (m.Error != "timeout") _turns.Remove(m.Id);
                 break;
             case "draft" when m.Id is not null && m.Id == _chatTurn:   // stream B shows it («بصوتك» + copy)
                 _turns.Remove(m.Id);
@@ -262,11 +270,13 @@ internal sealed partial class MindEngine
         var id = m.Id ?? "";
         _turns.TryGetValue(id, out var turn);
         var text = Words(m.Text ?? "");
-        if (m.Mood == "distress") _pausedUntil = DateTimeOffset.Now.AddHours(24);   // spec §7.4: no initiative for a day
+        if (m.Mood == "distress") { _pausedUntil = DateTimeOffset.Now.AddHours(24); SavePause(); }   // spec §7.4: no initiative for a day, across restarts
         if (turn.Kind == "initiative")
         {
             _turns.Remove(id);
             if (text.Trim().Length == 0) { Log.Write("mind: initiative, nothing to say"); return; }
+            var gate = _gate.Check(GateInputs());
+            if (!gate.Open) { _lastGate = gate.ClosedBy ?? "closed"; Log.Write($"mind: initiative line dropped ({_lastGate})"); return; }   // the moment passed
             _lastLine = DateTimeOffset.Now;
             _awaitingAnswerSince = _lastLine;
             _linesToday++;
@@ -304,8 +314,14 @@ internal sealed partial class MindEngine
         var spec = _registry.Announced.First(t => t.Name == call.Tool);
         var cls = _registry.ClassOf(call);
         var source = turn.Source;
-        var d = _policy.Decide(spec, call, cls, source, Context(turn.Kind));
+        var ctx = Context(turn.Kind);
+        var d = _policy.Decide(spec, call, cls, source, ctx);
         var why = source == ActSource.User ? turn.Line : Clip(call.Why, 80);
+        bool callPause = ctx.CallStarting && call.Tool == "music.control" && EngineTools.Str(call, "op") == "pause";
+        if (source == ActSource.Self && d.Verdict != Verdict.Refuse && !callPause && _gate.Check(GateInputs()) is { Open: false } closed)
+            d = new AutonomyDecision(Verdict.Refuse, "gate:" + closed.ClosedBy);   // her own action waits for a calm moment, re-checked now
+        if (d.Verdict == Verdict.Act && call.Tool is "timer.start" or "timer.cancel" && _tools.HisTimerRunning)
+            d = new AutonomyDecision(Verdict.Ask, "his-timer");   // his timer: never replaced or stopped without his yes
         Log.Write($"mind: call {call.Tool} {d.Verdict.ToString().ToLowerInvariant()}{(d.Reason is { } r ? $" ({r})" : "")}");
         switch (d.Verdict)
         {
@@ -314,7 +330,9 @@ internal sealed partial class MindEngine
                 break;
             case Verdict.Ask:
                 if (source == ActSource.Self) _selfAsks.Add(DateTimeOffset.Now);
-                var question = ToolTemplates.Question(call);
+                var question = d.Reason == "his-timer"
+                    ? (call.Tool == "timer.start" ? "بغيّر مؤقتك؟ (" + ToolTemplates.Done(call) + ")" : "بوقّف مؤقتك؟")
+                    : ToolTemplates.Question(call);
                 _ask.Ask(question, yes => Safe(() =>
                 {
                     if (yes) Run(id, n, call, source, why, ActionOutcome.AskedYes);
@@ -336,6 +354,7 @@ internal sealed partial class MindEngine
     private void Run(string id, int n, ToolCall call, ActSource source, string? why, ActionOutcome done)
     {
         if (_tools.Get(call.Tool) is not { } tool) { Reply(id, n, false, "unavailable", ToolTemplates.Unavailable); return; }
+        _tools.Source = source;
         tool.RunAsync(call).ContinueWith(t => Ui.TryEnqueue(() => Safe(() =>
         {
             var o = t.IsCompletedSuccessfully ? t.Result : ToolOutcome.Fail("failed", ToolTemplates.Failed);
@@ -439,6 +458,31 @@ internal sealed partial class MindEngine
         if (Director.CurrentKey != "claude-permission") return;
         _log.Append("claude.permission", "Claude بدّه إذنك", ActSource.Self, null, ActionOutcome.Refused, null);
         Log.Write("mind: claude permission (notified only)");
+    }
+
+    // ---- the distress pause, kept across restarts (spec §7.4) ----
+
+    private const string PauseFile = "autonomy-pause";
+
+    private DateTimeOffset? LoadPause()
+    {
+        try
+        {
+            var b = _box.Read(PauseFile);
+            if (b is { Length: > 0 } && long.TryParse(Encoding.UTF8.GetString(b), NumberStyles.Integer, CultureInfo.InvariantCulture, out long ms))
+            {
+                var until = DateTimeOffset.FromUnixTimeMilliseconds(ms);
+                return until > DateTimeOffset.Now ? until : null;
+            }
+        }
+        catch (Exception) { }
+        return null;
+    }
+
+    private void SavePause()
+    {
+        try { _box.Write(PauseFile, Encoding.UTF8.GetBytes((_pausedUntil ?? DateTimeOffset.MinValue).ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture))); }
+        catch (Exception e) { Log.Write($"mind: pause not kept ({e.GetType().Name})"); }
     }
 
     // ---- «شو عملت اليوم» for the settings app (production) ----

@@ -320,4 +320,20 @@ public sealed class TurnRunnerTests
         await Run(new MindMsg { T = "turn", Id = "d2", Source = "draft", Text = "اكتبلي رد" });
         Assert.Equal("مرحبا يا أحمد، رح اتأخر شوي", _io.Final.Text);
     }
+
+    [Fact]
+    public async Task Turn_NoProposals_WhenLearningIsOff_OrAfterDistress()
+    {
+        const string remember = """[{"text":"بيحب القهوة","kind":"preference","sensitive":"none"}]""";
+        _llm.Reply(Decision(remember: remember));
+        var off = Hello() with { Caps = new MindCaps(true, false, MindVoice.Complementary) };
+        await Runner().RunAsync(Chat("x"), off, _io, default);
+        Assert.Empty(_store.Proposed);
+        var r = Runner();
+        await Run(Chat("CUE", "d1"), r);   // a distress reply
+        _llm.Reply(Decision("""[{"tool":"goal.add","args":{"text":"x"},"why":"x"}]""", remember: remember));
+        await Run(Chat("بدي خلّص المشروع", "t2"), r);
+        Assert.Empty(_store.Proposed);   // a day without proposals after a hard moment
+        Assert.Empty(_io.Of("propose"));
+    }
 }

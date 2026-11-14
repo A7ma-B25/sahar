@@ -89,7 +89,7 @@ internal sealed partial class MenuCard : IDisposable
             if (_focus == "chat") _chat.Focus();
         });
         _chat.Submitted += text => Safe(() => Send(text));
-        _chat.Typed += () => Safe(() => ChatTyped?.Invoke());
+        _chat.Typed += first => Safe(() => { _typedAt = Environment.TickCount64; if (first) ChatTyped?.Invoke(); });
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });
         _chat.Deactivated += next => Safe(() => { if (next != _catcher.Hwnd && !Win.Own.Contains(next)) Close(restoreFocus: false); });

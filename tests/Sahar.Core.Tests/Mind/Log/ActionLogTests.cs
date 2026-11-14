@@ -119,4 +119,36 @@ public sealed class ActionLogTests
         _box.Files[ActionLog.File] = "not json"u8.ToArray();
         Assert.Empty(Log().All());
     }
+
+    [Fact]
+    public void Log_WorksThroughTheRealSecretBox()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "sahar-log-" + Guid.NewGuid().ToString("n"));
+        try
+        {
+            var log = MindParts.ActionLog(MindParts.SecretBox(dir), _ => null, () => _now);
+            var e = log.Append("timer.start", "شغّلت مؤقت ٥ دقيقة", ActSource.User, "مؤقت ٥", ActionOutcome.Done, "t");
+            Assert.Equal(e.Id, MindParts.ActionLog(MindParts.SecretBox(dir), _ => null, () => _now).All().Single().Id);
+            Assert.DoesNotContain("مؤقت", string.Concat(Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Select(File.ReadAllText)));
+        }
+        finally { try { Directory.Delete(dir, true); } catch (IOException) { } }
+    }
+
+    [Fact]
+    public void Log_AFailingBoxNeverThrows()
+    {
+        var log = MindParts.ActionLog(new ThrowingBox(), _ => null, () => _now);
+        var e = log.Append("timer.start", "x", ActSource.User, null, ActionOutcome.Done, null);
+        Assert.Equal("timer.start", e.Tool);
+        Assert.Empty(log.All());
+        log.Feedback(e.Id, 1);
+        Assert.False(log.Undo(e.Id));
+    }
+
+    private sealed class ThrowingBox : ISecretBox
+    {
+        public byte[]? Read(string name) => throw new IOException("locked");
+        public void Write(string name, ReadOnlySpan<byte> data) => throw new IOException("locked");
+        public void Delete(string name) => throw new IOException("locked");
+    }
 }

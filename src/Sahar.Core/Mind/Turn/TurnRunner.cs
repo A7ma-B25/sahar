@@ -28,6 +28,10 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
     public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.Now;
 
     private readonly List<(string User, string Her)> _history = [];
+    /// <summary>After a distress reply: a day without proposals (spec §7.4); the engine's hello says Learn = false
+    /// for the rest of that day after a restart.</summary>
+    private DateTimeOffset? _distressAt;
+    public static readonly TimeSpan DistressQuiet = TimeSpan.FromHours(24);
 
     internal sealed record Outcome(string Tool, bool Ok, string Summary, string? Data, bool Read);
 
@@ -47,6 +51,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
             if (chat && prompts.Distress(line) is { } distress)
             {
                 var text = distress.Help.Count > 0 ? distress.Text + "\n" + string.Join("\n", distress.Help) : distress.Text;
+                _distressAt = Now();
                 io.Send(new MindMsg { T = "say", Id = id, Text = text, Mood = "distress", Final = true });
                 return;
             }
@@ -56,6 +61,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
             var messages = PromptBuilder.Build(Prefix(hello, source), source == "draft" ? [] : _history,
                 chat || source == "initiative" ? prompts.PersonalBlock(line, PromptBuilder.PersonalTokens) : "", turn.Situation, source, line);
             var budget = source == "reflect" ? ReflectBudget : ChatBudget;
+            bool learn = hello.Caps?.Learn != false && !(_distressAt is { } at && Now() - at < DistressQuiet);
             var clock = new Stopwatch();
             var outcomes = new List<Outcome>();
             int calls = 0;
@@ -86,7 +92,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                 if (Decision.Parse(reply.Text) is not { } d) { invalid = true; break; }
                 say = d.Say;
                 mood = d.Mood;
-                if (chat && source != "draft") Remember(io, id, d.Remember);
+                if (chat && learn && source != "draft") Remember(io, id, d.Remember);
 
                 bool reads = false;
                 foreach (var action in d.Actions.Take(MaxActions))
@@ -96,7 +102,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                     var spec = registry.Announced.First(t => t.Name == call.Tool);
                     if (ToolCatalog.MindLocal.Contains(call.Tool))
                     {
-                        outcomes.Add(Local(io, id, call, chat));
+                        outcomes.Add(Local(io, id, call, chat && learn));
                         continue;
                     }
                     int n = ++calls;

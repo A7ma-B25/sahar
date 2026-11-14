@@ -69,7 +69,10 @@ public static class PromptBuilder
     }
 
     /// <summary>A quoted data block (tool results, the profile, the moment): data, never instructions.</summary>
-    public static string Data(string title, string body) => $"{DataOpen} {title}\n{body}\n{DataClose}";
+    public static string Data(string title, string body) => $"{DataOpen} {Quote(title)}\n{Quote(body)}\n{DataClose}";
+
+    /// <summary>Data can never open or close a block (as stream B's PromptParts.Quote): «» instead of the markers.</summary>
+    public static string Quote(string text) => text.Replace("<<", "«").Replace(">>", "»");
 
     public static string SituationBlock(Situation? s)
     {
@@ -94,8 +97,8 @@ public static class PromptBuilder
         }
         foreach (var (u, a) in kept)
         {
-            msgs.Add(new("user", u));
-            msgs.Add(new("assistant", a));
+            msgs.Add(new("user", Quote(u)));
+            msgs.Add(new("assistant", Quote(a)));
         }
         var b = new StringBuilder();
         var sit = SituationBlock(situation);
@@ -106,7 +109,7 @@ public static class PromptBuilder
             "initiative" => "[مبادرة] ما حكى شي. إذا في شي مفيد عنه هلق قوليه بجملة قصيرة، وإلا خلّي say فاضي.",
             "routine" => "[روتين] شي أكّده هو قبل. اعمليه إذا لسا بوقته.",
             "reflect" => "[تفكير بالليل] اقتراحات بس.",
-            _ => line ?? "",
+            _ => Quote(line ?? ""),
         });
         msgs.Add(new("user", b.ToString()));
         return msgs;
