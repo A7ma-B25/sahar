@@ -931,6 +931,14 @@ internal sealed unsafe class App
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} faceAnims={sahar.FaceAnimationsMade + FadeLayer.StepAnimationsMade} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
+            // Test mode: a full, compacting collection that hands freed memory back (GCCollectionMode.Aggressive), so a
+            // memory step compares what she keeps, not where the next collection happened to land (test-build 43598510152).
+            pipe.Register("debug-gc", _ =>
+            {
+                GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+                return new PipeReply(true, FormattableString.Invariant($"gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} workingSetMB={Environment.WorkingSet / 1048576.0:0.0}"));
+            });
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
             ActivityPipe.Register(pipe, acts, claudeSource, () => monitors, shelfSource);
             // Her activity expressions on demand (0.13 §1.5): the sway, the halo's cover colour, the drooping leaf.

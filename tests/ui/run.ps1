@@ -195,6 +195,12 @@ public static class Shell {
 "@
 
 # Test-mode diagnostics: "generation=N overlayVisible=true|false".
+function Retry-Rename([string]$from, [string]$to) {
+    for ($try = 1; ; $try++) {
+        try { Rename-Item $from (Split-Path $to -Leaf) -ErrorAction Stop; return }
+        catch { if ($try -ge 20) { throw }; Start-Sleep -Milliseconds 500 }
+    }
+}
 function Info {
     $r = Send '{"type":"cmd","name":"debug-info"}'
     if (-not $r.ok) { throw "debug-info not ok: $($r.error)" }
@@ -1706,7 +1712,13 @@ function Stage-Menu {
         Write-Host ("    with the menu open: {0:N1} MB" -f ($open / 1MB))
         if ($open - $before -gt 5MB) { throw ("the open menu adds {0:N1} MB" -f (($open - $before) / 1MB)) }
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        # Measured after a full collection at both ends: unsettled, the number swung with where a collection landed —
+        # run 43609662178: +0.15 MB a round of garbage, then a gen-2 collection at round 13 took the managed heap from
+        # 16.2 to 3.2 MB while the working set rose 5.1 MB (its new regions). What is kept is what counts.
+        Start-Sleep -Seconds 1
+        Write-Host "    settled before: $((Kv 'debug-gc').GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" })"
         $first = (State).workingSetBytes
+        $heapFirst = [double](Kv 'debug-gc').gcHeapMB
         $rounds = [System.Collections.Generic.List[string]]::new()
         foreach ($i in 1..15) {
             Send '{"type":"cmd","name":"menu-open"}' | Out-Null
@@ -1721,7 +1733,10 @@ function Stage-Menu {
             $rounds.Add(("{0}:{1:N1}/{2}/{3}" -f $i, ((State).workingSetBytes / 1MB), $ri.privateMB, $ri.gcHeapMB))
         }
         Start-Sleep -Seconds 3
+        $gc = Kv 'debug-gc'
         $after = (State).workingSetBytes
+        Write-Host ("    settled after: gcHeapMB={0} workingSetMB={1}" -f $gc.gcHeapMB, $gc.workingSetMB)
+        if ([double]$gc.gcHeapMB - $heapFirst -gt 1) { throw ("15 rounds of menu and bubble kept {0:N1} MB more managed memory" -f ([double]$gc.gcHeapMB - $heapFirst)) }
         $ri = Info
         Write-Host "    per round (working set MB / private MB / managed heap MB): $($rounds -join ' ')"
         Write-Host ("    first {0:N1} MB; settled: private {1} MB, managed heap {2} MB" -f ($first / 1MB), $ri.privateMB, $ri.gcHeapMB)
@@ -1929,7 +1944,8 @@ function Stage-Menu {
         # No settings app for this one engine start: then the card has no settings button (hidden, not greyed out).
         $app = Join-Path (Split-Path $Exe) 'Sahar.Settings'
         $aside = "$app.aside"
-        if (Test-Path $app) { Rename-Item $app $aside }
+        # Retried: a scanner can hold the freshly downloaded folder for a moment (run 43609662178: access denied).
+        if (Test-Path $app) { Retry-Rename $app $aside }
         try {
             Restart-With '{ "helloDone": true }'
             [System.Windows.Forms.SendKeys]::SendWait('^%s')
@@ -1943,7 +1959,7 @@ function Stage-Menu {
             [System.Windows.Forms.SendKeys]::SendWait('^%s')
             Wait-Menu 'false' 1000 'card closed by the shortcut again' | Out-Null
         }
-        finally { if (Test-Path $aside) { Rename-Item $aside $app } }
+        finally { if (Test-Path $aside) { Retry-Rename $aside $app } }
     }
     Step 'only the chosen items show' {
         Restart-With '{ "helloDone": true, "menuItems": ["play", "timer"] }'
