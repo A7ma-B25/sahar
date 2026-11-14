@@ -12,7 +12,7 @@ namespace Sahar.Engine.Activities;
 /// </summary>
 internal static class ActivityPipe
 {
-    public static void Register(PipeServer pipe, ActivityHub hub, ClaudeSource claude, Func<List<MonitorInfo>> monitors)
+    public static void Register(PipeServer pipe, ActivityHub hub, ClaudeSource claude, Func<List<MonitorInfo>> monitors, ShelfSource shelf)
     {
         string Arg(PipeRequest r, string key) => r.Args?.TryGetValue(key, out var v) == true ? v : "";
         pipe.Register("debug-activities", _ => new PipeReply(true, hub.Describe() + $" claudeSessions={claude.Sessions}"));
@@ -48,6 +48,14 @@ internal static class ActivityPipe
             hub.PickBead(int.TryParse(Arg(r, "index"), out var i) ? i : 0);
             return new PipeReply(true, hub.Describe());
         });
+        // The shelf's file actions on real files (review #7, #8): add as if dropped; counts of what came out.
+        pipe.Register("shelf-add", r =>
+        {
+            var path = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(Arg(r, "path64")));
+            shelf.TestAdd([path]);
+            return new PipeReply(true, hub.Describe());
+        });
+        pipe.Register("debug-shelf", _ => new PipeReply(true, $"shrunk={shelf.ShrinkCount} zipped={shelf.ZipCount}"));
         pipe.Register("activity-knock", r =>
         {
             if (ActivitySim.Make(Arg(r, "kind"), DateTimeOffset.Now) is not { } made) return new PipeReply(false, "unknown kind");

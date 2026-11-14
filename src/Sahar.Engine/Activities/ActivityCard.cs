@@ -189,7 +189,7 @@ internal sealed class ActivityCard : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"activity card error: {e}"); }
+        catch (Exception e) { Log.Write($"activity card error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     public void Dispose() => _visual.Dispose();

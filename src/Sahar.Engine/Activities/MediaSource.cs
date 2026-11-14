@@ -42,7 +42,7 @@ internal sealed class MediaSource
         _settings = settings;
         _save = save;
         _lyricsDir = lyricsDir;
-        hub.Pressed += (id, a) => { if (a?.Id == "music" || id.StartsWith("music-", StringComparison.Ordinal) || id.StartsWith("lyrics", StringComparison.Ordinal)) Press(id); };
+        hub.Pressed += (id, a) => Safe(() => { if (a?.Id == "music" || id.StartsWith("music-", StringComparison.Ordinal) || id.StartsWith("lyrics", StringComparison.Ordinal)) Press(id); });
         hub.CoverOf = a => a.Id == "music" && _song is { } s ? (s.Cover, s.Colour) : (null, null);
         var t = ui.CreateTimer();
         t.Interval = TimeSpan.FromSeconds(1);
@@ -68,7 +68,14 @@ internal sealed class MediaSource
     public Rgba? Colour => _song?.Colour;
     public event Action? PlayingChanged;
 
-    private void Changed() => Task.Run(RefreshAsync);
+    /// <summary>Timeline events come many times a second while seeking: one refresh per 300 ms quiet spell.</summary>
+    private void Changed()
+    {
+        int n = Interlocked.Increment(ref _changes);
+        Task.Delay(300).ContinueWith(_ => { if (Volatile.Read(ref _changes) == n) _ = RefreshAsync(); }, TaskScheduler.Default);
+    }
+
+    private int _changes;
 
     /// <summary>Off the UI thread: every session's state, the pick, and the picked one's song.</summary>
     private async Task RefreshAsync()

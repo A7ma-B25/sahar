@@ -73,12 +73,24 @@ internal sealed class ActivityHub : IDisposable
         _tick.Interval = TimeSpan.FromSeconds(1);
         _tick.Tick += (_, _) => Safe(Tick);
         _tick.Start();
+        _hideSoon = ui.CreateTimer();
+        _hideSoon.IsRepeating = false;
+        _hideSoon.Interval = TimeSpan.FromMilliseconds(150);
+        _hideSoon.Tick += (_, _) => Safe(HideNow);
         _momentEnd = ui.CreateTimer();
         _momentEnd.IsRepeating = false;
         _momentEnd.Tick += (_, _) => Safe(Refresh);
     }
 
-    private readonly DispatcherQueueTimer _momentEnd;
+    private readonly DispatcherQueueTimer _momentEnd, _hideSoon;
+
+    private void HideNow()
+    {
+        var v = _stack.View(DateTimeOffset.Now);
+        if (v is not null && ActivityStack.TagShown(_card.IsOpen, MenuOpen(), Hidden(), Dragged())) return;
+        if (_shown) { _tag.Hide(); _input.SetVisible(false); _shown = false; }
+        SetNeed(null);
+    }
 
     public ActivityStack Stack => _stack;
     public ActivityCard Card => _card;
@@ -106,7 +118,7 @@ internal sealed class ActivityHub : IDisposable
     {
         if (card is not null) _cards[a.Id] = card;
         if (!ActivitySwitch.On(a.Kind, Settings())) return;
-        if (_away.Locked || _fullscreenAway) _away.Note(a.Kind, DateTimeOffset.Now);
+        if (_away.Locked || _fullscreenAway) _away.Note(a.Kind, DateTimeOffset.Now, a.Alert);   // kept kinds only (AwayLog)
         if (_fullscreenAway)
         {
             var act = Knock.Decide(a.Kind, FullscreenWhere.Hers, a.Alert);
@@ -204,10 +216,11 @@ internal sealed class ActivityHub : IDisposable
         if (front != _lastLoggedFront) { _lastLoggedFront = front; Log.Write($"activity: tag {front ?? "none"} ({_view?.Beads.Count ?? 0} beads)"); }
         if (!show)
         {
-            if (_shown) { _tag.Hide(); _input.SetVisible(false); _shown = false; }
-            SetNeed(null);
+            // A hide that a show follows within 150 ms (the menu closing into a card, a moment ending) never blinks.
+            if (_shown && !_hideSoon.IsRunning) _hideSoon.Start();
             return;
         }
+        _hideSoon.Stop();
         var v = _view!;
         var front2 = InCall() ? ActivityText.ForCall(v.Front) : v.Front;
         _geometry = Geometry(v);
@@ -390,7 +403,7 @@ internal sealed class ActivityHub : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"activity error: {e}"); }
+        catch (Exception e) { Log.Write($"activity error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
     }
 
     public void Dispose()

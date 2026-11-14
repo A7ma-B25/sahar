@@ -37,7 +37,7 @@ internal sealed class ClaudeSource
         if (_board.AskingNow && !wasAsking)
         {
             _post(EventKind.ClaudePermission);
-            _hub.Say(ActivityText.AskBubble);
+            if (!_hub.Hushed()) _hub.Say(ActivityText.AskBubble);   // hushed: the tag and her face, no line
         }
     }
 

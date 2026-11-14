@@ -17,8 +17,8 @@ internal sealed unsafe class CopySource
     private static CopySource? _instance;
     private readonly ActivityHub _hub;
     private readonly DispatcherQueueTimer _timer;
-    private nint _hook, _window;
-    private CopyPace? _pace;
+    private nint _hook;
+    private readonly CopyWatch _watch = new();
 
     public CopySource(DispatcherQueue ui, ActivityHub hub)
     {
@@ -37,7 +37,7 @@ internal sealed unsafe class CopySource
     {
         try
         {
-            if (idObject != 0 || _instance is not { } me || me._window != 0) return;
+            if (idObject != 0 || _instance is not { } me || me._watch.Window != 0) return;
             if (ActNative.ClassOf(hwnd) == Class) me.Start(hwnd);
         }
         catch (Exception) { }
@@ -52,52 +52,42 @@ internal sealed unsafe class CopySource
         }
     }
 
+    /// <summary>A dialog to watch (one at a time; an ended one never again): the timer reads it, never this call.</summary>
     private void Start(nint window)
     {
-        _window = window;
-        _pace = new CopyPace();
+        if (!_watch.Accept(window)) return;
         Log.Write("copy: started");
         _timer.Start();
-        Read();
     }
 
     private void Read()
     {
-        var now = DateTimeOffset.Now;
-        if (_window == 0 || _pace is null) { _timer.Stop(); return; }
-        if (Native.IsWindow(_window) == 0)
+        if (_watch.Window is var w && w == 0) { _timer.Stop(); return; }
+        bool exists = Native.IsWindow(w) != 0;
+        var u = _watch.Tick(exists, exists ? ActCom.Title(w) : "", DateTimeOffset.Now);
+        switch (u.Step)
         {
-            _pace.Gone(now);
-            End(_pace.Done);
-            return;
-        }
-        if (CopyTitle.Percent(ActCom.Title(_window)) is { } p)
-        {
-            _pace.Sample(p, now);
-            if (_pace.Done) { End(true); return; }
-            _hub.Set(new Activity("copy", ActivityKind.Copy, ActivityText.Copying, ActivityText.Percent(p), "copy", (float)(p / 100)), Card);
+            case CopyStep.Progress:
+                _hub.Set(new Activity("copy", ActivityKind.Copy, ActivityText.Copying, ActivityText.Percent(u.Percent), "copy", (float)(u.Percent / 100)), Card);
+                break;
+            case CopyStep.Done or CopyStep.Closed:
+                _timer.Stop();
+                _hub.Remove("copy");
+                Log.Write(u.Step == CopyStep.Done ? "copy: done" : "copy: closed");
+                if (u.Step == CopyStep.Done) _hub.Moment(new Activity("copy-done", ActivityKind.CopyDone, ActivityText.CopyDone, null, "check"), Card);
+                break;
         }
     }
 
-    private void End(bool done)
-    {
-        _timer.Stop();
-        _window = 0;
-        _hub.Remove("copy");
-        Log.Write(done ? "copy: done" : "copy: closed");
-        if (done) _hub.Moment(new Activity("copy-done", ActivityKind.CopyDone, ActivityText.CopyDone, null, "check"), Card);
-        _pace = null;
-        Find();   // another dialog may still be open
-    }
-
-    private CardData? Card() => _pace is { } p ? new CardData(CardKind.Copy, Copy: new CopyCard(p.Percent, p.Left)) : new CardData(CardKind.Copy, Copy: new CopyCard(100, null));
+    private CardData? Card() => _watch.Pace is { } p ? new CardData(CardKind.Copy, Copy: new CopyCard(p.Percent, p.Left)) : new CardData(CardKind.Copy, Copy: new CopyCard(100, null));
 
     /// <summary>«فرجيني نافذة النسخ» (after your click on the card, so Windows lets us bring it forward).</summary>
     private void ShowDialog()
     {
-        if (_window == 0 || Native.IsWindow(_window) == 0) return;
-        ActNative.ShowWindow(_window, 9 /* SW_RESTORE */);
-        ActNative.SetForegroundWindow(_window);
+        var w = _watch.Window;
+        if (w == 0 || Native.IsWindow(w) == 0) return;
+        ActNative.ShowWindow(w, 9 /* SW_RESTORE */);
+        ActNative.SetForegroundWindow(w);
         _hub.CloseCard();
     }
 

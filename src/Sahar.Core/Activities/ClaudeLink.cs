@@ -39,6 +39,16 @@ public static class ClaudeLink
 
     public static LinkResult Remove(string? json, string exePath) => Edit(json, _ => { });
 
+    /// <summary>At her start (review #6): linked hooks that point at another Sahar.Engine.exe are repointed here;
+    /// not linked, or already here, nothing to write (Ok false).</summary>
+    public static LinkResult Follow(string? json, string exePath)
+    {
+        if (Root(json) is not { } root || root["hooks"] is not JsonObject hooks) return new LinkResult(false, null, "not-linked");
+        bool ours = hooks.Any(p => p.Value is JsonArray g && g.OfType<JsonObject>().Any(x => x["hooks"] is JsonArray hs && hs.OfType<JsonObject>().Any(Ours)));
+        if (!ours) return new LinkResult(false, null, "not-linked");
+        return Linked(json, exePath) ? new LinkResult(false, null, "same") : Install(json, exePath);
+    }
+
     public static bool Linked(string? json, string exePath)
     {
         if (Root(json) is not { } root || root["hooks"] is not JsonObject hooks) return false;

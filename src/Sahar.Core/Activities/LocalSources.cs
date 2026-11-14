@@ -59,9 +59,10 @@ public sealed class AwayLog
         _notes.Clear();
     }
 
-    public void Note(ActivityKind kind, DateTimeOffset t)
+    /// <summary>Only what fullscreen keeps for «وإنت غايب» (finishes, the quiet alerts) is noted (review 0.13 #5).</summary>
+    public void Note(ActivityKind kind, DateTimeOffset t, WeatherAlert? alert = null)
     {
-        if (_since is not null) _notes.Add((kind, t));
+        if (_since is not null && Knock.Decide(kind, Sahar.Core.Brain.FullscreenWhere.Hers, alert) == FullscreenAct.Keep) _notes.Add((kind, t));
     }
 
     /// <summary>The summary when the lock lasted ≥ 2 min and something happened; null otherwise. Once.</summary>
@@ -323,6 +324,25 @@ public static class ShelfThings
 
     public static string ZipName(IReadOnlyList<string> paths) => paths.Count == 1 ? Label(paths[0]) + ".zip" : "رف سحر.zip";
 
+    /// <summary>Zips <paramref name="files"/> into <paramref name="target"/> through a ".part" file: all or nothing.</summary>
+    public static bool Zip(IReadOnlyList<string> files, string target)
+    {
+        var part = target + ".part";
+        try
+        {
+            using (var zip = System.IO.Compression.ZipFile.Open(part, System.IO.Compression.ZipArchiveMode.Create))
+                foreach (var f in files)
+                    System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(zip, f, Path.GetFileName(f), System.IO.Compression.CompressionLevel.Optimal);
+            File.Move(part, target);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            try { File.Delete(part); } catch (Exception) { }
+            return false;
+        }
+    }
+
     /// <summary>The long side at 1920 (never larger than the original).</summary>
     public static (int W, int H) Shrunk(int w, int h)
     {
@@ -346,4 +366,70 @@ public static class ShelfThings
         int cut = path.LastIndexOfAny(['\\', '/']);
         return cut < 0 ? "" : path[..cut];
     }
+}
+
+public enum CopyStep { None, Progress, Done, Closed }
+
+public readonly record struct CopyUpdate(CopyStep Step, double Percent, TimeSpan? Left);
+
+/// <summary>
+/// Explorer's copy dialog, one at a time (review 0.13 #1): <see cref="Accept"/> a window once; a window that ended
+/// (100 %, or closed) is never accepted again, so a dialog that lingers at 100 % can't restart the watch. The engine
+/// only reads titles; the decisions are here.
+/// </summary>
+public sealed class CopyWatch
+{
+    private nint _window, _ended;
+    private CopyPace? _pace;
+
+    public nint Window => _window;
+    public CopyPace? Pace => _pace;
+
+    public bool Accept(nint window)
+    {
+        if (window == 0 || window == _ended || _window != 0) return false;
+        _window = window;
+        _pace = new CopyPace();
+        return true;
+    }
+
+    public CopyUpdate Tick(bool exists, string title, DateTimeOffset now)
+    {
+        if (_window == 0 || _pace is null) return new(CopyStep.None, 0, null);
+        if (!exists)
+        {
+            _pace.Gone(now);
+            return End(_pace.Done ? CopyStep.Done : CopyStep.Closed);
+        }
+        if (CopyTitle.Percent(title) is not { } p) return new(CopyStep.None, _pace.Percent, _pace.Left);
+        _pace.Sample(p, now);
+        return _pace.Done ? End(CopyStep.Done) : new(CopyStep.Progress, p, _pace.Left);
+    }
+
+    private CopyUpdate End(CopyStep step)
+    {
+        var pct = _pace?.Percent ?? 0;
+        _ended = _window;
+        _window = 0;
+        _pace = null;
+        return new(step, pct, null);
+    }
+}
+
+/// <summary>A fetch at most once an hour; a failed one may try again at once (review 0.13 #9).</summary>
+public sealed class FetchGate
+{
+    private DateTimeOffset? _last, _previous;
+
+    public bool TryStart(DateTimeOffset now)
+    {
+        if (!Sahar.Core.Senses.WeatherRules.ShouldFetch(now, _last)) return false;
+        _previous = _last;
+        _last = now;
+        return true;
+    }
+
+    public void Failed() => _last = _previous;
+
+    public void Reset() => _last = _previous = null;
 }

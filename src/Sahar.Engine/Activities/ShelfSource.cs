@@ -152,6 +152,13 @@ internal sealed partial class ShelfSource : IDisposable
         catch (Exception e) { Log.Write($"shelf: thumbnail failed ({e.GetType().Name})"); }
     }
 
+    /// <summary>Test mode: files on the shelf as if dropped.</summary>
+    public void TestAdd(IEnumerable<string> paths)
+    {
+        _shelf.Add(paths, DateTimeOffset.Now);
+        Show();
+    }
+
     private List<string> Chosen()
     {
         var tiles = Tiles();
@@ -246,7 +253,9 @@ internal sealed partial class ShelfSource : IDisposable
                     new BitmapTransform { ScaledWidth = (uint)w, ScaledHeight = (uint)h, InterpolationMode = BitmapInterpolationMode.Fant },
                     ExifOrientationMode.RespectExifOrientation, ColorManagementMode.DoNotColorManage).AsTask();
                 var target = Free(ShelfThings.ShrunkPath(path));
-                using var output = await FileRandomAccessStream.OpenAsync(target, FileAccessMode.ReadWrite).AsTask();
+                // A new file (review #8: the two-argument OpenAsync only opens one that exists).
+                using var output = await FileRandomAccessStream.OpenAsync(target, FileAccessMode.ReadWrite, StorageOpenOptions.None,
+                    FileOpenDisposition.CreateNew).AsTask();
                 var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, output).AsTask();
                 encoder.SetSoftwareBitmap(bmp);
                 await encoder.FlushAsync().AsTask();
@@ -257,30 +266,34 @@ internal sealed partial class ShelfSource : IDisposable
         _ui.TryEnqueue(() => Safe(() =>
         {
             Log.Write($"shelf: shrank {done}");
+            ShrinkCount += done;
+            ShrinkDone?.Invoke(done > 0);
             _say(done > 0 ? "صغّرتها، حطيتها جنبها 🤏" : "ما قدرت صغّرها");
             _hub.CloseCard();
         }));
     }
 
+    /// <summary>Off the UI thread, all or nothing (a ".part" file until it is whole), then she says so (review #7).</summary>
     private void Zip(List<string> files)
     {
         files = files.Where(File.Exists).ToList();
         if (files.Count == 0) return;
-        try
-        {
-            var target = Free(ShelfThings.Beside(files[0], ShelfThings.ZipName(files)));
-            using (var zip = ZipFile.Open(target, ZipArchiveMode.Create))
-                foreach (var f in files) zip.CreateEntryFromFile(f, Path.GetFileName(f), CompressionLevel.Optimal);
-            Log.Write($"shelf: zipped {files.Count}");
-            _say("ضغطتهن، الملف جنبهن 📦");
-        }
-        catch (Exception e)
-        {
-            Log.Write($"shelf: zip failed ({e.GetType().Name})");
-            _say("ما قدرت اضغطهن");
-        }
         _hub.CloseCard();
+        var target = Free(ShelfThings.Beside(files[0], ShelfThings.ZipName(files)));
+        Task.Run(() => ShelfThings.Zip(files, target)).ContinueWith(t => _ui.TryEnqueue(() => Safe(() =>
+        {
+            bool ok = t.IsCompletedSuccessfully && t.Result;
+            Log.Write(ok ? $"shelf: zipped {files.Count}" : "shelf: zip failed");
+            _say(ok ? "ضغطتهن، الملف جنبهن 📦" : "ما قدرت اضغطهن");
+            if (ok) ZipCount++;
+            ZipDone?.Invoke(ok);
+        })), TaskScheduler.Default);
     }
+
+    /// <summary>Test diagnostics: a zip or a shrink finished (true when it worked).</summary>
+    public event Action<bool>? ZipDone, ShrinkDone;
+    public int ShrinkCount { get; private set; }
+    public int ZipCount { get; private set; }
 
     /// <summary>A name that doesn't exist yet ("x.zip", then "x (2).zip"…): nothing of yours is ever overwritten.</summary>
     private static string Free(string path)

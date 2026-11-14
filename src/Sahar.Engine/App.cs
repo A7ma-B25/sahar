@@ -510,6 +510,7 @@ internal sealed unsafe class App
         };
         using var activities = acts;
         var claudeSource = new ClaudeSource(acts, director.Post);
+        Task.Run(HookMode.Follow);   // linked hooks follow her when she moved (review #6)
         var weatherSource = new WeatherSource(acts, weather, () => settings, director.Post);
         var mediaSource = new MediaSource(ui, acts, () => settings, Save, Path.Combine(Log.Folder, "lyrics"));
         // Her expressions for activities (0.13 §1.5): music sways her and tints her halo with the cover; rain droops her
@@ -898,7 +899,7 @@ internal sealed unsafe class App
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} faceAnims={sahar.FaceAnimationsMade + FadeLayer.StepAnimationsMade} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
                 FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
             pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
-            ActivityPipe.Register(pipe, acts, claudeSource, () => monitors);
+            ActivityPipe.Register(pipe, acts, claudeSource, () => monitors, shelfSource);
             // Her activity expressions on demand (0.13 §1.5): the sway, the halo's cover colour, the drooping leaf.
             pipe.Register("activity-expr", r =>
             {
