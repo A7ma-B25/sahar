@@ -336,4 +336,15 @@ public sealed class TurnRunnerTests
         Assert.Empty(_store.Proposed);   // a day without proposals after a hard moment
         Assert.Empty(_io.Of("propose"));
     }
+
+    [Fact]
+    public async Task Turn_RiskTagTravelsWithTheSay()
+    {
+        _llm.Reply(Decision(say: "x").TrimEnd('}') + ""","risk":"high"}""");
+        await Run(Chat("x"));
+        Assert.Equal("high", _io.Final.Risk);
+        _llm.Reply(Decision(say: "y"));
+        await Run(Chat("y", "t2"));
+        Assert.Null(_io.Final.Risk);
+    }
 }

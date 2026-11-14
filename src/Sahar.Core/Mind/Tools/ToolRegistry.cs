@@ -154,6 +154,11 @@ public sealed class ToolRegistry(IReadOnlyList<ToolSpec> announced) : IToolRegis
             w.WriteEndObject();
             w.WriteEndObject();
 
+            // Optional, last (review X4): her own tag for a line that may be risky; the host's SayGuard checks every say.
+            w.WriteStartObject(SayGuard.RiskField);
+            Enum(w, SayGuard.RiskValues);
+            w.WriteEndObject();
+
             w.WriteEndObject();
             Required(w, ["actions", "next", "say", "mood", "remember"]);
             w.WriteBoolean("additionalProperties", false);

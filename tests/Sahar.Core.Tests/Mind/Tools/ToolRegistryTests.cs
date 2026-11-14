@@ -177,7 +177,7 @@ public sealed class ToolRegistryTests
         Assert.Equal("object", root.GetProperty("type").GetString());
         Assert.False(root.GetProperty("additionalProperties").GetBoolean());
         // actions first, say after them: she streams her words only once she knows whether she acts (truthful confirmations).
-        Assert.Equal(["actions", "next", "say", "mood", "remember"], root.GetProperty("properties").EnumerateObject().Select(p => p.Name));
+        Assert.Equal(["actions", "next", "say", "mood", "remember", "risk"], root.GetProperty("properties").EnumerateObject().Select(p => p.Name));
         var actions = root.GetProperty("properties").GetProperty("actions");
         Assert.Equal(3, actions.GetProperty("maxItems").GetInt32());
         var names = actions.GetProperty("items").GetProperty("anyOf").EnumerateArray()
@@ -208,5 +208,14 @@ public sealed class ToolRegistryTests
         var r = MindParts.ToolRegistry(list);
         Assert.Equal(list, r.Announced);
         Assert.True(r.Validate(Call("note.save", """{"text":"x"}""")).Ok);
+    }
+
+    [Fact]
+    public void Schema_HasTheOptionalRiskTag()
+    {
+        using var doc = JsonDocument.Parse(All.DecisionSchema());
+        var props = doc.RootElement.GetProperty("properties");
+        Assert.Equal(Sahar.Core.Mind.SayGuard.RiskValues, props.GetProperty(Sahar.Core.Mind.SayGuard.RiskField).GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+        Assert.DoesNotContain(Sahar.Core.Mind.SayGuard.RiskField, doc.RootElement.GetProperty("required").EnumerateArray().Select(e => e.GetString()));
     }
 }
