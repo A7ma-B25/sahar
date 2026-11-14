@@ -79,6 +79,14 @@ jobs:
           $pv = @("HKLM:\SOFTWARE\WOW6432Node\$key", "HKCU:\Software\$key") | ForEach-Object { (Get-ItemProperty $_ -ErrorAction SilentlyContinue).pv } | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1
           if (-not $pv) { throw 'The WebView2 runtime is not installed on this runner: the settings app cannot run.' }
           Write-Host "WebView2 runtime $pv"
+      # The mind stage's tiny model (plan Ruling 4, 291.5 MB, pinned): cached by its pin; never the 5 GB model.
+      - uses: actions/cache@v4
+        with:
+          path: artifacts/mind/downloads
+          key: mind-ci-model-${{ hashFiles('tools/mind/pins.json') }}
+      - name: The mind stage's tiny model (pinned)
+        shell: pwsh
+        run: ./tools/mind/fetch.ps1 -Model -Out artifacts/mind
       # Publishing a commit that already passed every UI stage (a successful "ui-test all" run on the same SHA):
       # only smoke and gallery run here (the release carries gallery.png). Otherwise every stage, as before.
       - name: A full UI pass on this commit?
