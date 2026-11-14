@@ -73,8 +73,8 @@ public static partial class Distress
         return latin > arabic;
     }
 
-    // «… موت/ميت/مت من الضحك / عالجوع» (laughing, hunger, tiredness, cold, boredom, …), «قتلني/موتني ضحك»: figures of
+    // «… موت/ميت/مت من الضحك / عالجوع» (laughing, hunger, tiredness, cold, boredom, …; never «القهر» or «الخوف»: those can be real), «قتلني/موتني ضحك»: figures of
     // speech, taken out first. Only these objects: «بدي موت مشان…» or «عشان…» stays a cue.
-    [GeneratedRegex(@"(?:(?:بدي|رح|ح|عم)\s+)?(?:ب?ا?موت|ميت|ميته|مت|قتلت?ني|موتت?ني)\s+(?:(?:من|م)\s+|ع|على\s+)?(?:ال)?(?:ضحك|ضحكه|جوع|تعب|نعس|برد|حر|شوب|ملل|زهق|قهر|فرح|فرحه|شوق|غيره|خوف|عطش|فضول|حماس|شغل)(?!\p{L})", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:(?:بدي|رح|ح|عم)\s+)?(?:ب?ا?موت|ميت|ميته|مت|قتلت?ني|موتت?ني)\s+(?:(?:من|م)\s+|ع|على\s+)?(?:ال)?(?:ضحك|ضحكه|جوع|تعب|نعس|برد|حر|شوب|ملل|زهق|فرح|فرحه|شوق|غيره|عطش|فضول|حماس|شغل)(?!\p{L})", RegexOptions.CultureInvariant)]
     private static partial Regex Idiom();
 }

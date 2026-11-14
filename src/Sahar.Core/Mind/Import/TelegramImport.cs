@@ -25,34 +25,37 @@ public static class TelegramImport
                 && me.TryGetProperty("user_id", out var uid) && uid.ValueKind == JsonValueKind.Number)
                 myId = "user" + uid.GetRawText();
             if (root.TryGetProperty("messages", out var msgs)) Read(msgs, lines, myId, out _);
-            string? myName = null;
+            string? mine = null;
             if (root.TryGetProperty("chats", out var chats) && chats.ValueKind == JsonValueKind.Object
                 && chats.TryGetProperty("list", out var list) && list.ValueKind == JsonValueKind.Array)
                 foreach (var chat in list.EnumerateArray())
                     if (chat.ValueKind == JsonValueKind.Object && chat.TryGetProperty("messages", out var m))
                     {
                         Read(m, lines, myId, out var found);
-                        myName ??= found;
+                        mine ??= found;
                     }
-            return lines.Count == 0 ? null : new ChatExport("telegram", lines, myName);
+            return lines.Count == 0 ? null : new ChatExport("telegram", lines, mine);
         }
     }
 
-    private static void Read(JsonElement messages, List<ChatLine> into, string? myId, out string? myName)
+    /// <summary>Messages with text; a forwarded one is someone else's words and is dropped. <paramref name="mine"/>: his
+    /// id when a message carries it.</summary>
+    private static void Read(JsonElement messages, List<ChatLine> into, string? myId, out string? mine)
     {
-        myName = null;
+        mine = null;
         if (messages.ValueKind != JsonValueKind.Array) return;
         foreach (var m in messages.EnumerateArray())
         {
             if (m.ValueKind != JsonValueKind.Object) continue;
             if (!m.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "message") continue;
             if (!m.TryGetProperty("from", out var from) || from.ValueKind != JsonValueKind.String) continue;
+            if (m.TryGetProperty("forwarded_from", out _)) continue;
+            string? senderId = m.TryGetProperty("from_id", out var fid) && fid.ValueKind == JsonValueKind.String ? fid.GetString() : null;
             var sender = from.GetString()!.Trim();
             var text = m.TryGetProperty("text", out var t) ? Text(t).Trim() : "";
             if (sender.Length == 0 || text.Length == 0) continue;
-            if (myId is not null && myName is null && m.TryGetProperty("from_id", out var fid) && fid.ValueKind == JsonValueKind.String && fid.GetString() == myId)
-                myName = sender;
-            into.Add(new ChatLine(sender, text));
+            if (myId is not null && senderId == myId) mine = myId;
+            into.Add(new ChatLine(sender, text, senderId));
         }
     }
 

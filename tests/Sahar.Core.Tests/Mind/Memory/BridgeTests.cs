@@ -24,6 +24,7 @@ public sealed class BridgeTests : IDisposable
     private sealed class FakeEngine : IEngineLink
     {
         public List<string> Commands = [];
+        public Func<string, bool>? KeyAt;   // was the key still there when this command came?
         public bool Running => true;
         public Task<bool> ReloadAsync(bool askHello = false) => Task.FromResult(true);
         public Task<(bool Ok, string? Reason)> TryShortcutAsync(string value) => Task.FromResult<(bool, string?)>((true, null));
@@ -32,7 +33,7 @@ public sealed class BridgeTests : IDisposable
         public Task<EraseOutcome?> EraseAllAsync() => Task.FromResult<EraseOutcome?>(new EraseOutcome([], true));
         public Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args)
         {
-            Commands.Add(name);
+            Commands.Add(name + (KeyAt?.Invoke(name) == true ? ":key" : ""));
             return Task.FromResult<IReadOnlyDictionary<string, string>?>(new Dictionary<string, string> { ["ok"] = "true" });
         }
     }
@@ -40,7 +41,8 @@ public sealed class BridgeTests : IDisposable
     private Dictionary<string, MindBridges.Handler> Table()
     {
         var t = new Dictionary<string, MindBridges.Handler>(StringComparer.Ordinal);
-        new MemoryBridge(Personal, Models, Runtime, new MindBridgeContext(SettingsPath, _engine, () => _now)).Register(t);
+        new MemoryBridge(Personal, Models, Runtime, new MindBridgeContext(SettingsPath, _engine, () => _now),
+            _ => { _engine.Commands.Add("waited"); return Task.CompletedTask; }).Register(t);
         return t;
     }
 
@@ -103,6 +105,7 @@ public sealed class BridgeTests : IDisposable
         Assert.Equal("chats", first.GetProperty("sources")[0].GetProperty("kind").GetString());
         Assert.False(first.GetProperty("sources")[0].TryGetProperty("snippet", out _));   // the page shows kind and date, never words
         Assert.True(body.GetProperty("consent").GetProperty("chats").GetBoolean());
+        Assert.Equal("ok", body.GetProperty("store").GetString());
 
         (ok, body) = await Ask("mind-profile-confirm", J(new() { ["item"] = a.Id }));
         Assert.True(ok);
@@ -200,11 +203,14 @@ public sealed class BridgeTests : IDisposable
         File.WriteAllText(Path.Combine(Models, "gemma.gguf"), "weights");
         Assert.True(File.Exists(Path.Combine(Personal, SecretBox.KeyFile)));
 
+        _engine.KeyAt = _ => File.Exists(Path.Combine(Personal, SecretBox.KeyFile));
         var (ok, _) = await Ask("mind-forget");
         Assert.True(ok);
         Assert.False(Directory.Exists(Personal));
+        // The Mind is stopped and waited for first, while the key is still there; then the shred; then she says it.
+        Assert.Equal(["mind-stop:key", "waited", "mind-forgot"], _engine.Commands);
         Assert.True(File.Exists(Path.Combine(Models, "gemma.gguf")));   // default: the model stays (nothing about him in it)
-        Assert.Contains("mind-forgot", _engine.Commands);
+
         Assert.True(File.Exists(SettingsPath));                          // settings stay
 
         Directory.CreateDirectory(Runtime);

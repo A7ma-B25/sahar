@@ -19,7 +19,7 @@ public static partial class MindBridges
 /// consent in settings.json (Ruling 3): without it nothing is kept and the page asks. The page sees kinds, counts and
 /// dates of sources, never snippets. Nothing here logs text.
 /// </summary>
-public sealed class MemoryBridge(string personal, string models, string runtime, MindBridgeContext ctx)
+public sealed class MemoryBridge(string personal, string models, string runtime, MindBridgeContext ctx, Func<TimeSpan, Task>? waitMindGone = null)
 {
     public void Register(Dictionary<string, MindBridges.Handler> t)
     {
@@ -63,6 +63,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
         if (string.IsNullOrEmpty(id)) return Fail("bad-request");
         if (needsText && string.IsNullOrWhiteSpace(text)) return Fail("bad-text");
         var store = Store();
+        if (store.Status == StoreStatus.Locked) return Fail("store-locked");
         return change(store, id, text) ? Ok(w => Profile(w, store)) : Fail("not-found");
     }
 
@@ -78,6 +79,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
         foreach (var i in all.Where(i => i.ShapesHer).OrderBy(i => i.Category).ThenByDescending(i => i.ConfirmedAt)) WriteItem(w, i);
         w.WriteEndArray();
         Style(w, store.Style());
+        w.WriteString("store", Camel(store.Status.ToString()));
         var c = LearnConsent.From(Settings());
         w.WriteStartObject("consent");
         w.WriteBoolean("chats", c.Chats);
@@ -162,9 +164,13 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
         if (content.Length > ChatImport.MaxChars) return Fail("too-big");
         if (ChatImport.Parse(content, Str(r, "name")) is not { } chat) return Fail("not-a-chat");
         var senders = chat.Senders;
-        var me = Str(r, "me") is { Length: > 0 } asked && senders.Any(s => s.Name == asked) ? asked
-            : chat.Me is { } known && senders.Any(s => s.Name == known) ? known
-            : Settings().UserName is { Length: > 0 } name && senders.FirstOrDefault(s => string.Equals(s.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)) is { } byName ? byName.Name
+        // "me" is a sender key: the export's id when it has ids, else the name. A name from settings picks him only
+        // when exactly one sender has it.
+        static string Key(SenderCount s) => s.Id ?? s.Name;
+        var byName = Settings().UserName is { Length: > 0 } name ? senders.Where(s => string.Equals(s.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)).ToList() : [];
+        var me = Str(r, "me") is { Length: > 0 } asked && senders.Any(s => Key(s) == asked) ? asked
+            : chat.Me is { } known && senders.Any(s => Key(s) == known) ? known
+            : byName.Count == 1 ? Key(byName[0])
             : null;
         var his = me is null ? [] : chat.His(me);
         return Ok(w =>
@@ -175,6 +181,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
             {
                 w.WriteStartObject();
                 w.WriteString("name", s.Name);
+                w.WriteString("key", Key(s));
                 w.WriteNumber("count", s.Count);
                 w.WriteEndObject();
             }
@@ -195,7 +202,7 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
         if (content.Length > ChatImport.MaxChars) return Fail("too-big");
         if (!Settings().MindLearnImports) return Fail("no-consent");
         if (ChatImport.Parse(content, Str(r, "name")) is not { } chat) return Fail("not-a-chat");
-        if (string.IsNullOrEmpty(me) || chat.Senders.All(s => s.Name != me)) return Fail("bad-sender");
+        if (string.IsNullOrEmpty(me) || chat.Senders.All(s => (s.Id ?? s.Name) != me)) return Fail("bad-sender");
         var store = Store();
         int kept = store.AddSamples(LearnSource.Imports, chat.His(me));
         return Ok(w => { w.WriteNumber("kept", kept); Style(w, store.Style()); });
@@ -205,6 +212,10 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
     /// downloaded model too unless he asks (it holds nothing about him). She is told, so she stops the Mind and says so.</summary>
     private async Task<MindBridgeReply> Forget(JsonElement r)
     {
+        // The Mind first (review B2): told to quit, then waited for, so no turn in flight writes after the shred (and a
+        // store that saw the old key never makes a new one anyway).
+        await ctx.Engine.CommandAsync("mind-stop", null);
+        await (waitMindGone ?? WaitMindGone)(TimeSpan.FromSeconds(5));
         Store().ForgetAll();
         bool model = r.ValueKind == JsonValueKind.Object && r.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.True;
         if (model)
@@ -219,6 +230,21 @@ public sealed class MemoryBridge(string personal, string models, string runtime,
             w.WriteBoolean("model", model);
             if (!gone) w.WriteString("error", "in-use");
         });
+    }
+
+    private static async Task WaitMindGone(TimeSpan limit)
+    {
+        var deadline = DateTime.UtcNow + limit;
+        foreach (var p in System.Diagnostics.Process.GetProcessesByName("Sahar.Mind"))
+        {
+            try
+            {
+                var left = deadline - DateTime.UtcNow;
+                if (left > TimeSpan.Zero) await p.WaitForExitAsync(new CancellationTokenSource(left).Token);
+            }
+            catch (Exception) { /* gone already, or the time is up: the shred goes on */ }
+            finally { p.Dispose(); }
+        }
     }
 
     // ---- small parts ----

@@ -22,6 +22,8 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
     private const string StoreFile = "store", StyleFile = "style", MusicFile = "music";
 
     public SecretBox Box => box;
+    /// <summary>Ok / Empty / Locked (his key cannot be opened: nothing is written) / Recovered (a damaged file kept aside).</summary>
+    public StoreStatus Status => box.Status();
 
     // ---- the profile ----
 
@@ -38,7 +40,7 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
         {
             if (d.Rejected.Contains(hash)) return null;
             var at = now();
-            var src = source with { Snippet = sensitive == Sensitivity.None && source.Snippet is { } s ? Clip(Clean(s, MaxSnippet)) : null };
+            var src = source with { Snippet = sensitive == Sensitivity.None && source.Snippet is { } s ? Clip(Clean(Import.Scrub.Clean(s), MaxSnippet)) : null };
             var row = d.Profile.FirstOrDefault(r => r.Hashes.Contains(hash));
             if (row is null)
             {
@@ -135,7 +137,9 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
     public int AddSamples(LearnSource source, IEnumerable<string> lines)
     {
         if (!consent().Allows(source)) return 0;
-        var clean = lines.Select(l => Clean(Import.Scrub.Clean(l), MaxSampleChars)).Where(l => l.Length >= 2).ToList();
+        // A line about something private, or a hard moment, is never a style sample (review B4): no consent covers it.
+        var clean = lines.Select(l => Clean(Import.Scrub.Clean(l), MaxSampleChars))
+            .Where(l => l.Length >= 2 && Safety.Sensitive.Check(l) == Sensitivity.None && !Safety.Distress.Check(l)).ToList();
         if (clean.Count == 0) return 0;
         return Change(StyleFile, MemoryJson.Default.StyleData, () => new StyleData(), d =>
         {
@@ -295,14 +299,25 @@ public sealed class MindStore(SecretBox box, Func<DateTimeOffset> now, Func<Lear
         return data;
     }
 
-    private TResult Change<T, TResult>(string name, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, Func<T> empty, Func<T, TResult> change)
+    /// <summary>Read, change, write in one hold of the lock. Refused (<paramref name="failed"/>) when the key cannot be
+    /// opened, the other writer holds the lock, or a forget happened under this store; a damaged file is kept aside
+    /// first, never written over.</summary>
+    private TResult Change<T, TResult>(string name, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, Func<T> empty, Func<T, TResult> change, TResult failed = default!)
     {
-        using var _ = box.Lock();
-        var data = Parse(box.ReadLocked(name), info) ?? empty();
-        var result = change(data);
-        Retain(data!);
-        box.WriteLocked(name, JsonSerializer.SerializeToUtf8Bytes(data, info));
-        return result;
+        try
+        {
+            using var _ = box.Lock();
+            var bytes = box.ReadLocked(name, out var state);
+            if (state == ReadState.KeyLocked) return failed;
+            var data = Parse(bytes, info);
+            if (state == ReadState.Damaged || (state == ReadState.Ok && data is null)) box.KeepAside(name);
+            data ??= empty();
+            var result = change(data);
+            Retain(data!);
+            box.WriteLocked(name, JsonSerializer.SerializeToUtf8Bytes(data, info));
+            return result;
+        }
+        catch (MindStoreException) { return failed; }
     }
 
     /// <summary>«خلّي حكينا» (MindEpisodeDays): the words of their chats and what he played go after the days; what he

@@ -72,6 +72,8 @@ addStrings({
     youForgetDone: 'نسيت كل شي… مرحبا من جديد 🌙',
     youForgetFailed: 'في ملف مسكّر هلق. سكّرني وجرّب كمان مرة.',
     youFailed: 'ما زبطت. جرّب كمان مرة؟',
+    youStoreLocked: 'ما عم اقدر افتح ذاكرتي على هالجهاز هلق، فما عم احفظ شي جديد. ما مسحت شي منها.',
+    youStoreRecovered: 'كان في ملف من ذاكرتي ما انفتح. حطّيتو على جنب بدل ما امسحو، وكمّلت من جديد.',
 
     eraseConfirmMind: 'رح انسى كل شي: اسمك، ملاحظاتك، شو نسخت، وشو فهمت عنك.',
     eraseModelToo: 'واحذفي عقلي المنزّل كمان (ما فيه شي عنك)',
@@ -145,6 +147,8 @@ addStrings({
     youForgetDone: 'I forgot everything… hello again 🌙',
     youForgetFailed: 'A file is in use right now. Close me and try again.',
     youFailed: 'That didn’t work. Try again?',
+    youStoreLocked: 'I can’t open my memory on this PC right now, so I’m not saving anything new. I erased nothing.',
+    youStoreRecovered: 'One of my memory files wouldn’t open. I put it aside instead of erasing it, and started fresh.',
 
     eraseConfirmMind: 'I’ll forget everything: your name, your notes, what you copied, and what I understood about you.',
     eraseModelToo: 'And delete my downloaded mind too (it holds nothing about you)',

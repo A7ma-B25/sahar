@@ -167,7 +167,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
   let importPanel = null;
   if (state.imp) {
     const imp = state.imp;
-    const who = select('import-me', [['', tx('youImportWhoNone')], ...imp.senders.map((s) => [s.name, `${s.name} (${num(s.count)})`])], imp.me || '',
+    const who = select('import-me', [['', tx('youImportWhoNone')], ...imp.senders.map((s) => [s.key || s.name, `${s.name} (${num(s.count)})`])], imp.me || '',
       (v) => preview(imp.content, imp.name, v));
     importPanel = h('div', { class: 'mm-panel', id: 'import-preview' },
       row(tx('youImportWho'), who, { forId: 'import-me' }),
@@ -245,9 +245,15 @@ export async function render({ S, tx, set, ask, render: rerender }) {
   }
   forgetAsk();
 
+  // The store as it is: his key cannot be opened (nothing is written, nothing erased) or a damaged file was kept aside.
+  const storeNote = data.store === 'locked' || data.store === 'recovered'
+    ? h('p', { class: 'mm-empty mm-store', id: 'you-store', role: 'status', text: tx(data.store === 'locked' ? 'youStoreLocked' : 'youStoreRecovered') })
+    : null;
+
   return [
     title(tx('youTitle')),
     sub(tx('youSub')),
+    storeNote,
     section(tx('youNoticed'), 'you-noticed-title'),
     proposed,
     section(tx('youConfirmed')),
