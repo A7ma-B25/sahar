@@ -31,8 +31,9 @@ public static partial class Scrub
     [GeneratedRegex(@"(?i)\b(?:https?://|www\.)[^\s<>«»""]+", RegexOptions.CultureInvariant)]
     private static partial Regex UrlRx();
 
-    // A bare domain with a path or a well-known ending: youtube.com/watch, t.me/x, site.org.
-    [GeneratedRegex(@"(?i)\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|me|sy|sa|ae|co|app|dev|ly|gl|be|tv|info|xyz)\b(?:/[^\s<>«»""]*)?", RegexOptions.CultureInvariant)]
+    // Any bare domain (a Latin name, a dot, a 2–24 letter ending), with or without a path: youtube.com/watch, t.me/x,
+    // my-shop.store. A file name like notes.txt goes too; a style sample loses nothing by it.
+    [GeneratedRegex(@"(?i)\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,24}\b(?:/[^\s<>«»""]*)?", RegexOptions.CultureInvariant)]
     private static partial Regex DomainRx();
 
     [GeneratedRegex(@"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b", RegexOptions.CultureInvariant)]

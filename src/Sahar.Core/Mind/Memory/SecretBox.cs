@@ -4,6 +4,20 @@ using System.Text;
 
 namespace Sahar.Core.Mind.Memory;
 
+/// <summary>The box refuses a write rather than lose what is there: <c>locked</c> (the key cannot be opened),
+/// <c>forgotten</c> (this box saw a key that «انسي كل شي» removed under it), <c>busy</c> (the other writer holds the
+/// mutex). Callers treat it as "not kept".</summary>
+public sealed class MindStoreException(string code) : IOException(code)
+{
+    public string Code { get; } = code;
+}
+
+/// <summary>What a read found.</summary>
+public enum ReadState { Missing, Ok, KeyLocked, Damaged }
+
+/// <summary>How the store is (the «عنك» page and her bubble say it calmly).</summary>
+public enum StoreStatus { Ok, Empty, Locked, Recovered }
+
 /// <summary>Wraps the store's 256-bit key for rest (spec §7.8). <see cref="Unwrap"/> answers null for anything it
 /// cannot open (another user, a copied disk, a damaged file), never throws.</summary>
 public interface IKeyWrap
@@ -109,11 +123,12 @@ public sealed class TestKeyWrap : IKeyWrap
 /// SettingsStore. The key is read under the mutex for every call, so once <see cref="ForgetAll"/> deleted it nothing
 /// written before opens again, in any process. Never logs, never throws on reading.
 /// </summary>
-public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
+public sealed class SecretBox(string folder, IKeyWrap wrap, TimeSpan? mutexWait = null) : ISecretBox
 {
     public const string KeyFile = "key.dpapi";
     public const string MutexName = @"Local\Sahar.Mind.Store";
-    private static readonly TimeSpan MutexWait = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _wait = mutexWait ?? TimeSpan.FromSeconds(5);
+    private bool _sawKey;   // this box opened a key once: a missing key later means a forget, never "make a new one"
     private static readonly byte[] Magic = "SMB1"u8.ToArray();
     private const int NonceSize = 12, TagSize = 16;
 
@@ -124,8 +139,34 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
 
     public byte[]? Read(string name)
     {
-        using var _ = Lock();
-        return ReadLocked(name);
+        try
+        {
+            using var gate = Lock();
+            return ReadLocked(name, out _);
+        }
+        catch (MindStoreException) { return null; }
+    }
+
+    /// <summary>Locked: a key is there and cannot be opened. Recovered: a damaged file was kept aside (*.bad).</summary>
+    public StoreStatus Status()
+    {
+        try
+        {
+            using var _ = Lock();
+            var key = Path.Combine(Folder, KeyFile);
+            if (File.Exists(key) && wrap.Unwrap(File.ReadAllBytes(key)) is not { Length: 32 }) return StoreStatus.Locked;
+            if (Directory.Exists(Folder) && Directory.EnumerateFiles(Folder, "*.bad").Any()) return StoreStatus.Recovered;
+            return File.Exists(key) ? StoreStatus.Ok : StoreStatus.Empty;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return StoreStatus.Locked; }
+    }
+
+    /// <summary>A file that does not open is moved aside as <c>name-&lt;time&gt;.bad</c>, never written over.</summary>
+    internal void KeepAside(string name)
+    {
+        var path = PathOf(name);
+        try { File.Move(path, Path.Combine(Folder, $"{name}-{DateTime.UtcNow:yyyyMMddHHmmss}.bad"), overwrite: true); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new MindStoreException("locked"); }
     }
 
     public void Write(string name, ReadOnlySpan<byte> data)
@@ -134,6 +175,7 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
         WriteLocked(name, data);
     }
 
+    /// <summary>Throws <see cref="MindStoreException"/> rather than write without the lock or over a key it cannot open.</summary>
     public void Delete(string name)
     {
         using var _ = Lock();
@@ -148,6 +190,7 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
     {
         using var _ = Lock();
         Shred(Folder, Deleting);
+        _sawKey = false;   // forgetting is this box's own doing: its next write starts fresh
     }
 
     /// <summary>The same order for a folder this box does not own (erase-all), with no lock: the caller holds none.</summary>
@@ -185,17 +228,24 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
 
     // ---- under the lock (MindStore reads, changes and writes in one hold) ----
 
+    /// <summary>The cross-process gate: three tries, then <c>busy</c> (never on without it). An abandoned mutex is ours.</summary>
     internal IDisposable Lock()
     {
-        var m = new Mutex(false, MutexName);
-        bool owned;
-        try { owned = m.WaitOne(MutexWait); }
-        catch (AbandonedMutexException) { owned = true; }
-        return new Gate(m, owned);
+        for (int i = 0; i < 3; i++)
+        {
+            var m = new Mutex(false, MutexName);
+            bool owned;
+            try { owned = m.WaitOne(_wait); }
+            catch (AbandonedMutexException) { owned = true; }
+            if (owned) return new Gate(m);
+            m.Dispose();
+        }
+        throw new MindStoreException("busy");
     }
 
-    internal byte[]? ReadLocked(string name)
+    internal byte[]? ReadLocked(string name, out ReadState state)
     {
+        state = ReadState.Missing;
         var path = PathOf(name);
         byte[] blob;
         try
@@ -203,10 +253,11 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
             if (!File.Exists(path)) return null;
             blob = File.ReadAllBytes(path);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { state = ReadState.KeyLocked; return null; }
+        state = ReadState.Damaged;
         if (blob.Length < Magic.Length + NonceSize + TagSize || !blob.AsSpan(0, Magic.Length).SequenceEqual(Magic)) return null;
         var key = LoadKey(create: false);
-        if (key is null) return null;
+        if (key is null) { state = File.Exists(Path.Combine(Folder, KeyFile)) ? ReadState.KeyLocked : ReadState.Damaged; return null; }
         try
         {
             var nonce = blob.AsSpan(Magic.Length, NonceSize);
@@ -215,6 +266,7 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
             var plain = new byte[cipher.Length];
             using var gcm = new AesGcm(key, TagSize);
             gcm.Decrypt(nonce, cipher, tag, plain, Aad(name));
+            state = ReadState.Ok;
             return plain;
         }
         catch (CryptographicException) { return null; }
@@ -241,22 +293,29 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
         finally { CryptographicOperations.ZeroMemory(key); }
     }
 
-    /// <summary>The key, unwrapped; a new one when there is none (or it cannot be opened) and <paramref name="create"/>:
-    /// a fresh store, and every older file becomes unreadable.</summary>
+    /// <summary>The key, unwrapped. A new one ONLY when there is none and this box never saw one (review B1, B2): a key
+    /// that cannot be opened is never replaced (<c>locked</c>), and a key that vanished under this box (a forget while
+    /// it worked) is never recreated (<c>forgotten</c>).</summary>
     private byte[]? LoadKey(bool create)
     {
         var path = Path.Combine(Folder, KeyFile);
-        try
+        if (File.Exists(path))
         {
-            if (File.Exists(path) && wrap.Unwrap(File.ReadAllBytes(path)) is { Length: 32 } key) return key;
+            byte[]? key = null;
+            try { key = wrap.Unwrap(File.ReadAllBytes(path)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (key is { Length: 32 }) { _sawKey = true; return key; }
+            if (!create) return null;
+            throw new MindStoreException("locked");
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         if (!create) return null;
+        if (_sawKey) throw new MindStoreException("forgotten");
         var fresh = RandomNumberGenerator.GetBytes(32);
         Directory.CreateDirectory(Folder);
         var tmp = path + ".tmp";
         File.WriteAllBytes(tmp, wrap.Wrap(fresh));
         File.Move(tmp, path, overwrite: true);
+        _sawKey = true;
         return fresh;
     }
 
@@ -269,11 +328,11 @@ public sealed class SecretBox(string folder, IKeyWrap wrap) : ISecretBox
 
     private static byte[] Aad(string name) => Encoding.UTF8.GetBytes("sahar-mind:" + name);
 
-    private readonly struct Gate(Mutex mutex, bool owned) : IDisposable
+    private sealed class Gate(Mutex mutex) : IDisposable
     {
         public void Dispose()
         {
-            if (owned) mutex.ReleaseMutex();
+            mutex.ReleaseMutex();
             mutex.Dispose();
         }
     }

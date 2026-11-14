@@ -70,7 +70,7 @@ public sealed class ImportTests
         """;
         var chat = ChatImport.Parse(single, "result.json")!;
         Assert.Equal("telegram", chat.Format);
-        Assert.Equal(["صباح الخير", "شوف [رابط] و [حساب]"], chat.His("Ahmad"));
+        Assert.Equal(["صباح الخير", "شوف [رابط] و [حساب]"], chat.His("user111"));   // by from_id (review B3)
 
         const string full = """
         {"personal_information":{"user_id":111,"first_name":"Ahmad","last_name":""},
@@ -82,8 +82,26 @@ public sealed class ImportTests
              {"type":"message","from":"Ahmad","from_id":"user111","text":"منيح"}]}]}}
         """;
         var all = ChatImport.Parse(full, "result.json")!;
-        Assert.Equal("Ahmad", all.Me);   // known from his own export
+        Assert.Equal("user111", all.Me);   // known from his own export, by id
         Assert.Equal(["هلا", "منيح"], all.His(all.Me!));
+    }
+
+    [Fact]
+    public void Telegram_MatchesById_DropsForwarded()
+    {
+        const string json = """
+        {"personal_information":{"user_id":111,"first_name":"Ahmad"},
+         "chats":{"list":[{"name":"G","type":"private_group","messages":[
+           {"type":"message","from":"Ahmad","from_id":"user111","text":"أنا"},
+           {"type":"message","from":"Ahmad","from_id":"user999","text":"مش أنا بنفس الاسم"},
+           {"type":"message","from":"Ahmad","from_id":"user111","forwarded_from":"Sami","text":"كلام سامي"}]}]}}
+        """;
+        var chat = ChatImport.Parse(json, "result.json")!;
+        Assert.Equal("user111", chat.Me);
+        Assert.Equal(["أنا"], chat.His(chat.Me!));
+        Assert.Equal(2, chat.Senders.Count);   // two people, one name
+        Assert.All(chat.Senders, s => Assert.Equal("Ahmad", s.Name));
+        Assert.Contains(chat.Senders, s => s.Id == "user999");
     }
 
     [Theory]
@@ -102,6 +120,7 @@ public sealed class ImportTests
         Assert.Equal("حوّل على [حساب]", Scrub.Clean("حوّل على SY12 3456 7890 1234 5678 9012"));
         Assert.Equal("الكرت [رقم]", Scrub.Clean("الكرت 4111 1111 1111 1111"));
         Assert.Equal("تابع [حساب] هونيك", Scrub.Clean("تابع @sahar_moon هونيك"));
+        Assert.Equal("شوف [رابط] و [رابط]", Scrub.Clean("شوف my-shop.store و news.example.museum/a"));
         // Times, small numbers, a year and a price stay.
         Assert.Equal("منلتقى الساعة 10:30 بعد 5 دقايق سنة 2026 بـ 15000", Scrub.Clean("منلتقى الساعة 10:30 بعد 5 دقايق سنة 2026 بـ 15000"));
     }

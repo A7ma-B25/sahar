@@ -34,6 +34,8 @@ public sealed class SafetyTests
     [InlineData("بدي موت مشان خلص")]
     [InlineData("بدي موت عشان ارتاح")]
     [InlineData("رح موت حالي من القهر")]
+    [InlineData("بدي موت من القهر")]
+    [InlineData("بدي موت من الخوف")]
     public void Distress_Cues_Syrian_Msa_English(string line) => Assert.True(Distress.Check(line), line);
 
     [Theory]

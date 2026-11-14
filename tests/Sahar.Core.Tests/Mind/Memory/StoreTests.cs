@@ -162,7 +162,10 @@ public sealed class StoreTests : IDisposable
         stop.Cancel();
         writer.Wait();
 
-        // Whatever the Mind wrote after the key went is under a new key it made itself; nothing from before opens.
+        // The writer that saw the old key never makes a new one: nothing at all is left (review B2).
+        Assert.False(Directory.Exists(_dir) && Directory.EnumerateFileSystemEntries(_dir).Any());
+        Assert.Equal(0, mind.AddSamples(LearnSource.Examples, ["بعد النسيان"]));
+        Assert.False(Directory.Exists(_dir) && Directory.EnumerateFileSystemEntries(_dir).Any());
         var fresh = Store();
         Assert.DoesNotContain(fresh.Memories(), m => m.Text == "بدو يخلّص المشروع الجمعة");
         Assert.Empty(fresh.Samples("", 10));
@@ -172,6 +175,81 @@ public sealed class StoreTests : IDisposable
         // The next write starts a fresh store.
         fresh.AddMemory("من جديد", MemoryKind.Fact);
         Assert.Equal("من جديد", Assert.Single(Store().Memories()).Text);
+    }
+
+    private sealed class NoWrap : IKeyWrap
+    {
+        public byte[] Wrap(byte[] key) => new TestKeyWrap().Wrap(key);
+        public byte[]? Unwrap(byte[] wrapped) => null;   // another user, a copied disk, a damaged key
+    }
+
+    [Fact]
+    public void UnopenableKey_RefusesWrites_KeepsEverything()
+    {
+        var store = Store();
+        store.AddMemory("بدو يخلّص المشروع", MemoryKind.Goal);
+        var key = File.ReadAllBytes(Path.Combine(_dir, SecretBox.KeyFile));
+        var data = File.ReadAllBytes(Path.Combine(_dir, "store.enc"));
+        var locked = new MindStore(new SecretBox(_dir, new NoWrap()), () => _now, () => _consent);
+        Assert.Equal(StoreStatus.Locked, locked.Status);
+        Assert.Null(locked.Propose("بتحب الشاي", ProfileCategory.Likes, Chat(), Sensitivity.None));
+        Assert.Equal(0, locked.AddSamples(LearnSource.Examples, ["يلا"]));
+        locked.AddMemory("شي جديد", MemoryKind.Fact);
+        Assert.Equal(key, File.ReadAllBytes(Path.Combine(_dir, SecretBox.KeyFile)));   // never a new key over his
+        Assert.Equal(data, File.ReadAllBytes(Path.Combine(_dir, "store.enc")));        // never an empty store over his
+        Assert.Equal("بدو يخلّص المشروع", Assert.Single(Store().Memories()).Text);
+    }
+
+    [Fact]
+    public void DamagedFile_KeptAside_NotOverwritten()
+    {
+        var store = Store();
+        store.AddMemory("أول ذكرى", MemoryKind.Fact);
+        var path = Path.Combine(_dir, "store.enc");
+        var raw = File.ReadAllBytes(path);
+        raw[^1] ^= 1;
+        File.WriteAllBytes(path, raw);
+        store.AddMemory("بعد العطل", MemoryKind.Fact);
+        var bad = Assert.Single(Directory.GetFiles(_dir, "store*.bad"));
+        Assert.Equal(raw, File.ReadAllBytes(bad));
+        Assert.Equal(StoreStatus.Recovered, store.Status);
+        Assert.Equal("بعد العطل", Assert.Single(store.Memories()).Text);
+    }
+
+    [Fact]
+    public void MutexHeld_RefusesInsteadOfWritingUnlocked()
+    {
+        using var held = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using var m = new Mutex(false, SecretBox.MutexName);
+            m.WaitOne();
+            held.Set();
+            release.Wait();
+            m.ReleaseMutex();
+        });
+        holder.Start();
+        held.Wait();
+        try
+        {
+            var store = new MindStore(new SecretBox(_dir, new TestKeyWrap(), TimeSpan.FromMilliseconds(30)), () => _now, () => _consent);
+            store.AddMemory("بلا قفل", MemoryKind.Fact);
+            Assert.False(Directory.Exists(_dir));
+        }
+        finally { release.Set(); holder.Join(); }
+        Store().AddMemory("مع القفل", MemoryKind.Fact);
+        Assert.Single(Store().Memories());
+    }
+
+    [Fact]
+    public void Samples_DropSensitiveAndDistressLines_SnippetsScrubbed()
+    {
+        var store = Store();
+        Assert.Equal(1, store.AddSamples(LearnSource.Examples, ["يلا تمام", "عندي سكري من زمان", "بدي موت وخلص"]));
+        Assert.Equal(["يلا تمام"], store.Samples("", 10));
+        var p = store.Propose("بتحب المشي", ProfileCategory.Likes, Chat(0, "ابعتلي على 0944123456"), Sensitivity.None)!;
+        Assert.Equal("ابعتلي على [رقم]", p.Sources[0].Snippet);
     }
 
     [Fact]

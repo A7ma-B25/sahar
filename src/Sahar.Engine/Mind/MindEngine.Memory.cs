@@ -20,9 +20,14 @@ internal sealed partial class MindEngine
 
     partial void AttachMemory()
     {
-        LearnConsent Consent() => LearnConsent.From(Settings());
-        _memory = new MindStore(new SecretBox(MindPaths.Personal, KeyWrap.Default), () => DateTimeOffset.Now, Consent, () => Settings().MindEpisodeDays);
-        _music = new MusicLearner(_memory, Consent, () => DateTimeOffset.Now);
+        NewMemory();
+        // His key cannot be opened (another Windows user, a copied disk): she says so once, calmly; nothing is erased.
+        _ = Task.Run(() =>
+        {
+            if (_memory!.Status != StoreStatus.Locked) return;
+            Log.Write("mind: store locked (nothing written)");
+            Ui.TryEnqueue(() => Speech.Say(Address.ToYou("ما عم اقدر افتح ذاكرتي هلق… ما مسحت شي، شوف «عنك» بالإعدادات 🌿")));
+        });
         _musicOn = Settings().MindLearnMusic;
         SettingsChanged += s =>
         {
@@ -48,10 +53,17 @@ internal sealed partial class MindEngine
         if (!TestMode) timer.Start();
 
         // «انسي كل شي» from the «عنك» page: the settings app shredded mind\ (key first); she says it, softly.
+        // «انسي كل شي», first half: a running Mind quits (never started for this); the settings app waits for it, then shreds.
+        Pipe.Register("mind-stop", _ =>
+        {
+            bool sent = SendIfRunning(new MindMsg { T = "quit" });
+            Log.Write($"mind: stop for forget ({(sent ? "was running" : "not running")})");
+            return new PipeReply(true, "ok=true");
+        });
         Pipe.Register("mind-forgot", _ =>
         {
             Log.Write("mind: forgot everything");
-            SendIfRunning(new MindMsg { T = "quit" });   // a running Mind stops (never started for this)
+            NewMemory();   // her own store saw the old key: a fresh one starts from nothing
             Speech.Say(Address.ToYou("نسيت كل شي… مرحبا من جديد 🌙"));
             return new PipeReply(true, "ok=true");
         });
@@ -79,12 +91,12 @@ internal sealed partial class MindEngine
                 var cat = Enum.TryParse<ProfileCategory>(r.Args?.GetValueOrDefault("category"), true, out var c) ? c : ProfileCategory.Likes;
                 int days = int.TryParse(r.Args?.GetValueOrDefault("daysAgo"), out var d) ? d : 0;
                 if (text is null) return new PipeReply(false, "no-text");
-                var item = _memory.Propose(text, cat, new ItemSource(LearnSource.Chats, DateTimeOffset.Now.AddDays(-days)), Sensitivity.None);
-                if (item is not null && r.Args?.GetValueOrDefault("confirm") == "true") _memory.Confirm(item.Id);
+                var item = _memory!.Propose(text, cat, new ItemSource(LearnSource.Chats, DateTimeOffset.Now.AddDays(-days)), Sensitivity.None);
+                if (item is not null && r.Args?.GetValueOrDefault("confirm") == "true") _memory!.Confirm(item.Id);
                 return new PipeReply(true, $"ok={(item is null ? "false" : "true")} id={item?.Id ?? ""}");
             });
             Pipe.Register("debug-mind-memory", _ =>
-                new PipeReply(true, $"listens={_memory.Listens().Count} files={(Directory.Exists(MindPaths.Personal) ? Directory.EnumerateFileSystemEntries(MindPaths.Personal).Count() : 0)}"));
+                new PipeReply(true, $"listens={_memory!.Listens().Count} files={(Directory.Exists(MindPaths.Personal) ? Directory.EnumerateFileSystemEntries(MindPaths.Personal).Count() : 0)}"));
         }
 
         if (TestMode)
@@ -93,7 +105,7 @@ internal sealed partial class MindEngine
                 var title = Text(r.Args?.GetValueOrDefault("title64"));
                 var artist = Text(r.Args?.GetValueOrDefault("artist64"));
                 bool kept = title is not null && Hear(title, artist);
-                return new PipeReply(true, $"kept={(kept ? "true" : "false")} count={_memory.Listens().Count}");
+                return new PipeReply(true, $"kept={(kept ? "true" : "false")} count={_memory!.Listens().Count}");
             });
     }
 
@@ -152,6 +164,16 @@ internal sealed partial class MindEngine
             return true;
         }
         finally { Native.CloseClipboard(); }
+    }
+
+    private void NewMemory()
+    {
+        LearnConsent Consent() => LearnConsent.From(Settings());
+        lock (_musicGate)
+        {
+            _memory = new MindStore(new SecretBox(MindPaths.Personal, KeyWrap.Default), () => DateTimeOffset.Now, Consent, () => Settings().MindEpisodeDays);
+            _music = new MusicLearner(_memory, Consent, () => DateTimeOffset.Now);
+        }
     }
 
     private bool Hear(string title, string? artist)

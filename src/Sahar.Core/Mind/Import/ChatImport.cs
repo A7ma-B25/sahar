@@ -1,23 +1,26 @@
 namespace Sahar.Core.Mind.Import;
 
 /// <summary>One message of an exported chat: who sent it and its text (multi-line kept).</summary>
-public sealed record ChatLine(string Sender, string Text);
+/// <summary><see cref="SenderId"/>: the export's own id for the sender (Telegram <c>from_id</c>) when it has one —
+/// names repeat, ids do not.</summary>
+public sealed record ChatLine(string Sender, string Text, string? SenderId = null);
 
 /// <summary>How many messages a sender has (the page asks «مين إنت؟» with these; never stored, never logged).</summary>
-public sealed record SenderCount(string Name, int Count);
+public sealed record SenderCount(string Name, int Count, string? Id = null);
 
 /// <summary>A parsed export (plan 0.14 Task B2; spec §7.5). Other people's messages live only in this object for the
-/// preview; <see cref="His"/> is all that may be kept. <see cref="Me"/>: his sender name when the file says it
-/// (Telegram's own export).</summary>
+/// preview; <see cref="His"/> is all that may be kept. <see cref="Me"/>: his sender id when the file says it
+/// (Telegram's own export); otherwise he picks himself once.</summary>
 public sealed record ChatExport(string Format, IReadOnlyList<ChatLine> Lines, string? Me = null)
 {
     public IReadOnlyList<SenderCount> Senders =>
-        Lines.GroupBy(l => l.Sender, StringComparer.Ordinal).Select(g => new SenderCount(g.Key, g.Count()))
+        Lines.GroupBy(l => l.SenderId ?? l.Sender, StringComparer.Ordinal).Select(g => new SenderCount(g.First().Sender, g.Count(), g.First().SenderId))
             .OrderByDescending(s => s.Count).ThenBy(s => s.Name, StringComparer.Ordinal).ToList();
 
-    /// <summary>Only his own lines (exact sender name: "Ahmad Ali" is not "Ahmad"), scrubbed, empty ones dropped.</summary>
+    /// <summary>Only his own lines, scrubbed, empty ones dropped. <paramref name="me"/> is a sender id when the export
+    /// has ids (another "Ahmad" is not him), else the exact name ("Ahmad Ali" is not "Ahmad").</summary>
     public IReadOnlyList<string> His(string me) =>
-        Lines.Where(l => string.Equals(l.Sender, me, StringComparison.Ordinal))
+        Lines.Where(l => l.SenderId is { } id ? string.Equals(id, me, StringComparison.Ordinal) : string.Equals(l.Sender, me, StringComparison.Ordinal))
             .Select(l => Scrub.Clean(l.Text).Trim()).Where(t => t.Length > 0).ToList();
 }
 
