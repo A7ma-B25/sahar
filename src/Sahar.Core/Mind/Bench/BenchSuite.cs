@@ -130,7 +130,7 @@ public static class BenchRunner
     public const string SpeedPrompt = "احكيلي بجملتين شو بتحبي تعملي بيوم هادي.";
 
     public static async Task<BenchResult> RunAsync(ILlm llm, string model, string schema, Func<Task<RuntimeReady>> warm, Func<(int VramMB, int RamMB)> memory,
-        bool golden, IProgress<int>? rowsDone, Func<DateTimeOffset> now, CancellationToken ct)
+        bool golden, IProgress<int>? rowsDone, Func<DateTimeOffset> now, CancellationToken ct, int? rowsPerKind = null)
     {
         var load = Stopwatch.StartNew();
         var ready = await warm();
@@ -144,7 +144,9 @@ public static class BenchRunner
         int dPass = 0, dTotal = 0, tPass = 0, tTotal = 0, done = 0, restarts = 0;
         if (golden)
         {
-            foreach (var row in BenchSuite.Rows)
+            // CI (a 4-core runner, no GPU) runs the first N rows of each kind; the app always runs all 60.
+            var rows = rowsPerKind is { } n ? BenchSuite.Rows.GroupBy(r => r.Kind).SelectMany(g => g.Take(n)).ToList() : BenchSuite.Rows;
+            foreach (var row in rows)
             {
                 ct.ThrowIfCancellationRequested();
                 string text;

@@ -337,7 +337,8 @@ internal sealed class MindHost : ITurnIO
             await _runtime.UnloadAsync();   // a cold load is part of the measure
             var schema = MindParts.ToolRegistry(BenchSuite.Tools).DecisionSchema();
             var r = await BenchRunner.RunAsync(new LazyLlm(_runtime), id, schema, () => _runtime.WarmAsync(_quit.Token),
-                () => _runtime is RuntimeHost h ? h.Memory() : (0, 0), golden: !quick, null, () => DateTimeOffset.Now, _quit.Token);
+                () => _runtime is RuntimeHost h ? h.Memory() : (0, 0), golden: !quick, null, () => DateTimeOffset.Now, _quit.Token,
+                int.TryParse(Environment.GetEnvironmentVariable("SAHAR_MIND_BENCH_ROWS"), out var n) && n > 0 ? n : null);
             if (_registry.Find(id) is not null) _registry.SetBench(id, r);
             MindLog.Write(FormattableString.Invariant($"bench: load={r.LoadMs}ms first={r.FirstTokenMs}ms tps={r.TokPerSec} dialect={r.DialectPass}/{r.DialectTotal} tools={r.ToolPass}/{r.ToolTotal}"));
             Send(new MindMsg { T = "bench-result", Bench = r });

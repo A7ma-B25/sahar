@@ -78,6 +78,14 @@ public sealed class BenchTests
     }
 
     [Fact]
+    public async Task Bench_Reduced_RowsPerKind()
+    {
+        var r = await BenchRunner.RunAsync(new Scripted(good: true), "m", "{}", () => Task.FromResult(new RuntimeReady("m", "", Tier.Gpu6, Backend.Vulkan, 1, 0, 0)),
+            () => (0, 0), golden: true, null, () => DateTimeOffset.UnixEpoch, default, rowsPerKind: 6);
+        Assert.Equal((6, 6, 6, 6), (r.DialectPass, r.DialectTotal, r.ToolPass, r.ToolTotal));
+    }
+
+    [Fact]
     public async Task Bench_RowBadOutput_CountsAsFail_AndGoesOn()
     {
         var llm = new Scripted(good: true) { FailEvery = 2 };

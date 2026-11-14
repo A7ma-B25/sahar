@@ -12,6 +12,8 @@ function Stage-MindRuntime {
     New-Item -ItemType Directory -Force -Path (Join-Path $home0 'models') | Out-Null
     $env:SAHAR_MIND_HOME = $home0
     $env:SAHAR_MIND_FAST_IDLE = '1'
+    # The CPU runner bench: 6 dialect + 6 command rows (≈ 2.7 s a row measured on run 43510183582); the app runs 60.
+    $env:SAHAR_MIND_BENCH_ROWS = '6'
     $kept = Settings-Json
     try {
         Step 'mind: the pieces are there (Mind exe, CPU runtime, the tiny model)' {
@@ -70,9 +72,9 @@ function Stage-MindRuntime {
             SNav 'models'
             Wait-Until { (Js "document.getElementById('mine-list')?.textContent ?? ''") -match 'CI tiny' } 5000 'the CI model is not under «نماذجك»'
             SClick '#bench-ci-tiny'
-            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/30' } 480000 'the full bench'
+            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/6' } 180000 'the bench (6 + 6 rows on the CPU runner)'
             Wait-Until { (Js "document.querySelectorAll('#mine-list .m-stat').length") -ge 4 } 8000 'the stat tiles'
-            $b = [regex]::Match((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)')
+            $b = [regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)') | Select-Object -Last 1
             Write-Host "    full bench: dialect $($b.Groups[1].Value)/$($b.Groups[2].Value), tools $($b.Groups[3].Value)/$($b.Groups[4].Value)"
             if ([int]$b.Groups[3].Value * 5 -lt [int]$b.Groups[4].Value * 4) {
                 Wait-Until { (Js "document.getElementById('mine-list').textContent") -match 'حكي بس' } 5000 'no «حكي بس» badge for a chat-only model'
@@ -114,7 +116,7 @@ function Stage-MindRuntime {
         Stop-Engine
         Get-Process -Name 'llama-server', 'Sahar.Mind' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Copy-Item (Join-Path $home0 'mind.log') (Join-Path $Out 'mind.log') -ErrorAction SilentlyContinue
-        Remove-Item Env:SAHAR_MIND_HOME, Env:SAHAR_MIND_FAST_IDLE -ErrorAction SilentlyContinue
+        Remove-Item Env:SAHAR_MIND_HOME, Env:SAHAR_MIND_FAST_IDLE, Env:SAHAR_MIND_BENCH_ROWS -ErrorAction SilentlyContinue
         if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
         Remove-Item -Recurse -Force $home0 -ErrorAction SilentlyContinue
     }
