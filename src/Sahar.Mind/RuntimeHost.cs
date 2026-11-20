@@ -133,11 +133,17 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             if (backend == Backend.Cuda) psi.Environment["PATH"] = CudaPath();
             using var p = Process.Start(psi);
             if (p is null) return [];
-            var err = p.StandardError.ReadToEndAsync(ct);
-            var outText = await p.StandardOutput.ReadToEndAsync(ct).WaitAsync(TimeSpan.FromSeconds(15), ct);
-            await err.WaitAsync(TimeSpan.FromSeconds(2), ct);
-            if (!p.WaitForExit(2000)) p.Kill();
-            return Devices.Parse(outText);
+            try
+            {
+                var err = p.StandardError.ReadToEndAsync(ct);
+                var outText = await p.StandardOutput.ReadToEndAsync(ct).WaitAsync(TimeSpan.FromSeconds(15), ct);
+                await err.WaitAsync(TimeSpan.FromSeconds(2), ct);
+                return Devices.Parse(outText);
+            }
+            finally
+            {
+                try { if (!p.WaitForExit(2000)) p.Kill(); } catch (Exception) { }   // a stuck driver never leaves it behind
+            }
         }
         catch (Exception e) when (e is TimeoutException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {

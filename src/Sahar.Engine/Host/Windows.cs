@@ -129,6 +129,7 @@ internal static unsafe class Win
             if (foreign) continue;
             int cloaked = 0;
             if (Native.DwmGetWindowAttribute(h, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(int)) == 0 && cloaked != 0) continue;
+            if (Transient(h)) continue;   // a tooltip or the taskbar's previews: they go by themselves, never covered
             RECT r;
             if (Native.GetWindowRect(h, &r) != 0 && r.Right > area.Left && r.Left < area.Right && r.Bottom > area.Top && r.Top < area.Bottom) foreign = true;
         }
@@ -137,6 +138,19 @@ internal static unsafe class Win
             Native.SetWindowPos(ours[i], Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOSIZE | 0x0002 /* NOMOVE */ | Native.SWP_NOACTIVATE | 0x0200 /* NOOWNERZORDER */);
         Raised++;
         return true;
+    }
+
+    private static readonly HashSet<string> TransientClasses = new(StringComparer.Ordinal)
+    {
+        "tooltips_class32", "TaskListThumbnailWnd", "TaskListOverlayWnd", "Xaml_WindowedPopupClass", "TopLevelWindowForOverflowXamlIsland",
+        "NotifyIconOverflowWindow", "#32768" /* a menu */,
+    };
+
+    private static unsafe bool Transient(nint h)
+    {
+        char* buf = stackalloc char[64];
+        int n = Native.GetClassName(h, buf, 64);
+        return n > 0 && TransientClasses.Contains(new string(buf, 0, n));
     }
 
     public static void SetCaptureExcluded(nint hwnd, bool excluded)
