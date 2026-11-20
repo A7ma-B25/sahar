@@ -48,6 +48,8 @@ function Stage-MindEval {
         }
         foreach ($row in $rows) {
             Step "mindeval: $($row.id) ($($row.kind))" {
+                Send '{"type":"cmd","name":"show"}' | Out-Null       # a line before may have hidden her (sleep.hide)
+                Start-Sleep -Milliseconds 6500                          # the last reply leaves the header (6 s) and her bubble
                 Send '{"type":"cmd","name":"game-stop"}' | Out-Null
                 Send '{"type":"cmd","name":"list-close"}' | Out-Null
                 if ((Menu).open -ne 'true') { Send '{"type":"cmd","name":"menu-open"}' | Out-Null; Wait-Menu 'true' 3000 'card open' | Out-Null }
@@ -86,12 +88,13 @@ function Stage-MindEval {
                 }
                 $new = @(Eval-Lines $engineLog | Select-Object -Skip $e0)
                 $calls = @($new | ForEach-Object { if ($_ -match 'mind: call (\S+) (\S+)') { "$($Matches[1]) $($Matches[2])" } })
+                $said = @($new | ForEach-Object { if ($_ -match 'mind: said \((\d+) chars\)') { [int]$Matches[1] } })
                 $errors = @($new | ForEach-Object { if ($_ -match 'mind: turn error (\S+)') { $Matches[1] } })
                 $drops = @(Eval-Lines $mindLog | Select-Object -Skip $m0 | Where-Object { $_ -match ' (say|turn): (dropped|bad-output|thinking|failed)' } | ForEach-Object { ($_ -split ' ', 3)[2] })
                 if ($row.key) { Screenshot "mind-eval-$($row.id).png" | Out-Null }
                 $visible = if ($seen.Count) { $seen[$seen.Count - 1] } else { '' }
                 $rec = [ordered]@{ id = $row.id; kind = $row.kind; prompt = $row.text; expectTool = $row.tool; visible = $visible; seen = @($seen); where = @($where);
-                    calls = $calls; fastPath = -not $mindTurn; errors = $errors; drops = $drops; asked = $asked; firstMs = $first; totalMs = $endAt; model = $id }
+                    calls = $calls; saidChars = $said; fastPath = -not $mindTurn; errors = $errors; drops = $drops; asked = $asked; firstMs = $first; totalMs = $endAt; model = $id }
                 Add-Content -Path $outFile -Value ($rec | ConvertTo-Json -Compress -Depth 4) -Encoding utf8
                 Write-Host "    [$($row.id)] $($row.text) -> $(if ($visible) { $visible } else { '(nothing visible)' })  calls=[$($calls -join '; ')] fast=$(-not $mindTurn) errors=[$($errors -join ',')] $($endAt) ms"
                 if ($row.key -and -not $visible) { throw "$($row.id): nothing visible for «$($row.text)»" }
