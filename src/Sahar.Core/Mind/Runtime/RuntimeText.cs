@@ -31,6 +31,10 @@ public static class RuntimeText
 
     public static string Progress(int percent) => $"نزّلت {Digits.ToArabicIndic(percent.ToString(CultureInfo.InvariantCulture))}٪ من عقلي.";
 
+    /// <summary>0.14.1: the network dropped; she tries again by herself (once, when it first stops).</summary>
+    public static string Retrying(long done, long total) =>
+        $"نزّلت {Digits.ToArabicIndic((total > 0 ? (int)(done * 100 / total) : 0).ToString(CultureInfo.InvariantCulture))}٪ من عقلي — النت وقف شوي، وبكمّل لحالي.";
+
     public static string NoDisk(long missing) => $"ما في مكان كفاية عالجهاز: لازمني كمان {Gb(missing)} غيغا.";
 
     /// <summary>The quarter (25/50/75) just passed, once each; null otherwise.</summary>

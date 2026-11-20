@@ -54,7 +54,7 @@ export async function render({ tx, ask, render: rerender }) {
     dlButtons.replaceChildren();
     dlBar.hidden = true;
     dlCard.hidden = false;
-    if (d && d.model !== 'runtime-cuda' && ['downloading', 'paused', 'checking', 'verifying', 'blocked', 'failed', 'mismatch', 'no-disk', 'reachable'].includes(d.state)) {
+    if (d && d.model !== 'runtime-cuda' && ['downloading', 'retrying', 'paused', 'checking', 'verifying', 'blocked', 'failed', 'mismatch', 'no-disk', 'reachable'].includes(d.state)) {
       const name = list().find((m) => m.id === d.model)?.name ?? d.model;
       const pct = d.total ? Math.floor((d.done * 100) / d.total) : 0;
       if (d.state === 'blocked') {
@@ -68,11 +68,13 @@ export async function render({ tx, ask, render: rerender }) {
       icon(HAND.download);
       dlBar.hidden = false;
       dlBar.set(pct);
-      dlTitle.textContent = d.state === 'downloading' ? tx('dlTitle', { p: num(pct) }) : d.state === 'checking' ? tx('dlChecking')
+      dlTitle.textContent = d.state === 'downloading' ? tx('dlTitle', { p: num(pct) }) : d.state === 'retrying' ? tx('dlRetryingTitle', { p: num(pct) })
+        : d.state === 'checking' ? tx('dlChecking')
         : d.state === 'verifying' ? tx('dlVerifying') : tx('dlPausedTitle');
       dlMeta.textContent = tx('dlMeta', { name, done: gb(d.done), total: gb(d.total), speed: num(Math.round((d.bps || 0) / 1e5) / 10) });
-      dlNote.textContent = d.state === 'mismatch' ? tx('dlMismatch') : d.state === 'no-disk' ? tx('dlNoDisk') : d.state === 'failed' ? tx('dlFailed') : tx('dlNote');
-      if (d.state === 'downloading' || d.state === 'checking') dlButtons.append(ghost(tx('dlPause'), () => download('pause', d.model), { id: 'dl-pause' }));
+      dlNote.textContent = d.state === 'mismatch' ? tx('dlMismatch') : d.state === 'no-disk' ? tx('dlNoDisk') : d.state === 'failed' ? tx('dlFailed')
+        : d.state === 'retrying' ? tx('dlRetryingNote') : tx('dlNote');
+      if (d.state === 'downloading' || d.state === 'checking' || d.state === 'retrying') dlButtons.append(ghost(tx('dlPause'), () => download('pause', d.model), { id: 'dl-pause' }));
       else if (d.state !== 'verifying') dlButtons.append(ghost(tx('dlResume'), () => download('resume', d.model), { id: 'dl-resume' }),
         ghost(tx('dlCancel'), () => download('cancel', d.model), { id: 'dl-cancel' }));
       return;

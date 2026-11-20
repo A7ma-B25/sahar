@@ -41,3 +41,10 @@ public sealed class RuntimeTextTests
     public void Lines_NoLatinDigits() =>
         Assert.All(new[] { RuntimeText.Ask(3_106_738_272), RuntimeText.Progress(50), RuntimeText.NoDisk(5L << 30) }, l => Assert.DoesNotMatch("[0-9]", l));
 }
+
+public sealed class RetryingTextTests
+{
+    [Fact]
+    public void Retrying_SaysHowFar_AndThatItGoesOnByItself() =>
+        Assert.Equal("نزّلت ٤٢٪ من عقلي — النت وقف شوي، وبكمّل لحالي.", RuntimeText.Retrying(2_100_000_000, 4_977_171_584));
+}

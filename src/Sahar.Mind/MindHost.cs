@@ -268,7 +268,7 @@ internal sealed class MindHost : ITurnIO
                     var plan = new DownloadPlan(entry.Id, url, file, entry.Bytes, entry.Sha256, DateTimeOffset.Now);
                     var progress = new Reporter(p => { _lastUse = DateTimeOffset.UtcNow; Send(new MindMsg { T = "progress", Progress = p }); });
                     var sw = Stopwatch.StartNew();
-                    var r = await dl.RunAsync(plan, progress, cts.Token);
+                    var r = await dl.RunResumingAsync(plan, progress, cts.Token);   // 0.14.1: a network drop resumes by itself
                     MindLog.Write($"download: {r.State} after {sw.Elapsed.TotalSeconds:0}s ({r.Error ?? "-"})");
                     if (r.State == "done")
                     {

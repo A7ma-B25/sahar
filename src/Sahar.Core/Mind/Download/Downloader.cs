@@ -44,6 +44,14 @@ public static class DiskCheck
 /// a mismatch deletes everything. Redirects are followed by hand so every hop is checked. Never logs anything.
 /// Production passes a handler with automatic redirects off.
 /// </summary>
+/// <summary>0.14.1 fix 8: the waits between tries while the network is away — 5 s, 10 s, 30 s, 1 min, 2 min, then every
+/// 5 min; back to 5 s whenever a try brought bytes.</summary>
+public static class DownloadBackoff
+{
+    private static readonly int[] Seconds = [5, 10, 30, 60, 120, 300];
+    public static TimeSpan For(int triesWithoutBytes) => TimeSpan.FromSeconds(Seconds[Math.Clamp(triesWithoutBytes, 0, Seconds.Length - 1)]);
+}
+
 public sealed class Downloader(HttpMessageHandler handler, Func<DateTimeOffset> now, Func<string, long> freeBytes)
 {
     private readonly HttpClient _http = new(handler, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan };
@@ -77,6 +85,30 @@ public sealed class Downloader(HttpMessageHandler handler, Func<DateTimeOffset> 
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return new(false, "timeout"); }
         catch (HttpRequestException e) { return new(false, Why(e)); }
+    }
+
+    /// <summary>0.14.1: <see cref="RunAsync"/> again by itself while Sahar runs, after a network drop or a busy server
+    /// (5xx, 429), with <see cref="DownloadBackoff"/> waits reported as "retrying" (Error = seconds to the next try).
+    /// His pause (the token), a mismatch, a full disk or a refused host end it.</summary>
+    public async Task<DownloadResult> RunResumingAsync(DownloadPlan plan, IProgress<DownloadProgress>? progress, CancellationToken ct,
+        Func<TimeSpan, CancellationToken, Task>? wait = null)
+    {
+        wait ??= Task.Delay;
+        int dry = 0;
+        long best = ReadState(plan.File)?.Offset ?? 0;
+        while (true)
+        {
+            var r = await RunAsync(plan, progress, ct);
+            bool again = !ct.IsCancellationRequested && (r.State == "paused" && r.Error is not null
+                || r.State == "failed" && r.Error is { } e && (e == "http-429" || e.StartsWith("http-5", StringComparison.Ordinal)));
+            if (!again) return r;
+            if (r.Done > best) { best = r.Done; dry = 0; }
+            var pause = DownloadBackoff.For(dry++);
+            progress?.Report(new DownloadProgress(plan.ModelId, Path.GetFileName(plan.File), r.Done, plan.Bytes, 0, "retrying", Source(plan.Url),
+                ((int)pause.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            try { await wait(pause, ct); }
+            catch (OperationCanceledException) { return new("paused", r.Done); }
+        }
     }
 
     public async Task<DownloadResult> RunAsync(DownloadPlan plan, IProgress<DownloadProgress>? progress, CancellationToken ct)

@@ -194,6 +194,7 @@ internal sealed partial class MindEngine
             "downloading" when before is not "downloading" => RuntimeText.Started,
             "downloading" when RuntimeText.Milestone(p.Done, p.Total, _saidQuarter) is { } q => Said(q),
             "paused" when before is "downloading" => RuntimeText.Paused,
+            "retrying" when before is "downloading" => RuntimeText.Retrying(p.Done, p.Total),   // 0.14.1: once, then quiet
             "verifying" when before is not "verifying" => RuntimeText.Verifying,
             "mismatch" => RuntimeText.Mismatch,
             "no-disk" => RuntimeText.NoDisk(long.TryParse(p.Error, out var miss) ? miss : 0),
@@ -201,7 +202,7 @@ internal sealed partial class MindEngine
             _ => null,
         };
         if (p.State != before) Log.Write($"mind: download {p.State}{(p.Error is { } e && p.State != "no-disk" ? $" ({e})" : "")}");
-        if (p.State is not "downloading") _saidQuarter = p.State == "paused" ? _saidQuarter : 0;
+        if (p.State is not "downloading") _saidQuarter = p.State is "paused" or "retrying" ? _saidQuarter : 0;
         if (line is not null) Speech.Say(Address.For(Address.You, line));
         if (p.State == "done" && before != "done")
         {

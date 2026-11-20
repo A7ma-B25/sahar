@@ -154,6 +154,57 @@ public sealed class DownloaderTests : IDisposable
     [Fact]
     public void Disk_SizePlusOneGb() => Assert.Equal(0, DiskCheck.Missing(free: 6L << 30, size: 5L << 30));
 
+    // ---- 0.14.1 fix 8: his ~5 GB download paused on the network ~20 times in 6 days and waited for a click ----
+
+    [Fact]
+    public async Task Resuming_ADropMidFile_ContinuesByItself()
+    {
+        var hub = new FakeHub(_body) { CutAfter = 100_000 };
+        var waits = new List<TimeSpan>();
+        var states = new List<DownloadProgress>();
+        Task Wait(TimeSpan t, CancellationToken ct) { waits.Add(t); hub.CutAfter = hub.CutAfter + 100_000 is var c && c >= _body.Length ? null : c; return Task.CompletedTask; }
+        var r = await Dl(hub).RunResumingAsync(Plan(), new Sync(states.Add), default, Wait);
+        Assert.Equal("done", r.State);
+        Assert.Equal(_body, File.ReadAllBytes(Path.Combine(_dir, "m.gguf")));
+        Assert.Equal([DownloadBackoff.For(0), DownloadBackoff.For(0)], waits);   // progress each time: the first wait again
+        var retry = states.First(p => p.State == "retrying");
+        Assert.True(retry.Done >= 100_000);
+        Assert.Equal("5", retry.Error);   // seconds until it tries again, for «N٪ — بيكمّل لحالو»
+    }
+
+    [Fact]
+    public async Task Resuming_NoProgress_BacksOff_UpToFiveMinutes_UntilHePauses()
+    {
+        var hub = new FakeHub(_body) { Throw = new HttpRequestException("down", new System.Net.Sockets.SocketException(10051)) };
+        using var cts = new CancellationTokenSource();
+        var waits = new List<TimeSpan>();
+        Task Wait(TimeSpan t, CancellationToken ct) { waits.Add(t); if (waits.Count == 8) cts.Cancel(); ct.ThrowIfCancellationRequested(); return Task.CompletedTask; }
+        var r = await Dl(hub).RunResumingAsync(Plan(), null, cts.Token, Wait);
+        Assert.Equal("paused", r.State);
+        Assert.Equal(new[] { 5, 10, 30, 60, 120, 300, 300, 300 }.Select(s => TimeSpan.FromSeconds(s)), waits);
+    }
+
+    [Fact]
+    public async Task Resuming_HisPause_IsNotRetried()
+    {
+        var hub = new FakeHub(_body) { Hang = true };
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        int waits = 0;
+        var r = await Dl(hub).RunResumingAsync(Plan(), null, cts.Token, (_, _) => { waits++; return Task.CompletedTask; });
+        Assert.Equal("paused", r.State);
+        Assert.Equal(0, waits);
+    }
+
+    [Fact]
+    public async Task Resuming_AMismatchOrNoDisk_IsNotRetried()
+    {
+        int waits = 0;
+        var bad = Plan() with { Sha256 = new string('0', 64) };
+        var r = await Dl(new FakeHub(_body)).RunResumingAsync(bad, null, default, (_, _) => { waits++; return Task.CompletedTask; });
+        Assert.Equal("mismatch", r.State);
+        Assert.Equal(0, waits);
+    }
+
     /// <summary>huggingface.co answers 302 to the CDN; the CDN serves Range with an ETag.</summary>
     private sealed class FakeHub(byte[] body) : HttpMessageHandler
     {
