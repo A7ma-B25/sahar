@@ -3173,9 +3173,95 @@ function Stage-Shell {
         if ($real -ne $said) { throw "the overlay is at $real but the stage thinks $said (she would be drawn offset)" }
         if ((Overlay).needs -ne 'none') { throw "needs left behind: $((Overlay).needs)" }
     }
+    # 0.14.1 fix 2 (owner: "she stays BELOW the taskbar and NEVER appears above apps"): another topmost window coming on
+    # top (the taskbar after a click, an always-on-top app) must not keep her under it; outside real fullscreen she is
+    # always above apps and the taskbar, and still click-through outside her body.
+    Step 'always on top: over a maximised window, and over the taskbar after it came on top' {
+        if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
+        $script:win = Start-TestWindow 'maximised'
+        Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+        Pose-Body ([int]($Work.Width * 0.45)) ([int]($Work.Height * 0.4)) | Out-Null
+        [Mouse]::Move(5, 5)
+        Start-Sleep -Milliseconds 800
+        [ZProbe]::RaiseTaskbar() | Out-Null   # as when he clicks the taskbar: it comes on top of the topmost band
+        Start-Sleep -Milliseconds 2500
+        $c = Body-Centre
+        $hit = [ZProbe]::At($c[0], $c[1])
+        $z = [ZProbe]::Order($script:engine.Id, 'Sahar', $script:win.MainWindowHandle)
+        Write-Host "    over the maximised window: WindowFromPoint($($c[0]),$($c[1])) = $hit; z-order $z"
+        if ($hit -notmatch '^Sahar') { throw "her body centre belongs to '$hit', not her" }
+        $o = $z -split ','
+        if ([int]$o[0] -lt 0 -or [int]$o[0] -gt [int]$o[2]) { throw "she is under the maximised window (z $z)" }
+        # Perched on the taskbar: half her body over it, the taskbar raised again.
+        $st = State
+        $bar = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Bottom - $Work.Bottom
+        if ($bar -gt 0) {
+            Pose-Body ([int]($Work.Width * 0.45)) ([int]($Work.Bottom - $st.height / 2)) | Out-Null
+            Start-Sleep -Milliseconds 600
+            [ZProbe]::RaiseTaskbar() | Out-Null
+            Start-Sleep -Milliseconds 2500
+            $st = State
+            $px = [int]($st.x + $st.width / 2); $py = [int]([math]::Min($st.y + $st.height * 0.7, $Work.Bottom + $bar / 2))
+            $hit = [ZProbe]::At($px, $py)
+            $z = [ZProbe]::Order($script:engine.Id, 'Sahar', $script:win.MainWindowHandle)
+            Write-Host "    perched on the taskbar: WindowFromPoint($px,$py) = $hit; z-order $z"
+            if ($py -gt $Work.Bottom -and $hit -notmatch '^Sahar') { throw "on the taskbar her body belongs to '$hit' (she is under the taskbar)" }
+            $o = $z -split ','
+            if ([int]$o[1] -ge 0 -and [int]$o[0] -gt [int]$o[1]) { throw "she is under the taskbar (z $z)" }
+        }
+        # Click-through outside her body: a point well beside her is the window's.
+        $st = State
+        $far = [ZProbe]::At([int]($st.x - 120), [int]($st.y + $st.height / 2))
+        if ($far -match '^Sahar') { throw "beside her body the click goes to '$far'" }
+        Assert-Shell 'always on top' -Tray
+    }
     Stop-Engine
     if ($script:win -and -not $script:win.HasExited) { $script:win.Kill() }
 }
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ZProbe {
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder t, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder t, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
+    [DllImport("user32.dll")] static extern IntPtr GetTopWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    static string Title(IntPtr h) { var t = new StringBuilder(128); GetWindowText(h, t, 128); return t.ToString(); }
+    /// "title|class" of the top-level window under a screen point (what a click there would reach).
+    public static string At(int x, int y) {
+        var h = GetAncestor(WindowFromPoint(new POINT { X = x, Y = y }), 2);
+        var c = new StringBuilder(128); GetClassName(h, c, 128);
+        return Title(h) + "|" + c;
+    }
+    /// The taskbar on top of the topmost band, without activating it (what Explorer does when he clicks it).
+    public static bool RaiseTaskbar() {
+        var h = FindWindow("Shell_TrayWnd", null);
+        return h != IntPtr.Zero && SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
+    }
+    /// "her,taskbar,window": z-order positions from the top (-1 = not found) of her overlay (by title, her process),
+    /// the taskbar, and the given window.
+    public static string Order(int pid, string title, IntPtr window) {
+        int i = 0, her = -1, bar = -1, win = -1;
+        var tray = FindWindow("Shell_TrayWnd", null);
+        for (var h = GetTopWindow(IntPtr.Zero); h != IntPtr.Zero; h = GetWindow(h, 2), i++) {
+            uint p; GetWindowThreadProcessId(h, out p);
+            if (her < 0 && p == pid && IsWindowVisible(h) && Title(h) == title) her = i;
+            if (h == tray) bar = i;
+            if (h == window) win = i;
+        }
+        return her + "," + bar + "," + win;
+    }
+}
+"@
 
 # The owner's glitch reports on 0.10.1 (0.11): two faces at once, things in the menu flashing in the wrong place, her
 # drawing jumping while she moves. Burst grabs whole frames at screen rate in C# (PowerShell loops reach ~17 fps) and can
