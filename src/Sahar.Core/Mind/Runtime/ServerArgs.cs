@@ -8,7 +8,9 @@ namespace Sahar.Core.Mind.Runtime;
 /// thought took every token of her reply.</summary>
 public static class ServerArgs
 {
-    public static IReadOnlyList<string> For(TierPlan plan, string modelPath, int port, string apiKey, int threads)
+    /// <param name="device">0.14.1: the one GPU to offload to (<c>--device Vulkan1</c>, from <see cref="Devices.Pick"/>);
+    /// null = llama.cpp's own choice. Never for the CPU backend.</param>
+    public static IReadOnlyList<string> For(TierPlan plan, string modelPath, int port, string apiKey, int threads, string? device = null)
     {
         var a = new List<string>
         {
@@ -20,6 +22,7 @@ public static class ServerArgs
             "--reasoning", "off",
         };
         if (plan.Offload == Offload.Fit) a.AddRange(["--fit", "on"]);
+        if (device is { Length: > 0 } && plan.Backend != Backend.Cpu && plan.Offload != Offload.None) a.AddRange(["--device", device]);
         return a;
     }
 

@@ -46,17 +46,17 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             var probe = Probe.Read();
             var plan = Tiers.Plan(probe, s.MindUseGpu, s.MindBackend);
             if (plan.Tier == Tier.None) plan = plan with { Context = 4096 };
-            try { return await StartAsync(model, path, plan, ct); }
+            try { return await StartAsync(model, path, plan, Tiers.Best(probe), ct); }
             catch (MindRuntimeException e) when (plan.Backend != Backend.Cpu && e.Code is "load-failed" or "oom")
             {
                 MindLog.Write($"runtime: {plan.Backend} load failed ({e.Code}), trying the CPU");
-                return await StartAsync(model, path, plan with { Backend = Backend.Cpu, Offload = Offload.None }, ct);
+                return await StartAsync(model, path, plan with { Backend = Backend.Cpu, Offload = Offload.None }, null, ct);
             }
         }
         finally { _gate.Release(); }
     }
 
-    private async Task<RuntimeReady> StartAsync(ModelEntry model, string path, TierPlan plan, CancellationToken ct)
+    private async Task<RuntimeReady> StartAsync(ModelEntry model, string path, TierPlan plan, Gpu? gpu, CancellationToken ct)
     {
         var appDir = AppContext.BaseDirectory;
         var dir = ServerArgs.RuntimeDir(appDir, MindPaths.Runtime, plan.Backend);
@@ -68,6 +68,15 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         }
         var exe = Path.Combine(dir, "llama-server.exe");
         if (!File.Exists(exe)) throw new MindRuntimeException("load-failed");
+        // 0.14.1 fix 7: one named GPU — llama.cpp's Vulkan default also takes an Optimus laptop's Intel iGPU.
+        IReadOnlyList<LlamaDevice> before = [];
+        LlamaDevice? device = null;
+        if (plan.Backend != Backend.Cpu && plan.Offload != Offload.None)
+        {
+            before = await ListDevicesAsync(exe, dir, plan.Backend, ct);
+            device = Devices.Pick(before, gpu);
+            MindLog.Write($"runtime: devices {(before.Count == 0 ? "none" : string.Join(", ", before.Select(d => $"{d.Id} {d.Name} {d.TotalMB}MB")))}; using {device?.Id ?? "llama.cpp's choice"}");
+        }
         int port = FreePort();
         var key = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
         var psi = new ProcessStartInfo(exe)
@@ -75,8 +84,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = dir,
             RedirectStandardError = true, RedirectStandardOutput = true,
         };
-        foreach (var a in ServerArgs.For(plan, path, port, key, ServerArgs.Threads(Environment.ProcessorCount, 0))) psi.ArgumentList.Add(a);
-        if (plan.Backend == Backend.Cuda) psi.Environment["PATH"] = Path.Combine(MindPaths.Runtime, "cudart") + ";" + Environment.GetEnvironmentVariable("PATH");
+        foreach (var a in ServerArgs.For(plan, path, port, key, ServerArgs.Threads(Environment.ProcessorCount, 0), device?.Id)) psi.ArgumentList.Add(a);
+        if (plan.Backend == Backend.Cuda) psi.Environment["PATH"] = CudaPath();
         _vramMB = 0;
         _oom = false;
         var sw = Stopwatch.StartNew();
@@ -103,9 +112,38 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         _client = client;
         int ram = 0;
         try { p.Refresh(); ram = (int)(p.WorkingSet64 / (1024 * 1024)); } catch (Exception) { }
-        _ready = new RuntimeReady(model.Name, model.Quant, plan.Tier, plan.Backend, (int)sw.ElapsedMilliseconds, _vramMB, ram);
-        MindLog.Write(FormattableString.Invariant($"runtime: ready backend={plan.Backend} tier={plan.Tier} load={sw.ElapsedMilliseconds}ms vram={_vramMB}MB ram={ram}MB"));
+        long loadMs = sw.ElapsedMilliseconds;
+        // b12207's default verbosity hides the "buffer size" lines (0.14.0 logged vram=0MB on his GPU): the device's own
+        // free memory before and after the load says what her model took there.
+        if (device is not null && _vramMB == 0) _vramMB = Devices.UsedMB(before, await ListDevicesAsync(exe, dir, plan.Backend, ct), device.Id);
+        _ready = new RuntimeReady(model.Name, model.Quant, plan.Tier, plan.Backend, (int)loadMs, _vramMB, ram);
+        MindLog.Write(FormattableString.Invariant($"runtime: ready model={model.Name} {model.Quant} backend={plan.Backend} device={device?.Name ?? (plan.Backend == Backend.Cpu ? "cpu" : "default")} tier={plan.Tier} load={loadMs}ms vram={_vramMB}MB ram={ram}MB"));
         return _ready;
+    }
+
+    private static string CudaPath() => Path.Combine(MindPaths.Runtime, "cudart") + ";" + Environment.GetEnvironmentVariable("PATH");
+
+    /// <summary><c>llama-server --list-devices</c> (≈ 1 s; 15 s at most): the GPUs this runtime sees, names and memory.</summary>
+    private static async Task<IReadOnlyList<LlamaDevice>> ListDevicesAsync(string exe, string dir, Backend backend, CancellationToken ct)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true };
+            psi.ArgumentList.Add("--list-devices");
+            if (backend == Backend.Cuda) psi.Environment["PATH"] = CudaPath();
+            using var p = Process.Start(psi);
+            if (p is null) return [];
+            var err = p.StandardError.ReadToEndAsync(ct);
+            var outText = await p.StandardOutput.ReadToEndAsync(ct).WaitAsync(TimeSpan.FromSeconds(15), ct);
+            await err.WaitAsync(TimeSpan.FromSeconds(2), ct);
+            if (!p.WaitForExit(2000)) p.Kill();
+            return Devices.Parse(outText);
+        }
+        catch (Exception e) when (e is TimeoutException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            MindLog.Write($"runtime: list-devices failed ({e.GetType().Name})");
+            return [];
+        }
     }
 
     /// <summary>The server's GPU buffers (model, KV, compute) and a memory failure; the line itself is dropped.</summary>
