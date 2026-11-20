@@ -32,6 +32,9 @@ internal sealed class UpdateTool : IDisposable
     private UpdateOffer? _offer;
     private UpdateStep? _last;
     private string _status = "idle";
+    /// <summary>0.14.1 (review follow-up): Windows is ending the session or she is quitting — a setup is never started
+    /// then (it would run against a closing desktop).</summary>
+    public bool ShuttingDown { get; set; }
     private int? _setupExit;
 
     /// <param name="automatic">Checks on the schedule (off in test mode and when the setting is off).</param>
@@ -144,7 +147,7 @@ internal sealed class UpdateTool : IDisposable
                 _say("ما قدرت نزّل التحديث هلق، بجرّب بكرا");
                 return;
             }
-            if (!Installed) try { File.WriteAllText(_marker, UpdateRules.MoveMarker(DateTimeOffset.Now)); } catch (Exception) { }
+            if (ShuttingDown) { _status = "idle"; Log.Write("update: not started (shutting down)"); return; }
             // Starting the setup is off her UI thread: Windows scans a new 60 MB exe before it runs (5.3 s on CI run
             // 43598507492), and she must keep drawing and answering meanwhile.
             bool silent = Installed;
@@ -163,6 +166,9 @@ internal sealed class UpdateTool : IDisposable
             _say("ما قدرت ثبّت التحديث هلق، بجرّب بكرا");
             return;
         }
+        // 0.14.1 (review follow-up): the portable marker only once the wizard really started (a launch that failed
+        // left a marker that told the next start she had moved).
+        if (!Installed) try { File.WriteAllText(_marker, UpdateRules.MoveMarker(DateTimeOffset.Now)); } catch (Exception) { }
         _status = "installing";
         Log.Write($"update: installing {offer.Version} ({(Installed ? "silent" : "wizard: portable")})");
         _say(Installed ? "عم ثبّت النسخة الجديدة، رح ارجع بعد شوي 💜"

@@ -716,6 +716,8 @@ internal sealed unsafe class App
         movedTimer.Start();
         tray.CheckUpdate += () => Safe(() => updates.Check(manual: true));
         tray.EndSession += () => Safe(lifeDirector.Save);   // shutdown, logoff, update restart
+        tray.EndSession += () => updates.ShuttingDown = true;
+        tray.Quit += () => updates.ShuttingDown = true;
         tray.EndSession += () => Safe(() => { if (!_state.Hidden) motion.Play(MotionKind.Goodbye); });
         // The PC just started (or a test says so): she flies in and says hello (motion 18).
         if (Hello.ShouldGreet(DateTimeOffset.Now, SignIn.Time(), _options.TestMode, _options.SimulateBoot))
@@ -939,7 +941,7 @@ internal sealed unsafe class App
                 $"generation={host.Generation} overlayVisible={(stage.Visible ? "true" : "false")} " +
                 FormattableString.Invariant($"faceOffsetX={soul.LookTarget.X * sahar.Scale:0.##} canvasX={sahar.Position.X:0} canvasY={sahar.Position.Y:0} dpi={sahar.DpiScale:0.###}") +
                 $" face={sahar.FaceShown.Eyes}/{sahar.FaceShown.Mouth} faceSwaps={sahar.FaceSwaps} faceAnims={sahar.FaceAnimationsMade + FadeLayer.StepAnimationsMade} moon={(sahar.MoonProps.TryGetScalar("moon", out var mv) == Windows.UI.Composition.CompositionGetValueStatus.Succeeded ? mv : -1):0.##} bodyScale={(motion.BodyScaleBusy ? "busy" : "free")}" +
-                FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} privateMB={Environment.WorkingSet / 1048576.0:0.0}")));
+                FormattableString.Invariant($" gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} workingSetMB={Environment.WorkingSet / 1048576.0:0.0}")));
             // Test mode: a full, compacting collection that hands freed memory back (GCCollectionMode.Aggressive), so a
             // memory step compares what she keeps, not where the next collection happened to land (test-build 43598510152).
             pipe.Register("debug-gc", _ =>

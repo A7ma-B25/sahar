@@ -30,6 +30,12 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
+      # 0.14.1 (review follow-up): a publish anywhere but main stops here, before 40 minutes of Windows checks.
+      - name: Publish only from main
+        if: ${{ inputs.publish && github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::publish=true is refused on ${GITHUB_REF} (only main signs and publishes)"
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:

@@ -204,3 +204,28 @@ class WorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewFollowUps0141Tests(unittest.TestCase):
+    """0.14.0 review follow-ups (integration-todo «After 0.14.0»)."""
+
+    def setUp(self):
+        self.iss = read(*ISS)
+
+    def test_old_runtime_and_settings_files_are_cleared_before_the_copy(self):
+        # a llama.cpp pin bump must not leave the old build's DLLs beside the new llama-server.exe
+        block = re.search(r"(?ms)^\[InstallDelete\]\s*(.*?)^\[", self.iss)
+        self.assertIsNotNone(block, "no [InstallDelete] section")
+        self.assertIn(r'Type: filesandordirs; Name: "{app}\runtime"', block.group(1))
+        self.assertIn(r'Type: filesandordirs; Name: "{app}\Sahar.Settings"', block.group(1))
+
+    def test_an_orphaned_mind_is_waited_for(self):
+        self.assertIn("MindMutex = 'Local\\Sahar.Mind'", self.iss)
+        self.assertRegex(self.iss, r"WaitForMind\(")
+        mind = read("src", "Sahar.Mind", "Program.cs")
+        self.assertIn('"Local\\\\Sahar.Mind"', mind)
+
+    def test_test_build_refuses_to_publish_off_main_first(self):
+        yml = read(".github", "workflows", "test-build.yml")
+        steps = re.findall(r"- name: (.+)", yml)
+        self.assertTrue(steps and "main" in steps[0].lower() and "publish" in steps[0].lower(), steps[:2])

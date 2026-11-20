@@ -1730,7 +1730,7 @@ function Stage-Menu {
             if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
             Start-Sleep -Milliseconds 150
             $ri = Info
-            $rounds.Add(("{0}:{1:N1}/{2}/{3}" -f $i, ((State).workingSetBytes / 1MB), $ri.privateMB, $ri.gcHeapMB))
+            $rounds.Add(("{0}:{1:N1}/{2}/{3}" -f $i, ((State).workingSetBytes / 1MB), $ri.workingSetMB, $ri.gcHeapMB))
         }
         Start-Sleep -Seconds 3
         $gc = Kv 'debug-gc'
@@ -1739,7 +1739,7 @@ function Stage-Menu {
         if ([double]$gc.gcHeapMB - $heapFirst -gt 1) { throw ("15 rounds of menu and bubble kept {0:N1} MB more managed memory" -f ([double]$gc.gcHeapMB - $heapFirst)) }
         $ri = Info
         Write-Host "    per round (working set MB / private MB / managed heap MB): $($rounds -join ' ')"
-        Write-Host ("    first {0:N1} MB; settled: private {1} MB, managed heap {2} MB" -f ($first / 1MB), $ri.privateMB, $ri.gcHeapMB)
+        Write-Host ("    first {0:N1} MB; settled: working set {1} MB, managed heap {2} MB" -f ($first / 1MB), $ri.workingSetMB, $ri.gcHeapMB)
         Write-Host ("    after 15 more rounds: {0:N1} MB" -f ($after / 1MB))
         if ($after - $first -gt 5MB) { throw ("15 rounds of menu and bubble grew memory by {0:N1} MB" -f (($after - $first) / 1MB)) }
     }

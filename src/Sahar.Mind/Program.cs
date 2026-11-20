@@ -24,6 +24,8 @@ internal static class Program
         var pipeName = Arg("--pipe");
         if (pipeName is null) return 2;
         int parent = int.TryParse(Arg("--parent"), out var pid) ? pid : 0;
+        // 0.14.1 (review follow-up): the setup waits on this name for an orphaned Mind before it replaces files.
+        using var running = new Mutex(false, "Local\\Sahar.Mind");
         using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try { pipe.Connect(5000); }
         catch (Exception e) when (e is TimeoutException or IOException or UnauthorizedAccessException) { MindLog.Write($"mind: no engine pipe ({e.GetType().Name})"); return 3; }

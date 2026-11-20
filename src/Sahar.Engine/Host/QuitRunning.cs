@@ -31,9 +31,14 @@ internal static unsafe class QuitRunning
 
     private static bool QuitSahar(string? rememberFile)
     {
-        if (!Running(EngineMutex)) return true;
-        if (rememberFile is not null) Remember(rememberFile);
         var deadline = DateTime.UtcNow + Wait;
+        if (!Running(EngineMutex))
+        {
+            // 0.14.1 (review follow-up): an orphaned brain (her engine already gone) still holds its files: wait for it.
+            while (MindRunning() && DateTime.UtcNow < deadline) Thread.Sleep(200);
+            return !MindRunning();
+        }
+        if (rememberFile is not null) Remember(rememberFile);
         bool asked = false;
         while (!asked && DateTime.UtcNow < deadline && Running(EngineMutex))
         {

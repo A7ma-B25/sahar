@@ -84,6 +84,12 @@ english.Downgrade=A newer Sahar is installed (%1).%n%nReplace it with this older
 [Tasks]
 Name: "startup"; Description: "{cm:StartWithWindows}"
 
+[InstallDelete]
+; 0.14.1 (review follow-up): the last version's runtime and settings app go first, so a llama.cpp pin bump never leaves
+; an old DLL beside the new llama-server.exe (models live in %LocalAppData%\Sahar and are never here).
+Type: filesandordirs; Name: "{app}\runtime"
+Type: filesandordirs; Name: "{app}\Sahar.Settings"
+
 [Files]
 Source: "{#EngineDir}\Sahar.Engine.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#EngineDir}\Sahar.Mind.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -115,6 +121,7 @@ Type: filesandordirs; Name: "{%TEMP}\Sahar-update"
 const
   EngineMutex = 'Local\Sahar.Engine';
   SettingsMutex = 'Local\Sahar.Settings';   { the settings app (0.12): its window is closed by the same --quit }
+  MindMutex = 'Local\Sahar.Mind';           { her brain's process (0.14.1): it exits when the engine goes }
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B24750DD-9A27-4894-8A97-D099CBA9B19C}_is1';
 
 var
@@ -190,6 +197,22 @@ begin
   else
     Log('--quit exit code ' + IntToStr(Code));
   Result := not CheckForMutexes(EngineMutex + ',' + SettingsMutex);
+  if Result then WaitForMind();
+end;
+
+{ 0.14.1 (review follow-up): an orphaned Sahar.Mind.exe (and the llama-server it holds in its job) keeps its files in
+  use; it exits by itself once the engine is gone (it watches the engine), so wait for it up to 15 s. }
+procedure WaitForMind();
+var
+  I: Integer;
+begin
+  I := 0;
+  while CheckForMutexes(MindMutex) and (I < 60) do
+  begin
+    Sleep(250);
+    I := I + 1;
+  end;
+  if CheckForMutexes(MindMutex) then Log('her brain is still running after 15 s');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -219,6 +242,7 @@ begin
     else
       QuitByUs := EngineWas;
   end;
+  if Result = '' then WaitForMind();
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
