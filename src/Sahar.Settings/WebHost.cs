@@ -187,7 +187,7 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
         }
         catch (JsonException) { }
         string reply = await bridge.HandleAsync(json);
-        if (type is not ("get" or "prayer-today")) SettingsLog.Write($"page: {type ?? "?"}");   // the kind only
+        if (Sahar.Core.Diagnostics.LogRules.PageCallLogged(type)) SettingsLog.Write($"page: {type ?? "?"}");   // the kind only; never a routine poll
         Push(reply);
     }
 

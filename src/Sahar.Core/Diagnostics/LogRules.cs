@@ -42,6 +42,9 @@ public static partial class LogRules
     /// <summary><see cref="Kind"/> and the stack (method names; never the message).</summary>
     public static string Describe(Exception e) => e.StackTrace is { Length: > 0 } st ? $"{Kind(e)}{Environment.NewLine}{st}" : Kind(e);
 
+    /// <summary>0.14.1: the settings page's calls worth a log line (its kind only); routine reads and polls are not.</summary>
+    public static bool PageCallLogged(string? type) => type is not ("get" or "prayer-today" or "mind-status");
+
     /// <summary>What kind of waiting this is: "next turn at 12:00:01" and "next turn at 12:07:40" are one kind.</summary>
     public static string WaitKind(string reason) => reason.StartsWith("next turn at ", StringComparison.Ordinal) ? "next turn" : reason;
 }

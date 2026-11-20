@@ -35,3 +35,16 @@ public sealed class ErrorTallyTests
         Assert.Null(t.Record("activity", Clamp()));
     }
 }
+
+/// <summary>0.14.1 fix 5: routine reads from the settings page are never logged (4 145 «page: mind-status» lines).</summary>
+public sealed class PageCallLogTests
+{
+    [Theory]
+    [InlineData("get", false)]
+    [InlineData("prayer-today", false)]
+    [InlineData("mind-status", false)]
+    [InlineData("set", true)]
+    [InlineData("mind-download", true)]
+    [InlineData(null, true)]
+    public void RoutinePollsAreNotLogged(string? type, bool logged) => Assert.Equal(logged, LogRules.PageCallLogged(type));
+}

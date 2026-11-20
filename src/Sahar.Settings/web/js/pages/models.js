@@ -6,11 +6,14 @@ import { getLang } from '../i18n.js';
 import { toArabicIndic } from '../digits.js';
 import { HAND, chip, chips, card, meta, item, bar, stats, iconBox } from '../mind-ui.js';
 import '../strings/mind-runtime.js';
+import { startPoll, stopPoll } from '../poll.js';
 
-let timer = null;
+// 0.14.1: one poller (poll.js), started only if this render is still the page (a render awaits before it gets there,
+// and a second render or a page change may come meanwhile: settings.log had 4 145 «mind-status» in minutes).
+let gen = 0;
 export function leave() {
-  if (timer) clearInterval(timer);
-  timer = null;
+  gen++;
+  stopPoll('models');
 }
 
 const num = (n) => (getLang() === 'ar' ? toArabicIndic(String(n)).replace('.', '٫') : String(n));
@@ -20,6 +23,7 @@ const ROLE = { default: ['roleDefault', 'recDefault'], challenger: ['roleChallen
 
 export async function render({ tx, ask, render: rerender }) {
   leave();
+  const mine = gen;
   let st = await ask('mind-status');
   const list = () => (st.ok && st.models ? st.models.models : []);
   const activeId = () => (st.ok && st.models ? st.models.active : null);
@@ -164,7 +168,7 @@ export async function render({ tx, ask, render: rerender }) {
   drawDownload();
   drawRecommended();
   drawMine();
-  timer = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 1000);
+  if (mine === gen) startPoll('models', refresh, 1500);
 
   return [
     title(tx('pageModels')),
