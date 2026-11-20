@@ -111,7 +111,7 @@ public class ActivityStackTests
     {
         var s = new ActivityStack();
         foreach (var (id, k) in new[] { ("a", ActivityKind.Copy), ("b", ActivityKind.ClaudeWorking), ("c", ActivityKind.Music),
-                     ("d", ActivityKind.CameraMic), ("e", ActivityKind.Shelf) }) s.Set(A(id, k), T0);
+                     ("d", ActivityKind.CameraMic), ("e", ActivityKind.CameraMic) }) s.Set(A(id, k), T0);
         var v = s.View(T0)!;
         Assert.Equal("a", v.Front.Id);
         Assert.Equal(["b", "c", "d"], v.Beads.Select(b => b.Id));
@@ -126,7 +126,7 @@ public class ActivityStackTests
         var s = new ActivityStack();
         s.Set(A("a", ActivityKind.Copy), T0);
         s.Set(A("b", ActivityKind.Music), T0);
-        s.Set(A("c", ActivityKind.Shelf), T0);
+        s.Set(A("c", ActivityKind.CameraMic), T0);
         var seen = new List<string>();
         for (int i = 0; i < 4; i++) { seen.Add(s.View(T0)!.Front.Id); s.Wheel(1, T0.AddSeconds(i)); }
         Assert.Equal(["a", "b", "c", "a"], seen);
@@ -147,28 +147,52 @@ public class ActivityStackTests
         Assert.Equal("a", s.View(T0)!.Front.Id);
     }
 
-    [Fact]
-    public void WeatherToday_OnlyWhenAlone()
+    // 0.14.1 owner decision: the tag is only for something live and important; the weather of the day, the screen-time
+    // counter, the shelf and paused music stay in their cards and settings and never hang, alone or as beads.
+    [Theory]
+    [InlineData(ActivityKind.WeatherToday)]
+    [InlineData(ActivityKind.ScreenTime)]
+    [InlineData(ActivityKind.Shelf)]
+    [InlineData(ActivityKind.MusicPaused)]
+    public void Resting_NeverHangsATag(ActivityKind k)
     {
         var s = new ActivityStack();
-        s.Set(A("weather", ActivityKind.WeatherToday), T0);
-        Assert.Equal("weather", s.View(T0)!.Front.Id);
+        s.Set(A("rest", k), T0);
+        Assert.Null(s.View(T0));
+        Assert.Contains(s.All(T0), a => a.Id == "rest");   // still there for its card
         s.Set(A("music", ActivityKind.Music), T0);
         var v = s.View(T0)!;
         Assert.Equal("music", v.Front.Id);
         Assert.Empty(v.Beads);
+        s.Wheel(1, T0);
+        Assert.Equal("music", s.View(T0)!.Front.Id);
+    }
+
+    [Theory]
+    [InlineData(ActivityKind.ClaudeAsk)]
+    [InlineData(ActivityKind.ClaudeWorking)]
+    [InlineData(ActivityKind.Music)]
+    [InlineData(ActivityKind.Timer)]
+    [InlineData(ActivityKind.Copy)]
+    [InlineData(ActivityKind.WeatherAlert)]
+    [InlineData(ActivityKind.BatteryLow)]
+    [InlineData(ActivityKind.CameraMic)]
+    public void LiveAndImportant_Hangs(ActivityKind k)
+    {
+        var s = new ActivityStack();
+        s.Set(A("live", k), T0);
+        Assert.Equal("live", s.View(T0)!.Front.Id);
     }
 
     [Fact]
-    public void ScreenTime_NeverHangsAlone_ButIsInTheCycle()
+    public void NothingLive_SheCarriesNothing()
     {
         var s = new ActivityStack();
+        s.Set(A("weather", ActivityKind.WeatherToday), T0);
         s.Set(A("time", ActivityKind.ScreenTime), T0);
-        Assert.Null(s.View(T0));
-        s.Set(A("music", ActivityKind.Music), T0);
-        Assert.Equal("music", s.View(T0)!.Front.Id);
-        s.Wheel(1, T0);
-        Assert.Equal("time", s.View(T0)!.Front.Id);
+        s.Moment(A("charging", ActivityKind.Charging), T0);
+        Assert.Equal("charging", s.View(T0)!.Front.Id);   // a moment shows, then goes by itself
+        Assert.Null(s.View(T0.AddSeconds(7)));
     }
 
     [Fact]

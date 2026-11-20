@@ -6,8 +6,9 @@ public sealed record TagView(Activity Front, IReadOnlyList<Activity> Beads, bool
 /// <summary>
 /// Every live activity and moment, and which one her tag shows (spec 0.13 §1.3): one at a time, rank first, equal rank
 /// newest first. A moment (or Claude asking) that arrives after your pick takes the front, and when it ends your pick is
-/// back. The weather of the day shows only when nothing else is live; screen time never hangs by itself but is in the
-/// wheel's cycle. The rest wait as beads: at most three, then a knot.
+/// back. 0.14.1 (owner): only what is live and important hangs (<see cref="ActivityRank.Hangs"/>): the weather of the
+/// day, screen time, the shelf and paused music stay in their cards and settings; with nothing live she carries
+/// nothing. The rest wait as beads: at most three, then a knot.
 /// </summary>
 public sealed class ActivityStack
 {
@@ -43,7 +44,7 @@ public sealed class ActivityStack
     /// <summary>The mouse wheel over the tag: the next (or previous) one in the cycle comes forward.</summary>
     public void Wheel(int steps, DateTimeOffset now)
     {
-        var cycle = Cycle(now);
+        var cycle = Tag(now);
         if (cycle.Count < 2 || View(now) is not { } v) return;
         int i = cycle.FindIndex(e => e.Activity.Id == v.Front.Id);
         int next = ((i + steps) % cycle.Count + cycle.Count) % cycle.Count;
@@ -55,8 +56,8 @@ public sealed class ActivityStack
 
     public TagView? View(DateTimeOffset now)
     {
-        var cycle = Cycle(now);
-        if (cycle.Count == 0 || cycle.All(e => e.Activity.Kind == ActivityKind.ScreenTime)) return null;
+        var cycle = Tag(now);
+        if (cycle.Count == 0) return null;
         var front = cycle[0];
         if (_pick is { } id && cycle.FirstOrDefault(e => e.Activity.Id == id) is { } picked
             && !cycle.Any(e => ActivityRank.Of(e.Activity.Kind) <= 2 && e.Since > _pickedAt && e != picked))
@@ -71,9 +72,9 @@ public sealed class ActivityStack
     private List<Entry> Cycle(DateTimeOffset now)
     {
         foreach (var gone in _items.Where(p => p.Value.Until is { } u && u <= now).Select(p => p.Key).ToList()) _items.Remove(gone);
-        var list = _items.Values.OrderBy(e => ActivityRank.Of(e.Activity.Kind)).ThenByDescending(e => e.Since).ToList();
-        if (list.Any(e => e.Activity.Kind is not (ActivityKind.WeatherToday or ActivityKind.ScreenTime)))
-            list.RemoveAll(e => e.Activity.Kind == ActivityKind.WeatherToday);
-        return list;
+        return _items.Values.OrderBy(e => ActivityRank.Of(e.Activity.Kind)).ThenByDescending(e => e.Since).ToList();
     }
+
+    /// <summary>What her tag may carry, in order.</summary>
+    private List<Entry> Tag(DateTimeOffset now) => Cycle(now).Where(e => ActivityRank.Hangs(e.Activity.Kind)).ToList();
 }

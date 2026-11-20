@@ -4187,13 +4187,25 @@ function Stage-Activities {
             Pose-Body ([int]($Work.Width * 0.62)) ([int]($Work.Height * 0.22)) | Out-Null
             [Mouse]::Move(5, 5)
             Start-Sleep -Milliseconds 400
+            # 0.14.1 (owner): resting things never hang a tag — their cards still open (by id, as the menu and her tools do).
+            $resting = @{ weather = 'weather'; time = 'screentime'; shelf = 'shelf'; musicPaused = 'music' }
             foreach ($k in $kinds) {
                 Act 'activity-clear' | Out-Null
-                if ($k -eq 'time') { Act 'activity-sim' '{"kind":"weather"}' | Out-Null }   # screen time never hangs alone: the wheel brings it
                 $a = Act 'activity-sim' ('{"kind":"' + $k + '"}')
-                if ($k -eq 'time') { Act 'activity-wheel' '{"steps":"1"}' | Out-Null }
                 Start-Sleep -Milliseconds 500
                 $a = Acts
+                if ($resting.ContainsKey($k)) {
+                    if ($a.tagShown -ne 'false' -or $a.front -ne 'none') { throw "${k}: a resting thing hangs a tag ($($a.front))" }
+                    Act 'activity-card' ('{"id":"' + $resting[$k] + '"}') | Out-Null
+                    Start-Sleep -Milliseconds 600
+                    $a = Acts
+                    if ($a.cardOpen -ne 'true') { throw "${k}: its card did not open by id" }
+                    $c = Rect4 $a.card
+                    $shot = Screenshot "act-$k-card-$theme.png"
+                    Crop-Rect $shot ($c.x - 24) ($c.y - 24) ($c.w + 48) ($c.h + 56) (Join-Path $Out "app-$k-card-$theme.png")
+                    Act 'activity-card-close' | Out-Null
+                    continue
+                }
                 if ($a.tagShown -ne 'true') { throw "${k}: no tag ($($a.front))" }
                 $st = State
                 $t = Rect4 $a.tag
@@ -4240,12 +4252,13 @@ function Stage-Activities {
         foreach ($k in @('music', 'claude', 'shelf', 'camera', 'weather')) { Act 'activity-sim' ('{"kind":"' + $k + '"}') | Out-Null }
         $a = Acts
         if ($a.front -ne 'ClaudeWorking') { throw "front $($a.front) (Claude working outranks music)" }
-        if ($a.beads -ne 'Music,CameraMic,Shelf' -or $a.knot -ne 'false') { throw "beads $($a.beads) knot $($a.knot) (the weather waits for an empty thread)" }
+        if ($a.beads -ne 'Music,CameraMic' -or $a.knot -ne 'false') { throw "beads $($a.beads) knot $($a.knot) (0.14.1: the shelf and the weather never hang)" }
         Act 'activity-sim' '{"kind":"copy"}' | Out-Null
+        Act 'activity-sim' '{"kind":"battery"}' | Out-Null
         $a = Acts
-        if ($a.front -ne 'Copy' -or $a.knot -ne 'true') { throw "with five: front $($a.front) knot $($a.knot)" }
+        if ($a.front -ne 'BatteryLow' -or $a.knot -ne 'true') { throw "with five: front $($a.front) knot $($a.knot)" }
         Act 'activity-wheel' '{"steps":"1"}' | Out-Null
-        if ((Acts).front -ne 'ClaudeWorking') { throw "the wheel did not move to the next one ($((Acts).front))" }
+        if ((Acts).front -ne 'Copy') { throw "the wheel did not move to the next one ($((Acts).front))" }
         Act 'activity-bead' '{"index":"1"}' | Out-Null
         $a = Acts
         Write-Host "    after a bead click: front $($a.front)"
@@ -4360,7 +4373,7 @@ function Stage-Activities {
         $c = Send '{"type":"cmd","name":"debug-comment"}'
         Write-Host "    bubble: $([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(((($c.error -split ' ') | Where-Object { $_ -like 'text64=*' }) -replace 'text64=',''))))"
         Start-Sleep -Milliseconds 6500
-        if ((Acts).front -ne 'WeatherToday') { throw "after the alert: $((Acts).front)" }
+        if ((Acts).front -ne 'none') { throw "after the alert she still carries $((Acts).front) (0.14.1: the weather of the day never hangs)" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'SENTINELCITY') { throw 'engine.log holds the city' }
     }

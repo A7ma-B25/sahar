@@ -32,6 +32,11 @@ public static class ActivityRank
         _ => 10,   // screen time: in the cycle, never by itself
     };
 
+    /// <summary>0.14.1 (owner decision): the tag is only for something live and important — Claude asking or working,
+    /// music playing, a timer or a copy running, a weather alert, low battery, the camera or mic in use, and the short
+    /// moments (which end by themselves). The weather of the day, screen time, the shelf and paused music never hang.</summary>
+    public static bool Hangs(ActivityKind k) => k is not (ActivityKind.WeatherToday or ActivityKind.ScreenTime or ActivityKind.Shelf or ActivityKind.MusicPaused);
+
     /// <summary>Moments take the front for a while, then go.</summary>
     public static bool IsMoment(ActivityKind k) => k is ActivityKind.WeatherAlert or ActivityKind.Screenshot or ActivityKind.CopyDone
         or ActivityKind.ClaudeDone or ActivityKind.Back or ActivityKind.BatteryLow or ActivityKind.Charging or ActivityKind.Volume;
