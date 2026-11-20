@@ -48,9 +48,20 @@ def fallback(text):
     return any(f in (text or "") for f in FALLBACKS)
 
 
+def her_line(row):
+    """What she said: the header or her bubble (the list bubble only for a draft — otherwise it is a tool's list)."""
+    seen, where = row.get("seen") or [], row.get("where") or []
+    if seen and len(seen) == len(where):
+        want = ("list",) if row.get("kind") == "draft" else ("header", "bubble")
+        mine = [t for t, w in zip(seen, where) if w in want]
+        if mine:
+            return mine[-1]
+    return row.get("visible") or ""
+
+
 def score(row, golden=None):
     g = golden or {}
-    visible = (row.get("visible") or "").strip()
+    visible = her_line(row).strip()
     expect = row.get("expectTool")
     tools = [c.split(" ")[0] for c in row.get("calls") or []]
     acted = [c for c in row.get("calls") or [] if not c.endswith(" refuse")]
@@ -67,8 +78,8 @@ def score(row, golden=None):
     checks = {
         "visible": shown,
         "tool": bool(right),
-        "syrian": syrian(text) if kind != "draft" else bool(text),
-        "short": bool(text) and len(text) <= (400 if kind == "draft" else SHORT),
+        "syrian": shown and (syrian(text) if kind != "draft" else bool(text)),
+        "short": shown and len(text) <= (400 if kind == "draft" else SHORT),
         "topic": bool(shown and on_topic),
     }
     return checks
@@ -83,7 +94,7 @@ def summarize(rows, golden_by_id):
     totals = {n: sum(1 for _, c in scored if c[n]) for n in names}
     points = sum(totals.values())
     out = {"rows": len(scored), "totals": totals, "score": round(100 * points / (5 * len(scored)), 1) if scored else 0.0,
-           "fallbacks": sum(1 for r, _ in scored if fallback(r.get("visible"))), "model": rows[0].get("model") if rows else None}
+           "fallbacks": sum(1 for r, _ in scored if fallback(her_line(r))), "model": rows[0].get("model") if rows else None}
     return out, scored
 
 
@@ -94,7 +105,7 @@ def markdown(summary, scored):
              "| id | prompt | visible reply | calls | ✓ |", "|---|---|---|---|---|"]
     for r, c in scored:
         ok = "".join(k[0].upper() if v else "·" for k, v in c.items())
-        reply = (r.get("visible") or "(nothing)").replace("|", "/").replace("\n", " ")
+        reply = (her_line(r) or "(nothing)").replace("|", "/").replace("\n", " ")
         calls = ", ".join(r.get("calls") or []) or ("fast path" if r.get("fastPath") else "")
         lines.append(f"| {r.get('id')} | {r.get('prompt')} | {reply} | {calls} | {ok} |")
     return "\n".join(lines) + "\n"

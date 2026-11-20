@@ -23,6 +23,15 @@ class MindEvalScoreTests(unittest.TestCase):
         self.assertFalse(c["visible"])
         self.assertFalse(c["topic"])
 
+    def test_a_fallback_line_scores_nothing_but_the_tool(self):
+        c = m.score({"kind": "chat", "visible": "ما فهمت عليك منيح… فيك تقولها بطريقة تانية؟", "calls": []})
+        self.assertEqual([k for k, v in c.items() if v], ["tool"])
+
+    def test_a_tools_list_is_not_her_line(self):
+        row = {"kind": "command", "expectTool": "quran.open", "calls": ["quran.open act"], "seen": ["فتحتلك القرآن", "1. الفاتحة 2. البقرة"],
+               "where": ["header", "list"], "visible": "1. الفاتحة 2. البقرة"}
+        self.assertEqual(m.her_line(row), "فتحتلك القرآن")
+
     def test_a_good_chat_reply_passes_all_five(self):
         row = {"id": "e01", "kind": "chat", "visible": "منيحة الحمدلله، وإنت شو أخبارك؟", "calls": [], "fastPath": False}
         self.assertEqual(set(m.score(row, {"topic": ["منيح"]}).values()), {True})
