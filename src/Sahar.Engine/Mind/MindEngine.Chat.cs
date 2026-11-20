@@ -296,11 +296,11 @@ internal sealed partial class MindEngine
             Speech.Say(text, comment: true);
             return;
         }
-        if (id != _chatTurn) { _turns.Remove(id); return; }   // a cancelled turn's late words
+        if (id != _chatTurn) { _turns.Remove(id); Log.Write("mind: said dropped (late)"); return; }   // a cancelled turn's late words
         _chatTurn = null;
         _turns.Remove(id);
         Menu.MindThinking(false);
-        if (text.Length == 0) return;
+        if (text.Length == 0) { Log.Write("mind: said dropped (empty)"); return; }
         Log.Write($"mind: said ({text.Length} chars)");
         if (Menu.IsOpen && MenuCard.FitsHeader(text)) Menu.SetReply(text);
         else Speech.Say(Address.For(Address.You, text));

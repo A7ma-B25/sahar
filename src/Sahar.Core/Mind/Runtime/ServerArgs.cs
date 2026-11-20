@@ -4,7 +4,8 @@ namespace Sahar.Core.Mind.Runtime;
 
 /// <summary>llama-server's command line (spec §3.1, §3.5): loopback only, a fresh key per launch, no web UI, the
 /// model's own chat template (--jinja), q8_0 KV cache (q4_0 hurts tool calls), one slot, no built-in sleep (the
-/// process is killed instead).</summary>
+/// process is killed instead). 0.14.1: no thinking (<c>--reasoning off</c>): Gemma 4's template thinks by default and the
+/// thought took every token of her reply.</summary>
 public static class ServerArgs
 {
     public static IReadOnlyList<string> For(TierPlan plan, string modelPath, int port, string apiKey, int threads)
@@ -16,6 +17,7 @@ public static class ServerArgs
             "-ngl", plan.Offload == Offload.None ? "0" : "999",
             "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
             "-t", threads.ToString(System.Globalization.CultureInfo.InvariantCulture), "--parallel", "1",
+            "--reasoning", "off",
         };
         if (plan.Offload == Offload.Fit) a.AddRange(["--fit", "on"]);
         return a;

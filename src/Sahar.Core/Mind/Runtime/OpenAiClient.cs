@@ -9,7 +9,9 @@ namespace Sahar.Core.Mind.Runtime;
 /// <summary>
 /// <see cref="ILlm"/> over llama-server's OpenAI-compatible API on 127.0.0.1 with the launch's key: streamed
 /// /v1/chat/completions (SSE), grammar-constrained with <c>response_format: json_schema</c> when a schema is given.
-/// Errors become protocol codes: load-failed (no server), busy (503 while loading), timeout, bad-output.
+/// Errors become protocol codes: load-failed (no server), busy (503 while loading), timeout, bad-output, thinking (the
+/// model only thought: no words). 0.14.1: thinking is asked off per request too, and a connection lost before any byte
+/// (a keep-alive the server closed) is tried once more.
 /// Written with Utf8JsonWriter / JsonDocument only (AOT). Never logs text.
 /// </summary>
 public sealed class OpenAiClient(HttpMessageHandler handler, int port, string apiKey) : ILlm
@@ -29,17 +31,23 @@ public sealed class OpenAiClient(HttpMessageHandler handler, int port, string ap
     public async Task<LlmReply> CompleteAsync(LlmRequest request, Action<string>? partial, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        using var req = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions") { Content = new ByteArrayContent(Body(request)) };
-        req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var body = Body(request);
         HttpResponseMessage resp;
-        try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct); }
-        catch (HttpRequestException) { throw new MindRuntimeException("load-failed"); }
+        for (int attempt = 1; ; attempt++)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions") { Content = new ByteArrayContent(body) };
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct); break; }
+            catch (HttpRequestException) when (attempt == 1) { await Task.Delay(150, ct); }
+            catch (HttpRequestException e) { throw new MindRuntimeException("load-failed", e.HttpRequestError.ToString()); }
+        }
         using (resp)
         {
             if (resp.StatusCode == HttpStatusCode.ServiceUnavailable) throw new MindRuntimeException("busy");
             if (!resp.IsSuccessStatusCode) throw new MindRuntimeException("bad-output");
             var text = new StringBuilder();
+            bool thought = false;
             int prompt = 0, output = 0;
             TimeSpan first = TimeSpan.Zero;
             using var reader = new StreamReader(await resp.Content.ReadAsStreamAsync(ct), Encoding.UTF8);
@@ -52,6 +60,8 @@ public sealed class OpenAiClient(HttpMessageHandler handler, int port, string ap
                     if (data == "[DONE]") break;
                     using var doc = JsonDocument.Parse(data);
                     var root = doc.RootElement;
+                    if (root.TryGetProperty("choices", out var ch) && ch.GetArrayLength() > 0 && ch[0].TryGetProperty("delta", out var dl)
+                        && dl.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String && rc.GetString()!.Length > 0) thought = true;
                     if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0
                         && choices[0].TryGetProperty("delta", out var delta) && delta.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
                     {
@@ -71,7 +81,8 @@ public sealed class OpenAiClient(HttpMessageHandler handler, int port, string ap
                 }
             }
             catch (JsonException) { throw new MindRuntimeException("bad-output"); }
-            catch (IOException) { throw new MindRuntimeException("load-failed"); }
+            catch (IOException e) { throw new MindRuntimeException("load-failed", e.GetType().Name); }
+            if (thought && text.Length == 0) throw new MindRuntimeException("thinking");
             return new LlmReply(text.ToString(), prompt, output, first, sw.Elapsed);
         }
     }
@@ -98,6 +109,9 @@ public sealed class OpenAiClient(HttpMessageHandler handler, int port, string ap
             w.WriteNumber("top_k", s.TopK);
             w.WriteNumber("max_tokens", s.MaxTokens);
             w.WriteBoolean("stream", true);
+            w.WriteStartObject("chat_template_kwargs");
+            w.WriteBoolean("enable_thinking", false);
+            w.WriteEndObject();
             w.WriteStartObject("stream_options");
             w.WriteBoolean("include_usage", true);
             w.WriteEndObject();

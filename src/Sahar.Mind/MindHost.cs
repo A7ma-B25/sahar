@@ -161,19 +161,23 @@ internal sealed class MindHost : ITurnIO
                 else if (source == "draft")
                 {
                     var draft = await MindParts.Drafter(new LazyLlm(_runtime), Store).DraftAsync(new Sahar.Core.Mind.Drafts.DraftRequest(turn.Text ?? ""), cts.Token);
+                    if (draft is null) MindLog.Write("turn: dropped draft-empty");
                     Send(draft is null ? new MindMsg { T = "error", Id = id, Error = "bad-output" } : new MindMsg { T = "draft", Id = id, Text = draft.Text, Kind = draft.Label });
                 }
                 else
                 {
                     // Review X2: one runner per session, so she remembers the last lines (a new store starts a new one).
-                    _runner ??= EvalBudget() is { } budget
-                        ? new TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store) { ChatBudget = budget }
-                        : MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
+                    // 0.14.1: every reason a reply does not reach him is logged as a kind.
+                    _runner ??= new TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store)
+                    {
+                        ChatBudget = EvalBudget() ?? TimeSpan.FromSeconds(20),
+                        Dropped = kind => MindLog.Write($"turn: dropped {kind}"),
+                    };
                     await _runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
             }
             catch (OperationCanceledException) { Send(new MindMsg { T = "error", Id = id, Error = _quit.IsCancellationRequested || sw.Elapsed < TimeSpan.FromMinutes(3) ? "cancelled" : "timeout" }); }
-            catch (MindRuntimeException e) { Send(new MindMsg { T = "error", Id = id, Error = e.Code }); }
+            catch (MindRuntimeException e) { MindLog.Write($"turn: dropped {e.Code}{(e.Detail is { } d ? " " + d : "")}"); Send(new MindMsg { T = "error", Id = id, Error = e.Code }); }
             catch (Exception e) { MindLog.Write($"turn: failed ({e.GetType().Name})"); Send(new MindMsg { T = "error", Id = id, Error = "bad-output" }); }
             finally
             {

@@ -98,7 +98,7 @@ public static class PromptBuilder
         foreach (var (u, a) in kept)
         {
             msgs.Add(new("user", Quote(u)));
-            msgs.Add(new("assistant", Quote(a)));
+            msgs.Add(new("assistant", AsDecision(Quote(a))));
         }
         var b = new StringBuilder();
         var sit = SituationBlock(situation);
@@ -113,6 +113,24 @@ public static class PromptBuilder
         });
         msgs.Add(new("user", b.ToString()));
         return msgs;
+    }
+
+    /// <summary>0.14.1: her past line in the shape she answers in (the schema's decision), so the history never shows
+    /// the model plain-text answers to copy.</summary>
+    public static string AsDecision(string say)
+    {
+        using var ms = new MemoryStream();
+        using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            w.WriteStartObject();
+            w.WriteStartArray("actions"); w.WriteEndArray();
+            w.WriteString("next", "done");
+            w.WriteString("say", say);
+            w.WriteNull("mood");
+            w.WriteStartArray("remember"); w.WriteEndArray();
+            w.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(ms.ToArray());
     }
 
     private static string Clip(string s, int max) => s.Length <= max ? s : s[..max];

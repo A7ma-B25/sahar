@@ -21,7 +21,7 @@ public sealed class PromptAndTemplateTests
         Assert.Equal(prefix, msgs[0].Content);
         int historyTokens = msgs.Skip(1).Take(msgs.Count - 2).Sum(m => PromptBuilder.Tokens(m.Content));
         Assert.True(historyTokens <= PromptBuilder.HistoryTokens, $"{historyTokens}");
-        Assert.Equal("ر5", msgs[^2].Content);   // the newest turn is kept first
+        Assert.Equal(PromptBuilder.AsDecision("ر5"), msgs[^2].Content);   // the newest turn is kept first (0.14.1: as a decision)
         var last = msgs[^1].Content;
         Assert.Contains(PromptBuilder.DataOpen, last);
         Assert.Contains("\"app\":\"VS Code\"", last);   // Arabic and names stay readable (no \u escapes)

@@ -76,7 +76,7 @@ public sealed class RuntimeTests
         Assert.Equal("json_schema", body.RootElement.GetProperty("response_format").GetProperty("type").GetString());
         Assert.Equal("object", body.RootElement.GetProperty("response_format").GetProperty("json_schema").GetProperty("schema").GetProperty("type").GetString());
         Assert.True(body.RootElement.GetProperty("stream").GetBoolean());
-        Assert.Equal(160, body.RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.Equal(256, body.RootElement.GetProperty("max_tokens").GetInt32());   // 0.14.1: 160 cut whole decisions
     }
 
     [Fact]

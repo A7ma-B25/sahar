@@ -26,6 +26,8 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
     /// <summary>How long a call may wait for the engine (an Ask waits up to 2 min for him).</summary>
     public TimeSpan ReplyWait { get; init; } = TimeSpan.FromSeconds(150);
     public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.Now;
+    /// <summary>0.14.1: why a reply did not reach him, as a kind (the Mind logs it; never text).</summary>
+    public Action<string>? Dropped { get; init; }
 
     private readonly List<(string User, string Her)> _history = [];
     /// <summary>After a distress reply: a day without proposals (spec §7.4); the engine's hello says Learn = false
@@ -83,13 +85,14 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested) { TimedOut(io, id); return; }
                     catch (MindRuntimeException e)
                     {
+                        Dropped?.Invoke(e.Detail is { } detail ? e.Code + " " + detail : e.Code);
                         io.Send(new MindMsg { T = "error", Id = id, Error = e.Code });
                         return;
                     }
                     finally { clock.Stop(); }
                 }
                 ct.ThrowIfCancellationRequested();
-                if (Decision.Parse(reply.Text) is not { } d) { invalid = true; break; }
+                if (Decision.Parse(reply.Text) is not { } d) { invalid = true; Dropped?.Invoke("unparsable"); break; }
                 say = d.Say;
                 mood = d.Mood;
                 risk = d.Risk;
@@ -99,7 +102,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                 foreach (var action in d.Actions.Take(MaxActions))
                 {
                     var call = new ToolCall(action.Tool, action.Args, action.Why);
-                    if (!registry.Validate(call).Ok) { invalid = true; continue; }
+                    if (!registry.Validate(call).Ok) { if (!invalid) Dropped?.Invoke("invalid-call"); invalid = true; continue; }
                     var spec = registry.Announced.First(t => t.Name == call.Tool);
                     if (ToolCatalog.MindLocal.Contains(call.Tool))
                     {
@@ -120,7 +123,9 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
             }
 
             var final = Final(say, outcomes, invalid);
-            if (chat && source != "draft") Keep(line, final);
+            if (final == ToolTemplates.NothingDone) Dropped?.Invoke("claims-undone");
+            if (chat && final.Trim().Length == 0) { Dropped?.Invoke("empty-say"); final = ToolTemplates.BadOutput; }   // he asked: never silence
+            if (chat && source != "draft" && !Fallback(final)) Keep(line, final);
             io.Send(new MindMsg { T = "say", Id = id, Text = final, Mood = mood, Final = true, Risk = risk });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* Esc or a closed card: nothing more */ }
@@ -193,6 +198,9 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
         "other" => Sensitivity.Other,
         _ => Sensitivity.None,
     };
+
+    /// <summary>Her fixed lines for a failed turn: never kept as "her" history (they taught the model to repeat them).</summary>
+    private static bool Fallback(string line) => line is ToolTemplates.BadOutput or ToolTemplates.NothingDone or ToolTemplates.Timeout;
 
     private void Keep(string line, string her)
     {

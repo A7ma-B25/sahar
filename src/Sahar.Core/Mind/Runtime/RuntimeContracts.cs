@@ -3,8 +3,9 @@ namespace Sahar.Core.Mind.Runtime;
 /// <summary>One chat message for the model. <see cref="Role"/>: system | user | assistant.</summary>
 public sealed record ChatMessage(string Role, string Content);
 
-/// <summary>Sampling (spec §3.5): chat 0.7 / 0.9 / 40, ≤ 160 tokens; reflection may think, ≤ 2 K.</summary>
-public sealed record Sampling(double Temperature = 0.7, double TopP = 0.9, int TopK = 40, int MaxTokens = 160)
+/// <summary>Sampling (spec §3.5): chat 0.7 / 0.9 / 40, ≤ 256 tokens (0.14.1: 160 cut a decision with an Arabic say and a
+/// remember item mid-JSON); reflection may think, ≤ 2 K.</summary>
+public sealed record Sampling(double Temperature = 0.7, double TopP = 0.9, int TopK = 40, int MaxTokens = 256)
 {
     public static readonly Sampling Chat = new();
 }
@@ -24,9 +25,11 @@ public interface ILlm
     Task<LlmReply> CompleteAsync(LlmRequest request, Action<string>? partial, CancellationToken ct);
 }
 
-public sealed class MindRuntimeException(string code) : Exception(code)
+public sealed class MindRuntimeException(string code, string? detail = null) : Exception(code)
 {
     public string Code { get; } = code;
+    /// <summary>A kind for the log (e.g. the HttpRequestError name), never text.</summary>
+    public string? Detail { get; } = detail;
 }
 
 /// <summary>Hardware tiers (spec §4.3). None keeps today's command parser only.</summary>
