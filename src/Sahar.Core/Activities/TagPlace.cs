@@ -19,9 +19,17 @@ public static class TagPlace
     /// <summary>The thread's length (ActTag: 16 + 9 per bead, a little more for the knot).</summary>
     public static float Thread(int beads, bool knot) => ThreadDip + BeadDip * Math.Clamp(beads, 0, 3) + (knot ? KnotDip : 0);
 
+    /// <summary>Total (0.14.1): any input gives a finite tag, inside the work area whenever it fits there. With no room
+    /// under or beside her (perched on the taskbar, flying low, a small work area) it rises to the work area's bottom
+    /// instead of throwing (his log: ~1 273 Clamp errors an hour).</summary>
     public static RectF Place(RectF body, RectF work, Vector2 tag, float dpi, out TagSide side, float threadDip = ThreadDip)
     {
-        float w = MathF.Round(tag.X), h = MathF.Round(tag.Y);
+        static float F(float v, float or = 0) => float.IsFinite(v) ? v : or;
+        body = new RectF(F(body.X), F(body.Y), MathF.Max(0, F(body.Width)), MathF.Max(0, F(body.Height)));
+        work = new RectF(F(work.X), F(work.Y), MathF.Max(0, F(work.Width)), MathF.Max(0, F(work.Height)));
+        dpi = F(dpi, 1) is var d && d > 0 ? d : 1;
+        threadDip = MathF.Max(0, F(threadDip, ThreadDip));
+        float w = MathF.Round(MathF.Max(0, F(tag.X))), h = MathF.Round(MathF.Max(0, F(tag.Y)));
         float cx = body.X + body.Width / 2, cy = body.Y + body.Height / 2;
         float x, y;
         if (work.Bottom - body.Bottom >= threadDip * dpi + h)
@@ -37,8 +45,9 @@ public static class TagPlace
             x = right ? body.Right + SideGapDip * dpi : body.X - SideGapDip * dpi - w;
             y = MathF.Max(cy - h / 2, body.Y);
         }
-        x = Math.Clamp(x, work.X, MathF.Max(work.X, work.Right - w));
-        y = Math.Clamp(y, MathF.Max(work.Y, body.Y), MathF.Max(work.Y, work.Bottom - h));
+        float xHi = MathF.Max(work.X, work.Right - w), yHi = MathF.Max(work.Y, work.Bottom - h);
+        x = Math.Clamp(x, work.X, xHi);
+        y = Math.Clamp(y, MathF.Min(MathF.Max(work.Y, body.Y), yHi), yHi);
         return new RectF(MathF.Round(x), MathF.Round(y), w, h);
     }
 

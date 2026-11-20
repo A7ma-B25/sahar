@@ -43,6 +43,15 @@ internal static class Log
         }
     }
 
+    private static readonly Sahar.Core.Diagnostics.ErrorTally Tally = new(() => DateTimeOffset.Now);
+
+    /// <summary>0.14.1: an error from a loop or a callback — the first of its kind with its trace, then only a count
+    /// (his log had the same trace every second).</summary>
+    public static void Error(string where, Exception e)
+    {
+        if (Tally.Record(where, e) is { } line) Write(line);
+    }
+
     public static void Write(string line)
     {
         try

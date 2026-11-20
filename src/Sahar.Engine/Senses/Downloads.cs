@@ -41,7 +41,7 @@ internal sealed class Downloads : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"downloads error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("downloads", e); }
     }
 
     private void Renamed(string oldName, string newName, string path)

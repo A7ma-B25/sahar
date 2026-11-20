@@ -71,7 +71,7 @@ internal sealed unsafe class ClipboardSense
                 : copiedImage is { } d && _history.AddImage(d.Bytes, d.W, d.H, now);
             if (kept) Kept?.Invoke();
         }
-        catch (Exception e) { Log.Write($"clipboard error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("clipboard", e); }
     }
 
     private bool Open()

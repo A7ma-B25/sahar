@@ -122,3 +122,49 @@ public class TagPlaceTests
         Assert.Equal(body.Bottom + 43, TagPlace.Place(body, Work, Tag(1), 1, out _, TagPlace.Thread(3, false)).Y);
     }
 }
+
+/// <summary>0.14.1 fix 3: his log had ~1 273 "activity error: ArgumentException" an hour (Math.Clamp with min &gt; max
+/// in Place): her body below the work area (perched on the taskbar, flying low) left no room under or beside her.
+/// Place is total now: any input gives a finite tag inside the work area whenever it fits there.</summary>
+public class TagPlaceTotalTests
+{
+    private static readonly RectF Work = new(0, 0, 1920, 1032);   // a 1080p monitor above a 48 px taskbar
+
+    [Theory]
+    [InlineData(1700, 1040, 80, 77, 1f)]      // perched on the taskbar (the owner's case)
+    [InlineData(1700, 1010, 80, 77, 1.5f)]    // half over the taskbar at 150 %
+    [InlineData(-40, 1050, 80, 77, 1f)]       // flying in at the bottom-left corner
+    [InlineData(500, 20, 80, 77, 2f)]         // a small work area at 200 %
+    public void Place_NoRoom_DoesNotThrow_AndStaysInTheWorkArea(float x, float y, float w, float h, float dpi)
+    {
+        var r = TagPlace.Place(new RectF(x, y, w, h), Work, new Vector2(200 * dpi, TagPlace.HeightDip * dpi), dpi, out _);
+        Assert.True(r.X >= Work.X && r.Right <= Work.Right, $"x {r.X}..{r.Right}");
+        Assert.True(r.Y >= Work.Y && r.Bottom <= Work.Bottom, $"y {r.Y}..{r.Bottom}");
+    }
+
+    [Fact]
+    public void Place_RandomInputs_AreFinite_AndInsideWhenTheyFit()
+    {
+        var rnd = new Random(20261120);
+        for (int i = 0; i < 5000; i++)
+        {
+            float F(float lo, float hi) => lo + (float)rnd.NextDouble() * (hi - lo);
+            var work = new RectF(F(-3000, 3000), F(-2000, 2000), F(0, 4000), F(0, 2500));
+            var body = new RectF(F(-4000, 7000), F(-3000, 5000), F(0, 600), F(0, 600));
+            float dpi = F(0.5f, 4f);
+            var tag = new Vector2(F(0, 900), F(0, 200));
+            var r = TagPlace.Place(body, work, tag, dpi, out var side, F(0, 80));
+            Assert.True(float.IsFinite(r.X) && float.IsFinite(r.Y) && float.IsFinite(r.Width) && float.IsFinite(r.Height), $"seed row {i}");
+            Assert.True(Enum.IsDefined(side));
+            if (r.Width <= work.Width) Assert.True(r.X >= work.X - 0.5f && r.Right <= work.Right + 0.5f, $"row {i}: x {r.X}..{r.Right} in {work}");
+            if (r.Height <= work.Height) Assert.True(r.Y >= work.Y - 0.5f && r.Bottom <= work.Bottom + 0.5f, $"row {i}: y {r.Y}..{r.Bottom} in {work}");
+        }
+    }
+
+    [Fact]
+    public void Place_NotFiniteInputs_GiveAFiniteTag()
+    {
+        var r = TagPlace.Place(new RectF(float.NaN, 10, 80, float.PositiveInfinity), Work, new Vector2(float.NaN, 40), float.NaN, out _);
+        Assert.True(float.IsFinite(r.X) && float.IsFinite(r.Y) && float.IsFinite(r.Width) && float.IsFinite(r.Height));
+    }
+}

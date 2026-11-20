@@ -403,7 +403,7 @@ internal sealed class ActivityHub : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"activity error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
+        catch (Exception e) { Log.Error("activity", e); }
     }
 
     public void Dispose()

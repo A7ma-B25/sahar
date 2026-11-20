@@ -43,7 +43,7 @@ internal sealed unsafe class AppWatch
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"app watch error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("app watch", e); }
     }
 
     private void Front()

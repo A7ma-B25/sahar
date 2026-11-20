@@ -69,7 +69,7 @@ internal sealed class ScreenTimeSource : IDisposable
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"screen time error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("screen time", e); }
     }
 
     public void Dispose() => _time.Save();

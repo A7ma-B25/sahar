@@ -94,6 +94,6 @@ internal sealed unsafe class CopySource
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"copy source error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("copy source", e); }
     }
 }

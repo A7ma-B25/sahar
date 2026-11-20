@@ -22,7 +22,7 @@ internal sealed unsafe class CpuSense
         t.Tick += (_, _) =>
         {
             try { if (Sample() is { } busy) Feed(DateTimeOffset.Now, busy); }
-            catch (Exception e) { Log.Write($"cpu error: {e.GetType().Name}"); }
+            catch (Exception e) { Log.Error("cpu", e); }
         };
         t.Start();
     }

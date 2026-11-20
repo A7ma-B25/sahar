@@ -104,7 +104,7 @@ internal sealed unsafe class LifeDirector : IDisposable
         _timer.Tick += (_, _) =>
         {
             try { Tick(DateTimeOffset.Now); }
-            catch (Exception e) { Log.Write($"life error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
+            catch (Exception e) { Log.Error("life", e); }
         };
         _timer.Start();
     }

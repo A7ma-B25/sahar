@@ -69,6 +69,6 @@ internal sealed class WeatherSource
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"weather source error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("weather source", e); }
     }
 }

@@ -1224,7 +1224,7 @@ internal sealed unsafe class App
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"error: {Sahar.Core.Diagnostics.LogRules.Describe(e)}"); }
+        catch (Exception e) { Log.Error("engine", e); }
     }
 
     /// <summary>A numeric argument of a pipe command (screen pixels).</summary>

@@ -260,6 +260,6 @@ internal sealed class MediaSource
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"music error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("music", e); }
     }
 }

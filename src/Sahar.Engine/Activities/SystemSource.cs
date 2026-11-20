@@ -120,6 +120,6 @@ internal sealed unsafe class SystemSource
     private static void Safe(Action a)
     {
         try { a(); }
-        catch (Exception e) { Log.Write($"system source error: {e.GetType().Name}"); }
+        catch (Exception e) { Log.Error("system source", e); }
     }
 }
