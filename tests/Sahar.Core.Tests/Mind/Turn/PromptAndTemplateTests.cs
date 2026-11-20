@@ -65,3 +65,31 @@ public sealed class PromptAndTemplateTests
         Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(msgs[^1].Content, "<</بيانات>>").Count - 1);   // situation + profile blocks: one close each
     }
 }
+
+/// <summary>0.14.1, from the first CI eval: her words in Syrian (not MSA), a line for every chat, and three short
+/// examples of her answer's shape — each one a valid decision for the announced tools.</summary>
+public sealed class SyrianExamplesTests
+{
+    [Fact]
+    public void Prefix_HasSyrianExamples_ThatAreValidDecisions()
+    {
+        var prefix = PromptBuilder.Prefix("P", ToolCatalog.All);
+        var examples = System.Text.RegularExpressions.Regex.Matches(prefix, @"→ (\{.*\})$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        Assert.True(examples.Count >= 3, $"{examples.Count} examples");
+        var registry = Sahar.Core.Mind.MindParts.ToolRegistry(ToolCatalog.All);
+        foreach (System.Text.RegularExpressions.Match m in examples)
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(m.Groups[1].Value);
+            var say = d.RootElement.GetProperty("say").GetString()!;
+            Assert.True(Sahar.Core.Mind.Bench.DialectScore.Pass(say), say);
+            foreach (var a in d.RootElement.GetProperty("actions").EnumerateArray())
+                Assert.True(registry.Validate(new ToolCall(a.GetProperty("tool").GetString()!, a.GetProperty("args").Clone())).Ok, a.ToString());
+        }
+        Assert.Contains("لا تحكي فصحى", prefix);
+        Assert.Contains("say ما بيكون فاضي", prefix);
+    }
+
+    [Fact]
+    public void Prefix_WithoutTools_HasNoToolExample() =>
+        Assert.DoesNotContain("timer.start", PromptBuilder.Prefix("P", []));
+}

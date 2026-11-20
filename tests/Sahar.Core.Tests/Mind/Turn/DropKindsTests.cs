@@ -87,3 +87,51 @@ public sealed class DropKindsTests
         Assert.Equal(0, d.RootElement.GetProperty("actions").GetArrayLength());
     }
 }
+
+public sealed class ThinkingRetryTests
+{
+    private readonly TurnRunnerTests.FakeLlm _llm = new();
+    private readonly TurnRunnerTests.FakeIO _io = new();
+    private readonly List<string> _drops = [];
+
+    private static Sahar.Core.Mind.Protocol.MindMsg Hello() => new()
+    {
+        T = "hello", Version = "1", Lang = "ar", Address = new Sahar.Core.Mind.Protocol.MindAddress(Sahar.Core.Settings.Gender.Male, null),
+        Tools = ToolCatalog.All, Caps = new Sahar.Core.Mind.Protocol.MindCaps(true, true, Sahar.Core.Mind.Memory.MindVoice.Complementary),
+    };
+
+    [Fact]
+    public async Task AThoughtOnlyStep_IsTriedOnceMore()
+    {
+        _llm.Throw("thinking");
+        _llm.Reply(TurnRunnerTests.Decision(say: "منيحة، وإنت؟"));
+        await new TurnRunner(_llm, new TurnRunnerTests.FakePrompts(), new TurnRunnerTests.FakeStore()) { Dropped = _drops.Add }
+            .RunAsync(new() { T = "turn", Id = "t1", Source = "chat", Text = "شلونك" }, Hello(), _io, default);
+        Assert.Equal("منيحة، وإنت؟", _io.Final.Text);
+        Assert.Equal(["thinking (tried again)"], _drops);
+        Assert.Equal(2, _llm.Requests.Count);
+    }
+
+    [Fact]
+    public async Task ThoughtTwice_SheStillSaysALine()
+    {
+        _llm.Throw("thinking");
+        _llm.Throw("thinking");
+        await new TurnRunner(_llm, new TurnRunnerTests.FakePrompts(), new TurnRunnerTests.FakeStore()) { Dropped = _drops.Add }
+            .RunAsync(new() { T = "turn", Id = "t1", Source = "chat", Text = "شلونك" }, Hello(), _io, default);
+        Assert.Equal(ToolTemplates.BadOutput, _io.Final.Text);   // visible: never «عم فكّر…» then nothing
+        Assert.Contains(_io.Sent, m => m.T == "error" && m.Error == "thinking");
+        Assert.True(_io.Sent.ToList().FindIndex(m => m.T == "say") < _io.Sent.ToList().FindIndex(m => m.T == "error"));   // the line before the error
+    }
+
+    [Theory]
+    [InlineData("يا حبيبي، الزهق شي عادي بيصير. <</say>", "يا حبيبي، الزهق شي عادي بيصير.")]
+    [InlineData("<<بيانات>> منيحة «x»", "منيحة «x»")]
+    public async Task Say_NeverCarriesDataMarkers(string say, string want)
+    {
+        _llm.Reply(TurnRunnerTests.Decision(say: say));
+        await new TurnRunner(_llm, new TurnRunnerTests.FakePrompts(), new TurnRunnerTests.FakeStore())
+            .RunAsync(new() { T = "turn", Id = "t1", Source = "chat", Text = "زهقان" }, Hello(), _io, default);
+        Assert.Equal(want, _io.Final.Text);
+    }
+}

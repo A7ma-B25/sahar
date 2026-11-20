@@ -84,3 +84,16 @@ public sealed class ThinkingTests
         }
     }
 }
+
+/// <summary>0.14.1, after the first CI eval (run 44740612947): with thinking off, Gemma 4 still opened a thought on ~1 in
+/// 3 lines (reproduced locally with --reasoning off); <c>--reasoning-budget 0</c> ends any thought at once, a turn whose
+/// step came back as thought only is tried once more, and her line never stays empty.</summary>
+public sealed class ThinkingGuardTests
+{
+    [Fact]
+    public void Args_AThoughtEndsAtOnce()
+    {
+        var a = ServerArgs.For(Tiers.Plan(new HardwareProbe(32_510, [], true, 200_000)), "m", 1, "k", 4);
+        Assert.Equal("0", a[a.ToList().IndexOf("--reasoning-budget") + 1]);
+    }
+}

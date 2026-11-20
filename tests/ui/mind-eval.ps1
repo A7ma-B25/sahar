@@ -55,6 +55,8 @@ function Stage-MindEval {
                 $e0 = (Eval-Lines $engineLog).Count
                 $t0 = Eval-Turns $mindLog
                 $before = Text64 (Menu).line64
+                $oldBubble = if ((Kv 'debug-comment').showing -eq 'true') { Text64 (Kv 'debug-comment').text64 } else { '' }   # the last line's bubble may still show
+                $m0 = (Eval-Lines $mindLog).Count
                 $t64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($row.text))
                 $sw = [Diagnostics.Stopwatch]::StartNew()
                 Send ('{"type":"cmd","name":"menu-chat","args":{"text64":"' + $t64 + '"}}') | Out-Null
@@ -75,7 +77,7 @@ function Stage-MindEval {
                         }
                     }
                     $c = Kv 'debug-comment'
-                    if ($c.showing -eq 'true') { $l = Text64 $c.text64; if ($l -and -not $seen.Contains($l)) { $seen.Add($l); $where.Add('bubble'); if (-not $first) { $first = $sw.ElapsedMilliseconds } } }
+                    if ($c.showing -eq 'true') { $l = Text64 $c.text64; if ($l -and $l -ne $oldBubble -and -not $seen.Contains($l)) { $seen.Add($l); $where.Add('bubble'); if (-not $first) { $first = $sw.ElapsedMilliseconds } } }
                     $li = Kv 'debug-list'
                     if ($li.open -eq 'true') { $l = Text64 $li.lines64; if ($l -and -not $seen.Contains($l)) { $seen.Add($l); $where.Add('list'); if (-not $first) { $first = $sw.ElapsedMilliseconds } } }
                     $turnsDone = (Eval-Turns $mindLog) -gt $t0
@@ -85,7 +87,7 @@ function Stage-MindEval {
                 $new = @(Eval-Lines $engineLog | Select-Object -Skip $e0)
                 $calls = @($new | ForEach-Object { if ($_ -match 'mind: call (\S+) (\S+)') { "$($Matches[1]) $($Matches[2])" } })
                 $errors = @($new | ForEach-Object { if ($_ -match 'mind: turn error (\S+)') { $Matches[1] } })
-                $drops = @(Eval-Lines $mindLog | Select-Object -Last 40 | Where-Object { $_ -match ' (say|turn): (dropped|bad-output|thinking|failed)' } | ForEach-Object { ($_ -split ' ', 3)[2] })
+                $drops = @(Eval-Lines $mindLog | Select-Object -Skip $m0 | Where-Object { $_ -match ' (say|turn): (dropped|bad-output|thinking|failed)' } | ForEach-Object { ($_ -split ' ', 3)[2] })
                 if ($row.key) { Screenshot "mind-eval-$($row.id).png" | Out-Null }
                 $visible = if ($seen.Count) { $seen[$seen.Count - 1] } else { '' }
                 $rec = [ordered]@{ id = $row.id; kind = $row.kind; prompt = $row.text; expectTool = $row.tool; visible = $visible; seen = @($seen); where = @($where);

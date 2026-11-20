@@ -18,7 +18,7 @@ namespace Sahar.Core.Mind.Turn;
 /// model and no tools. The chat budget (20 s) counts model time only: waiting for his «إي»/«لا» does not use it.
 /// Sends state, partial, call, propose, say and error; never logs text.
 /// </summary>
-public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store) : ITurnRunner
+public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store) : ITurnRunner
 {
     public const int MaxSteps = 3, MaxActions = 3;
     public TimeSpan ChatBudget { get; init; } = TimeSpan.FromSeconds(20);
@@ -67,7 +67,7 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
             var clock = new Stopwatch();
             var outcomes = new List<Outcome>();
             int calls = 0;
-            bool invalid = false;
+            bool invalid = false, thoughtOnce = false;
             string say = "";
             string? mood = null, risk = null;
 
@@ -81,11 +81,25 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                 {
                     limit.CancelAfter(left);
                     clock.Start();
-                    try { reply = await llm.CompleteAsync(new LlmRequest(messages, schema, Sampling.Chat), stream.Add, limit.Token); }
+                    try
+                    {
+                        try { reply = await llm.CompleteAsync(new LlmRequest(messages, schema, Sampling.Chat), stream.Add, limit.Token); }
+                        catch (MindRuntimeException e) when (e.Code == "thinking" && !thoughtOnce)
+                        {
+                            // 0.14.1: a step that came back as a thought only is tried once more (the next one rarely thinks).
+                            thoughtOnce = true;
+                            Dropped?.Invoke("thinking (tried again)");
+                            stream = new SayStream(t => io.Send(new MindMsg { T = "partial", Id = id, Text = t }));
+                            reply = await llm.CompleteAsync(new LlmRequest(messages, schema, Sampling.Chat), stream.Add, limit.Token);
+                        }
+                    }
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested) { TimedOut(io, id); return; }
                     catch (MindRuntimeException e)
                     {
                         Dropped?.Invoke(e.Detail is { } detail ? e.Code + " " + detail : e.Code);
+                        // He asked: a line he can see before the error (the engine shows «I am still learning» itself for a
+                        // missing or failed model).
+                        if (chat && e.Code is "thinking" or "bad-output") io.Send(new MindMsg { T = "say", Id = id, Text = ToolTemplates.BadOutput, Final = true });
                         io.Send(new MindMsg { T = "error", Id = id, Error = e.Code });
                         return;
                     }
@@ -238,6 +252,10 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
 
     // ---- the decision JSON ----
 
+    /// <summary>0.14.1: the prompt's data markers («<<بيانات>>», «<</…»), which the model now and then copies into her line.</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"<</?[^<>]{0,24}>{0,2}")]
+    private static partial System.Text.RegularExpressions.Regex Markers();
+
     internal sealed record Decision(IReadOnlyList<Decision.Act> Actions, string Next, string Say, string? Mood, IReadOnlyList<Decision.Memory> Remember,
         string? Risk = null)
     {
@@ -267,7 +285,8 @@ public sealed class TurnRunner(ILlm llm, IPromptParts prompts, IMindStore store)
                         if (m.ValueKind == JsonValueKind.Object && m.TryGetProperty("text", out var mt) && mt.ValueKind == JsonValueKind.String && mt.GetString()!.Trim().Length > 0)
                             mem.Add(new(mt.GetString()!, m.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString()! : "fact",
                                 m.TryGetProperty("sensitive", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString()! : "other"));
-                var say = Str("say");
+                var say = Markers().Replace(Str("say"), " ");
+                say = string.Join(' ', say.Split(' ', StringSplitOptions.RemoveEmptyEntries)).Trim();
                 if (say.Length > 220) say = say[..220];
                 var mood = Str("mood");
                 var risk = Str(SayGuard.RiskField);

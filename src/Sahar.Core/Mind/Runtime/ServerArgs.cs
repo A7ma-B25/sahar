@@ -19,7 +19,7 @@ public static class ServerArgs
             "-ngl", plan.Offload == Offload.None ? "0" : "999",
             "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
             "-t", threads.ToString(System.Globalization.CultureInfo.InvariantCulture), "--parallel", "1",
-            "--reasoning", "off",
+            "--reasoning", "off", "--reasoning-budget", "0",   // 0.14.1: Gemma 4 still opened a thought now and then
         };
         if (plan.Offload == Offload.Fit) a.AddRange(["--fit", "on"]);
         if (device is { Length: > 0 } && plan.Backend != Backend.Cpu && plan.Offload != Offload.None) a.AddRange(["--device", device]);
