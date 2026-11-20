@@ -19,6 +19,8 @@ GROUPS = [
     ("mind", ["mind"]),
 ]
 ALL = [s for _, stages in GROUPS for s in stages]
+# 0.14.1: stages run.ps1 knows but "ui-test all" never runs (mind-eval.yml runs the real 5 GB model by hand).
+OPT_IN = ["mindeval"]
 SMALL = 3  # this many stages or fewer run in one job: a second Windows job would cost more than it saves
 
 

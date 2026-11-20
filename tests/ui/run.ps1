@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -4380,6 +4380,7 @@ function Stage-Activities {
 . (Join-Path $PSScriptRoot 'mind-runtime.ps1')
 . (Join-Path $PSScriptRoot 'mind-memory.ps1')
 . (Join-Path $PSScriptRoot 'mind-autonomy.ps1')
+. (Join-Path $PSScriptRoot 'mind-eval.ps1')   # 0.14.1: opt-in, mind-eval.yml only
 function Stage-Mind {
     Stage-MindRuntime
     Stage-MindMemory
@@ -4851,6 +4852,7 @@ try {
             'activities' { Stage-Activities }
             'mind' { Stage-Mind }
             'install' { Stage-Install }
+            'mindeval' { Stage-MindEval }
         }
     }
 }

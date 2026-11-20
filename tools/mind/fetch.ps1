@@ -8,9 +8,13 @@
 #                         Unzipped to <Out>/runtime/<variant>/ keeping llama-server.exe, the DLLs and the licence only.
 #   -Model                the CI model from Hugging Face at the pinned commit, checked against its pinned SHA-256,
 #                         to <Out>/ci-model/<file>.
+#   -EvalModel <id>       0.14.1, mind-eval.yml only: one of pins.json's evalModels (the catalog's own pins: the real
+#                         default or the challenger, ~5 GB) at its pinned commit, checked against its SHA-256, to
+#                         <Out>/eval-model/<file>.
 param(
     [string[]]$Runtime = @(),
     [switch]$Model,
+    [string]$EvalModel = '',
     [string]$Out = 'artifacts/mind'
 )
 $ErrorActionPreference = 'Stop'
@@ -84,6 +88,22 @@ if ($Model) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     Copy-Item $path (Join-Path $dir $m.file) -Force
     Write-Host "  ci-model/$($m.file) verified"
+}
+
+if ($EvalModel) {
+    $m = @($pins.evalModels) | Where-Object id -eq $EvalModel
+    if (-not $m) { throw "no pinned eval model '$EvalModel' (pins.json evalModels: $((@($pins.evalModels).id) -join ', '))" }
+    $dir = Join-Path $Out 'eval-model'
+    $final = Join-Path $dir $m.file
+    if ((Test-Path $final) -and (Sha256 $final) -eq $m.sha256) { Write-Host "  eval-model/$($m.file) (cached, verified)" }
+    else {
+        $path = Fetch "https://huggingface.co/$($m.repo)/resolve/$($m.commit)/$($m.file)" $m.file $m.bytes $m.sha256
+        $sha = Sha256 $path
+        if ($sha -ne $m.sha256) { Remove-Item $path; throw "$($m.file): SHA-256 $sha differs from the pin $($m.sha256)" }
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Move-Item $path $final -Force   # 5 GB: moved, not copied (the workflow caches eval-model/)
+        Write-Host "  eval-model/$($m.file) verified"
+    }
 }
 
 if ($pending.Count) { Write-Host "::warning::runtime pins still to commit: $($pending -join ', ') (see the PIN lines)" }

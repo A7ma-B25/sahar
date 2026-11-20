@@ -1,0 +1,82 @@
+name: mind-eval
+# 0.14.1, opt-in (by hand only): her REAL brain end to end on the runner's CPU — the real pinned model (~5 GB, pinned
+# SHA-256, cached), the real engine and Sahar.Mind.exe, the golden lines of tests/mind/golden/eval.jsonl typed into her
+# card, and what became visible scored (tools/ci/mind_eval_score.py). Artifact: prompts, her replies, tool calls,
+# the scored summary. Never on push: a full run is ~30–50 min of Windows time.
+run-name: mind-eval ${{ inputs.model }} ${{ inputs.only }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Which pinned model (tools/mind/pins.json evalModels)
+        type: choice
+        options: [gemma-4-e4b-q4km, jais-3-7b-q4km]
+        default: gemma-4-e4b-q4km
+      only:
+        description: Only these golden ids (comma-separated), or empty for all
+        type: string
+        default: ''
+      budget:
+        description: Her chat budget on this CPU runner, seconds (the app keeps 20 s)
+        type: string
+        default: '240'
+
+concurrency:
+  group: mind-eval-${{ github.ref }}-${{ inputs.model }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install agent-desktop (screenshots)
+        run: npm i -g agent-desktop@1.2.0
+      - name: Publish the engine and her brain's process (Native AOT)
+        shell: pwsh
+        run: |
+          dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
+          dotnet publish src/Sahar.Mind -c Release -r win-x64 -o artifacts/mind-exe
+          Copy-Item artifacts/mind-exe/Sahar.Mind.exe artifacts/engine/
+      - name: Her brain's runtime (official llama.cpp CPU build, pinned SHA-256 and GitHub's digest)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/mind/fetch.ps1 -Runtime cpu -Out artifacts/mind
+          New-Item -ItemType Directory -Force -Path artifacts/engine/runtime | Out-Null
+          Copy-Item artifacts/mind/runtime/cpu artifacts/engine/runtime/cpu -Recurse
+      - uses: actions/cache@v4
+        with:
+          path: artifacts/mind/eval-model
+          key: mind-eval-model-${{ inputs.model }}-${{ hashFiles('tools/mind/pins.json') }}
+      - name: The real model (Hugging Face at the pinned commit, SHA-256 checked)
+        shell: pwsh
+        run: ./tools/mind/fetch.ps1 -EvalModel '${{ inputs.model }}' -Out artifacts/mind
+      - name: Eval (real engine + Mind + model)
+        shell: pwsh
+        env:
+          SAHAR_EVAL_MODEL: ${{ inputs.model }}
+          SAHAR_EVAL_ONLY: ${{ inputs.only }}
+          SAHAR_EVAL_BUDGET_S: ${{ inputs.budget }}
+        run: ./tests/ui/run.ps1 -Stage mindeval
+      - name: Score
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path artifacts/ui/mind-eval.jsonl)) { Write-Host 'no eval rows'; exit 0 }
+          python -I tools/ci/mind_eval_score.py artifacts/ui/mind-eval.jsonl --json artifacts/ui/mind-eval-summary.json --md artifacts/ui/mind-eval-summary.md | Out-Null
+          Get-Content artifacts/ui/mind-eval-summary.md -Encoding utf8 | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mind-eval-${{ inputs.model }}
+          path: artifacts/ui/

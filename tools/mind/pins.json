@@ -1,5 +1,5 @@
 {
-  "about": "Sahar 0.14: the only place the llama.cpp runtime and the CI model are pinned. Core embeds this file (RuntimePins); tools/mind/fetch.ps1 verifies every download against it. Each runtime SHA-256 was computed on CI run 43499357852 and equals the digest GitHub publishes for the release asset (source: github-digest); a mismatch fails the build.",
+  "about": "Sahar 0.14: the only place the llama.cpp runtime and the CI model are pinned. Core embeds this file (RuntimePins); tools/mind/fetch.ps1 verifies every download against it. Each runtime SHA-256 was computed on CI run 43499357852 and equals the digest GitHub publishes for the release asset (source: github-digest); a mismatch fails the build. evalModels (0.14.1): the opt-in mind-eval workflow's real models, a mirror of ModelCatalog's pins (a Core test keeps them equal).",
   "llamaCpp": {
     "build": "b12207",
     "base": "https://github.com/ggml-org/llama.cpp/releases/download/b12207/",
@@ -17,5 +17,9 @@
     "file": "gemma-3-270m-it-Q8_0.gguf",
     "bytes": 291545600,
     "sha256": "0ef57d2c838458a1952664260dcba38e5bdda37494f3af732f06e4add24068e3"
-  }
+  },
+  "evalModels": [
+    { "id": "gemma-4-e4b-q4km", "repo": "unsloth/gemma-4-E4B-it-GGUF", "commit": "bfc15c382204943c3a8fff0c750b94ae2364d7a3", "file": "gemma-4-E4B-it-Q4_K_M.gguf", "bytes": 4977171584, "sha256": "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87" },
+    { "id": "jais-3-7b-q4km", "repo": "IFM/Jais-3-7B-GGUF", "commit": "e171351744258b67bb6eb445e76d9d122bf542c0", "file": "Jais-3-7B-Q4_K_M.gguf", "bytes": 5592226016, "sha256": "a8caa7fecf38d064f216f66d3d59641c1fbefdca9756af0703f4a872ab852eeb" }
+  ]
 }

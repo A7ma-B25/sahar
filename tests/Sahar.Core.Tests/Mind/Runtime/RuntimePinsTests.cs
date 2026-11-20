@@ -29,3 +29,27 @@ public sealed class RuntimePinsTests
     public void RuntimePins_AreSet() =>
         Assert.All(RuntimePins.Load().Assets, a => Assert.False(a.Sha256 is null, $"{a.Name}: SHA-256 not pinned yet (expected-pending)"));
 }
+
+/// <summary>0.14.1: mind-eval.yml downloads the real models by tools/mind/pins.json's evalModels; they must be the
+/// catalog's own pins (same commit, file, size and SHA-256), or the eval would test another file than he gets.</summary>
+public sealed class EvalModelPinsTests
+{
+    [Fact]
+    public void EvalModels_MirrorTheCatalog()
+    {
+        using var s = typeof(RuntimePins).Assembly.GetManifestResourceStream("Sahar.mind-pins.json")!;
+        using var doc = System.Text.Json.JsonDocument.Parse(s);
+        var rows = doc.RootElement.GetProperty("evalModels").EnumerateArray().ToList();
+        Assert.Contains(rows, r => r.GetProperty("id").GetString() == Sahar.Core.Mind.Models.ModelCatalog.DefaultId);
+        foreach (var r in rows)
+        {
+            var m = Sahar.Core.Mind.Models.ModelCatalog.Find(r.GetProperty("id").GetString()!);
+            Assert.NotNull(m);
+            Assert.Equal(m!.Repo, r.GetProperty("repo").GetString());
+            Assert.Equal(m.Commit, r.GetProperty("commit").GetString());
+            Assert.Equal(m.File, r.GetProperty("file").GetString());
+            Assert.Equal(m.Bytes, r.GetProperty("bytes").GetInt64());
+            Assert.Equal(m.Sha256, r.GetProperty("sha256").GetString());
+        }
+    }
+}

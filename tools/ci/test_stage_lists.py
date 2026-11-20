@@ -4,7 +4,7 @@ import os
 import re
 import unittest
 
-from ui_groups import ALL
+from ui_groups import ALL, OPT_IN
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -17,7 +17,11 @@ def read(*parts):
 class StageListsTests(unittest.TestCase):
     def test_run_ps1_knows_exactly_the_stages_ui_test_all_runs(self):
         names = re.search(r"\[ValidateSet\(([^)]*)\)\]\[string\[\]\]\$Stage", read("tests", "ui", "run.ps1")).group(1)
-        self.assertEqual(sorted(ALL), sorted(re.findall(r"'([a-z]+)'", names)))
+        self.assertEqual(sorted(ALL + OPT_IN), sorted(re.findall(r"'([a-z]+)'", names)))
+
+    def test_opt_in_stages_never_run_in_ui_test_all(self):
+        self.assertFalse(set(OPT_IN) & set(ALL))
+        self.assertIn("-Stage mindeval", read(".github", "workflows", "mind-eval.yml"))
 
     def test_test_build_full_run_is_every_stage(self):
         yml = read(".github", "workflows", "test-build.yml")

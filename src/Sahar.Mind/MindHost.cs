@@ -49,6 +49,11 @@ internal sealed class MindHost : ITurnIO
         catch (Exception) { return new SaharSettings(); }
     }
 
+    /// <summary>mind-eval.yml only: the real model on a CPU runner needs more than her 20 s chat budget
+    /// (<c>SAHAR_MIND_CHAT_BUDGET_S</c>, 20–900 s); unset everywhere else.</summary>
+    private static TimeSpan? EvalBudget() =>
+        int.TryParse(Environment.GetEnvironmentVariable("SAHAR_MIND_CHAT_BUDGET_S"), out var s) && s is >= 20 and <= 900 ? TimeSpan.FromSeconds(s) : null;
+
     private IMindStore Store => _store ??= MindParts.Store(MindPaths.Personal, () => DateTimeOffset.Now, () => LearnConsent.From(Settings()), () => Settings().MindEpisodeDays);
 
     public void Send(MindMsg msg)
@@ -132,7 +137,7 @@ internal sealed class MindHost : ITurnIO
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_quit.Token);
         // A last-resort net only: the runner keeps its own 20 s budget for the model, and an Ask may wait up to 150 s for
         // his «إي»/«لا» (review X1: a 25 s net cut the confirmation after his yes).
-        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMinutes(3));
+        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMinutes(3) + EvalBudget().GetValueOrDefault());
         _turn = (id, source, cts);
         _lastUse = DateTimeOffset.UtcNow;
         _ = Task.Run(async () =>
@@ -161,7 +166,9 @@ internal sealed class MindHost : ITurnIO
                 else
                 {
                     // Review X2: one runner per session, so she remembers the last lines (a new store starts a new one).
-                    _runner ??= MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
+                    _runner ??= EvalBudget() is { } budget
+                        ? new TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store) { ChatBudget = budget }
+                        : MindParts.TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store);
                     await _runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
             }
