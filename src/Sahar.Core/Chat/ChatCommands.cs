@@ -26,6 +26,7 @@ public static class ChatCommands
 {
     public const int DefaultTimerMinutes = 25;
 
+    private static readonly HashSet<string> Polite = ["حطيلي", "حطلي", "شغليلي", "شغلي", "اعمليلي", "اعملي", "بدي", "سجلي", "سجليلي", "اكتبيلي", "ضيفي"];
     private static readonly HashSet<string> TimerWords = ["مؤقت", "موقت", "timer"];
     private static readonly HashSet<string> NoteWords = ["ملاحظة", "ملاحظه", "note"];
     private static readonly HashSet<string> HushWords = ["اسكتي", "اسكت", "hush", "quiet"];
@@ -41,7 +42,10 @@ public static class ChatCommands
         if (norm == "be quiet") return new(ChatKind.Hush);
         var words = norm.Split(' ');
         int skip = words.Length > 1 && words[0] == "يلا" ? 1 : 0;
-        var first = words[skip];
+        // 0.14.1: «حطيلي مؤقت ٥ دقايق», «سجلي ملاحظة: …» — a polite verb before a command word is skipped too.
+        if (words.Length > skip + 1 && Polite.Contains(words[skip]) && (TimerWords.Contains(words[skip + 1]) || NoteWords.Contains(words[skip + 1].TrimEnd(':'))))
+            skip++;
+        var first = words[skip].TrimEnd(':', '،');
         var rest = string.Join(' ', words.Skip(skip + 1));
 
         if (TimerWords.Contains(first))
