@@ -23,7 +23,7 @@ const ROLE = { default: ['roleDefault', 'recDefault'], challenger: ['roleChallen
 
 export async function render({ tx, ask, render: rerender }) {
   leave();
-  const mine = gen;
+  const myGen = gen;
   let st = await ask('mind-status');
   const list = () => (st.ok && st.models ? st.models.models : []);
   const activeId = () => (st.ok && st.models ? st.models.active : null);
@@ -170,7 +170,7 @@ export async function render({ tx, ask, render: rerender }) {
   drawDownload();
   drawRecommended();
   drawMine();
-  if (mine === gen) startPoll('models', refresh, 1500);
+  if (myGen === gen) startPoll('models', refresh, 1500);
 
   return [
     title(tx('pageModels')),

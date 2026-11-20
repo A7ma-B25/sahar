@@ -49,5 +49,5 @@ test('models page: polls through poll.js only, and only if it is still the page'
   const src = readFileSync(new URL('../../src/Sahar.Settings/web/js/pages/models.js', import.meta.url), 'utf8');
   assert.ok(!/setInterval\(/.test(src), 'a raw setInterval in models.js');
   assert.match(src, /startPoll\('models'/);
-  assert.match(src, /if \(mine === gen\) startPoll/);
+  assert.match(src, /if \(myGen === gen\) startPoll/);
 });
