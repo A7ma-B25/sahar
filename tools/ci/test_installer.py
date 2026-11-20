@@ -229,3 +229,14 @@ class ReviewFollowUps0141Tests(unittest.TestCase):
         yml = read(".github", "workflows", "test-build.yml")
         steps = re.findall(r"- name: (.+)", yml)
         self.assertTrue(steps and "main" in steps[0].lower() and "publish" in steps[0].lower(), steps[:2])
+
+
+class PascalOrderTests(unittest.TestCase):
+    """Inno's Pascal needs a routine declared before it is called (run 44750774329: «Unknown identifier 'WaitForMind'»)."""
+
+    def test_every_code_routine_is_declared_before_its_first_call(self):
+        code = read(*ISS).split("[Code]", 1)[1]
+        decls = {m.group(2): m.start() for m in re.finditer(r"(?m)^(function|procedure) (\w+)", code)}
+        for name, at in decls.items():
+            first_call = re.search(r"\b" + name + r"\(", code)
+            self.assertGreaterEqual(first_call.start(), at, f"{name} is called before it is declared")

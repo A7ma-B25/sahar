@@ -180,6 +180,21 @@ begin
   end;
 end;
 
+{ 0.14.1 (review follow-up): an orphaned Sahar.Mind.exe (and the llama-server it holds in its job) keeps its files in
+  use; it exits by itself once the engine is gone (it watches the engine), so wait for it up to 15 s. }
+procedure WaitForMind();
+var
+  I: Integer;
+begin
+  I := 0;
+  while CheckForMutexes(MindMutex) and (I < 60) do
+  begin
+    Sleep(250);
+    I := I + 1;
+  end;
+  if CheckForMutexes(MindMutex) then Log('her brain is still running after 15 s');
+end;
+
 { Asks a running Sahar (and an open settings window) to quit with her own pipe command and waits (Exe --quit waits
   up to 20 s for her, 10 s for the window). True when neither is running afterwards. Never kills: a save is never cut short. }
 function QuitSahar(const Exe: String): Boolean;
@@ -198,21 +213,6 @@ begin
     Log('--quit exit code ' + IntToStr(Code));
   Result := not CheckForMutexes(EngineMutex + ',' + SettingsMutex);
   if Result then WaitForMind();
-end;
-
-{ 0.14.1 (review follow-up): an orphaned Sahar.Mind.exe (and the llama-server it holds in its job) keeps its files in
-  use; it exits by itself once the engine is gone (it watches the engine), so wait for it up to 15 s. }
-procedure WaitForMind();
-var
-  I: Integer;
-begin
-  I := 0;
-  while CheckForMutexes(MindMutex) and (I < 60) do
-  begin
-    Sleep(250);
-    I := I + 1;
-  end;
-  if CheckForMutexes(MindMutex) then Log('her brain is still running after 15 s');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
