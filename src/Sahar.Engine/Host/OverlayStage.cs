@@ -75,7 +75,12 @@ internal sealed class OverlayStage
     {
         _hidden = hidden;
         Native.ShowWindow(_active.Hwnd, hidden ? Native.SW_HIDE : Native.SW_SHOWNOACTIVATE);
+        if (!hidden) KeepOnTop();
     }
+
+    /// <summary>0.14.1 fix 2: back on top of the topmost band when another window came over her (never while hidden:
+    /// real fullscreen keeps her away). Cheap: one walk of the band.</summary>
+    public bool KeepOnTop() => !_hidden && Visible && Win.KeepOnTop(_active.Rect);
 
     /// <summary>A feature needs an area drawn (screen pixels) while it runs; null when it ends. The window changes
     /// after this turn's commit, in a turn of its own; <paramref name="settled"/> runs once that change is on screen
@@ -145,6 +150,8 @@ internal sealed class OverlayStage
         var move = _spare.MoveTo(target);
         Win.Apply(move);
         Native.ShowWindow(_spare.Hwnd, Native.SW_SHOWNOACTIVATE);
+        // A hidden window shows again where it sat in the band: the spare goes on top with her (0.14.1).
+        Native.SetWindowPos(_spare.Hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOSIZE | 0x0002 /* NOMOVE */ | Native.SWP_NOACTIVATE);
         AfterCommit(() => AfterCommit(() => Guarded(() =>
         {
             if (ThrowOnNextSwap) { ThrowOnNextSwap = false; throw new InvalidOperationException("test: a failing swap"); }

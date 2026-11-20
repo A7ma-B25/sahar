@@ -26,6 +26,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
 
     public nint Hwnd { get; }
     public event Action? HideHour;
+    /// <summary>Explorer started again (TaskbarCreated): a new taskbar is on top of the band (0.14.1).</summary>
+    public event Action? TaskbarCreated;
     /// <summary>A registered global hotkey was pressed (its id).</summary>
     public event Action<int>? HotkeyPressed;
     /// <summary>A key went down or up (its virtual-key code only; for the screenshot keys). Nothing is kept.</summary>
@@ -120,6 +122,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         if (msg == _taskbarCreated && _taskbarCreated != 0)
         {
             Add();
+            TaskbarCreated?.Invoke();
             return 0;
         }
         switch (msg)

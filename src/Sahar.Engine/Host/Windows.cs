@@ -105,6 +105,40 @@ internal static unsafe class Win
         return ToRECT(OverlayPlan.ShortOnOneSide(m.Bounds, edge));
     }
 
+    /// <summary>Times her windows were raised again (test diagnostics).</summary>
+    public static int Raised { get; private set; }
+
+    /// <summary>
+    /// 0.14.1 fix 2 (owner: she stayed under the taskbar): topmost windows share one band, and the last one raised is on
+    /// top — the taskbar after a click, an always-on-top app. Walks the band from the top (a few windows; cheap): when a
+    /// visible, uncloaked window that is not hers sits above one of hers and overlaps <paramref name="area"/>, all her
+    /// visible windows go back on top, bottom first, so their own order (card over body, field over card) is kept.
+    /// Nothing while <paramref name="area"/> is empty (she is hidden: real fullscreen keeps her away).
+    /// </summary>
+    public static unsafe bool KeepOnTop(RectI area)
+    {
+        if (area.Width <= 0 || area.Height <= 0) return false;
+        var ours = new List<nint>();
+        bool foreign = false, under = false;
+        int guard = 0;
+        for (nint h = Native.GetTopWindow(0); h != 0 && guard++ < 4096; h = Native.GetWindow(h, 2 /* GW_HWNDNEXT */))
+        {
+            if (((long)Native.GetWindowLongPtr(h, -20 /* GWL_EXSTYLE */) & Native.WS_EX_TOPMOST) == 0) break;   // the band ends
+            if (Native.IsWindowVisible(h) == 0) continue;
+            if (Own.Contains(h)) { ours.Add(h); under |= foreign; continue; }
+            if (foreign) continue;
+            int cloaked = 0;
+            if (Native.DwmGetWindowAttribute(h, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(int)) == 0 && cloaked != 0) continue;
+            RECT r;
+            if (Native.GetWindowRect(h, &r) != 0 && r.Right > area.Left && r.Left < area.Right && r.Bottom > area.Top && r.Top < area.Bottom) foreign = true;
+        }
+        if (!under) return false;
+        for (int i = ours.Count - 1; i >= 0; i--)
+            Native.SetWindowPos(ours[i], Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOSIZE | 0x0002 /* NOMOVE */ | Native.SWP_NOACTIVATE | 0x0200 /* NOOWNERZORDER */);
+        Raised++;
+        return true;
+    }
+
     public static void SetCaptureExcluded(nint hwnd, bool excluded)
     {
         if (Native.SetWindowDisplayAffinity(hwnd, excluded ? Native.WDA_EXCLUDEFROMCAPTURE : Native.WDA_NONE) == 0)

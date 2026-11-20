@@ -733,6 +733,15 @@ internal sealed unsafe class App
             host.CheckDevice();
         }
         overlay.DisplayChanged += () => Safe(OnDisplayChanged);
+        // 0.14.1 fix 2: always on top — re-asserted cheaply when the band may have changed (a new taskbar, another
+        // display, another app in front) and every 2 s as a net (the taskbar comes on top when he clicks it).
+        tray.TaskbarCreated += () => Safe(() => stage.KeepOnTop());
+        overlay.DisplayChanged += () => Safe(() => stage.KeepOnTop());
+        Foreground.Changed += () => Safe(() => stage.KeepOnTop());
+        var onTop = ui.CreateTimer();
+        onTop.Interval = TimeSpan.FromSeconds(2);
+        onTop.Tick += (_, _) => Safe(() => stage.KeepOnTop());
+        onTop.Start();
 
         // A new size keeps her body centre where it is (as a DPI change does in MoveTo).
         void ApplySize(float dip)
@@ -939,7 +948,7 @@ internal sealed unsafe class App
                 GC.WaitForPendingFinalizers();
                 return new PipeReply(true, FormattableString.Invariant($"gcHeapMB={GC.GetTotalMemory(false) / 1048576.0:0.0} workingSetMB={Environment.WorkingSet / 1048576.0:0.0}"));
             });
-            pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")}"));
+            pipe.Register("debug-overlay", _ => new PipeReply(true, stage.Describe() + $" visible={(stage.Visible ? "true" : "false")} raised={Win.Raised}"));
             ActivityPipe.Register(pipe, acts, claudeSource, () => monitors, shelfSource);
             // Her activity expressions on demand (0.13 §1.5): the sway, the halo's cover colour, the drooping leaf.
             pipe.Register("activity-expr", r =>

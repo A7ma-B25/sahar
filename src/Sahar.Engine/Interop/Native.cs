@@ -523,6 +523,16 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static partial nint GetWindowLongPtr(nint hwnd, int index);
 
+    // 0.14.1: the topmost band, walked from the top (Win.KeepOnTop).
+    [LibraryImport("user32.dll")]
+    public static partial nint GetTopWindow(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetWindow(nint hwnd, uint cmd);
+
+    [LibraryImport("dwmapi.dll")]
+    public static partial int DwmGetWindowAttribute(nint hwnd, uint attribute, int* value, uint size);
+
     [LibraryImport("user32.dll")]
     public static partial int GetLastInputInfo(LASTINPUTINFO* info);
 
