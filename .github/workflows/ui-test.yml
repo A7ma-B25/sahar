@@ -12,14 +12,31 @@ on:
         description: Stages to run (comma-separated), or all; a task runs the ones it touches, a release runs them all
         type: string
         default: all
+      eval_model:
+        description: For stages=mindeval only — the pinned model (gemma-4-e4b-q4km or jais-3-7b-q4km)
+        type: string
+        default: gemma-4-e4b-q4km
+      eval_only:
+        description: For stages=mindeval only — golden ids (comma-separated), or empty for all
+        type: string
+        default: ''
 
 concurrency:
   group: ui-test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # 0.14.1: `-f stages=mindeval` runs the opt-in eval of her real brain instead (mind-eval.yml), never with "all".
+  mind-eval:
+    if: ${{ inputs.stages == 'mindeval' }}
+    uses: ./.github/workflows/mind-eval.yml
+    with:
+      model: ${{ inputs.eval_model }}
+      only: ${{ inputs.eval_only }}
+      budget: '240'
   # The stage list → parallel Windows jobs (tools/ci/ui_groups.py): all → four balanced groups, ≤ 3 stages → one job.
   plan:
+    if: ${{ inputs.stages != 'mindeval' }}
     runs-on: ubuntu-latest
     outputs:
       groups: ${{ steps.plan.outputs.groups }}
@@ -33,6 +50,7 @@ jobs:
 
   # The engine is built once and shared with every UI job.
   build:
+    if: ${{ inputs.stages != 'mindeval' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:

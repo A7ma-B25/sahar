@@ -6,6 +6,13 @@ name: mind-eval
 run-name: mind-eval ${{ inputs.model }} ${{ inputs.only }}
 
 on:
+  # ui-test.yml calls it for `-f stages=mindeval` (a branch's own workflow_dispatch file is not dispatchable until it
+  # is on main).
+  workflow_call:
+    inputs:
+      model: { type: string, default: gemma-4-e4b-q4km }
+      only: { type: string, default: '' }
+      budget: { type: string, default: '240' }
   workflow_dispatch:
     inputs:
       model:
@@ -21,10 +28,6 @@ on:
         description: Her chat budget on this CPU runner, seconds (the app keeps 20 s)
         type: string
         default: '240'
-
-concurrency:
-  group: mind-eval-${{ github.ref }}-${{ inputs.model }}
-  cancel-in-progress: true
 
 jobs:
   eval:
