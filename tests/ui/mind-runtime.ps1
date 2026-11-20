@@ -67,6 +67,35 @@ function Stage-MindRuntime {
             if ([double]$b.Groups[3].Value -le 0) { throw 'no tokens per second: the client read nothing' }
             if ($log0 -match 'runtime: ready') { Write-Host '    (warm logged ready)' }
         }
+        # 0.14.1 fix 6: while her brain streams a turn (each word redraws the card's header) and while the settings
+        # app polls «mind-status», her UI thread keeps answering: every 'state' round trip on her pipe is timed, and a
+        # burst of whole frames over her card counts what was drawn.
+        Step 'mind: her UI answers while a turn streams and the models page polls (no hangs)' {
+            Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+            Start-Sleep -Milliseconds 600
+            $m = Menu
+            $c = $m.card -split ','
+            $t = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('احكيلي شي عن حالك'))
+            $turns = ([regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'turn: chat')).Count
+            $burst = [Burst]::Start([int]$c[0], [int]$c[1], [int]$c[2], 90, 3000)
+            Send ('{"type":"cmd","name":"menu-chat","args":{"text64":"' + $t + '"}}') | Out-Null
+            $ms = [System.Collections.Generic.List[double]]::new()
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            while ($sw.ElapsedMilliseconds -lt 30000) {
+                $one = [Diagnostics.Stopwatch]::StartNew()
+                $r = & "$PSScriptRoot\pipe.ps1" -Line '{"type":"cmd","name":"mind-status"}'
+                $null = & "$PSScriptRoot\pipe.ps1" -Line '{"type":"cmd","name":"state"}'
+                $ms.Add($one.Elapsed.TotalMilliseconds / 2)
+                if (([regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'turn: chat')).Count -gt $turns -and $sw.ElapsedMilliseconds -gt 3000) { break }
+                Start-Sleep -Milliseconds 40
+            }
+            $frames = $burst.Result
+            $sorted = @($ms | Sort-Object)
+            $p95 = $sorted[[int][math]::Floor(($sorted.Count - 1) * 0.95)]
+            Write-Host ("    {0} pipe round trips during the turn: median {1:N0} ms, p95 {2:N0} ms, max {3:N0} ms; {4} frames grabbed over the card in 3 s" -f $sorted.Count, $sorted[[int]($sorted.Count / 2)], $p95, $sorted[-1], $frames.Count)
+            Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+            if ($sorted[-1] -gt 400) { throw "her UI thread stalled $([int]$sorted[-1]) ms while she streamed a turn" }
+        }
         Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
             Start-SettingsApp | Out-Null
             SNav 'models'

@@ -72,11 +72,21 @@ internal sealed partial class MindEngine
 
     private static string? Arg(PipeRequest r, string key) => r.Args?.TryGetValue(key, out var v) == true ? v : null;
 
+    /// <summary>0.14.1 fix 6: read from models.json at most every 5 s (and again when the Mind sends its list). It was
+    /// read and parsed on her UI thread for every header redraw (each streamed word of a turn, via the today fact) and
+    /// every «mind-status» poll.</summary>
     private ModelEntry? ActiveModel()
     {
-        try { return new ModelRegistry(MindPaths.Models).Active; }
-        catch (Exception) { return null; }
+        long now = Environment.TickCount64;
+        if (_activeAt != 0 && now - _activeAt < 5000) return _active;
+        try { _active = new ModelRegistry(MindPaths.Models).Active; }
+        catch (Exception) { _active = null; }
+        _activeAt = now;
+        return _active;
     }
+
+    private ModelEntry? _active;
+    private long _activeAt;
 
     /// <summary>He started typing in the chat row: load the model now so the first answer is quick (spec §3.1).</summary>
     public void WarmUp()
@@ -169,6 +179,7 @@ internal sealed partial class MindEngine
                 break;
             case "models":
                 _models = new ModelManifest(m.Models ?? [], m.Model);
+                _activeAt = 0;   // read again on the next ask
                 break;
             case "progress" when m.Progress is { } p: Progress(p); break;
             case "bench-result" when m.Bench is { } b:
