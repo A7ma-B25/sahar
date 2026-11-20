@@ -14,7 +14,9 @@ internal sealed class WebHost(HostWindow window, Options options, SettingsBridge
 {
     public const string Host = "sahar.settings";
     public const string Origin = "https://" + Host + "/";
-    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(20);
+    // 0.14.1: 60 s — a cold WebView2 runtime on a busy or slow PC took more than 20 s (CI runs 44752306846, 44757735164),
+    // and a timeout closes the app with no window at all.
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
     private CoreWebView2Environment? _env;
     private CoreWebView2Controller? _controller;
 

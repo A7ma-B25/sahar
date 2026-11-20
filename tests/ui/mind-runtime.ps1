@@ -67,6 +67,30 @@ function Stage-MindRuntime {
             if ([double]$b.Groups[3].Value -le 0) { throw 'no tokens per second: the client read nothing' }
             if ($log0 -match 'runtime: ready') { Write-Host '    (warm logged ready)' }
         }
+        Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
+            Start-SettingsApp | Out-Null
+            SNav 'models'
+            Wait-Until { (Js "document.getElementById('mine-list')?.textContent ?? ''") -match 'CI tiny' } 5000 'the CI model is not under «نماذجك»'
+            SClick '#bench-ci-tiny'
+            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/6' } 180000 'the bench (6 + 6 rows on the CPU runner)'
+            Wait-Until { (Js "document.querySelectorAll('#mine-list .m-stat').length") -ge 4 } 8000 'the stat tiles'
+            $b = [regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)') | Select-Object -Last 1
+            Write-Host "    full bench: dialect $($b.Groups[1].Value)/$($b.Groups[2].Value), tools $($b.Groups[3].Value)/$($b.Groups[4].Value)"
+            if ([int]$b.Groups[3].Value * 5 -lt [int]$b.Groups[4].Value * 4) {
+                Wait-Until { (Js "document.getElementById('mine-list').textContent") -match 'حكي بس' } 5000 'no «حكي بس» badge for a chat-only model'
+            }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Start-Sleep -Milliseconds 600
+                Capture "app-models-ci-$theme"
+                SNav 'brain'
+                Start-Sleep -Milliseconds 600
+                Capture "app-brain-ci-$theme"
+                SNav 'models'
+            }
+            SOk 'emulate' '{"theme":""}'
+            Stop-SettingsApp
+        }
         # 0.14.1 fix 6: while her brain streams a turn (each word redraws the card's header) and while the settings
         # app polls «mind-status», her UI thread keeps answering: every 'state' round trip on her pipe is timed, and a
         # burst of whole frames over her card counts what was drawn.
@@ -95,30 +119,6 @@ function Stage-MindRuntime {
             Write-Host ("    {0} pipe round trips during the turn: median {1:N0} ms, p95 {2:N0} ms, max {3:N0} ms; {4} frames grabbed over the card in 3 s" -f $sorted.Count, $sorted[[int]($sorted.Count / 2)], $p95, $sorted[-1], $frames.Count)
             Send '{"type":"cmd","name":"menu-close"}' | Out-Null
             if ($sorted[-1] -gt 400) { throw "her UI thread stalled $([int]$sorted[-1]) ms while she streamed a turn" }
-        }
-        Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
-            Start-SettingsApp | Out-Null
-            SNav 'models'
-            Wait-Until { (Js "document.getElementById('mine-list')?.textContent ?? ''") -match 'CI tiny' } 5000 'the CI model is not under «نماذجك»'
-            SClick '#bench-ci-tiny'
-            Wait-Until { (Get-Content (Join-Path $home0 'mind.log') -Raw) -match 'tools=\d+/6' } 180000 'the bench (6 + 6 rows on the CPU runner)'
-            Wait-Until { (Js "document.querySelectorAll('#mine-list .m-stat').length") -ge 4 } 8000 'the stat tiles'
-            $b = [regex]::Matches((Get-Content (Join-Path $home0 'mind.log') -Raw), 'dialect=(\d+)/(\d+) tools=(\d+)/(\d+)') | Select-Object -Last 1
-            Write-Host "    full bench: dialect $($b.Groups[1].Value)/$($b.Groups[2].Value), tools $($b.Groups[3].Value)/$($b.Groups[4].Value)"
-            if ([int]$b.Groups[3].Value * 5 -lt [int]$b.Groups[4].Value * 4) {
-                Wait-Until { (Js "document.getElementById('mine-list').textContent") -match 'حكي بس' } 5000 'no «حكي بس» badge for a chat-only model'
-            }
-            foreach ($theme in 'light', 'dark') {
-                SOk 'emulate' ('{"theme":"' + $theme + '"}')
-                Start-Sleep -Milliseconds 600
-                Capture "app-models-ci-$theme"
-                SNav 'brain'
-                Start-Sleep -Milliseconds 600
-                Capture "app-brain-ci-$theme"
-                SNav 'models'
-            }
-            SOk 'emulate' '{"theme":""}'
-            Stop-SettingsApp
         }
         Step 'mind: idle for a minute → llama-server is gone (0 MB at rest)' {
             Wait-Until { (Mind-Procs 'llama-server') -eq 0 } 120000 'llama-server still running after the idle minute'

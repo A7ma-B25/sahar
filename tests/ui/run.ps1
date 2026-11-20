@@ -3646,9 +3646,9 @@ function Start-SettingsApp([string[]]$Extra = @()) {
     $deadline = (Get-Date).AddSeconds(30)
     while (-not (Test-Path '\\.\pipe\sahar-settings') -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
     if (-not (Test-Path '\\.\pipe\sahar-settings')) { throw 'the settings pipe did not appear within 30 s' }
-    $deadline = (Get-Date).AddSeconds(30)
-    do { $st = SKv 'state'; if ($st.ready -eq 'true') { return $st }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline)
-    throw 'the settings page was not ready within 30 s'
+    $deadline = (Get-Date).AddSeconds(75)   # 0.14.1: a cold WebView2 start may take up to the app's own 60 s
+    do { try { $st = SKv 'state'; if ($st.ready -eq 'true') { return $st } } catch { }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline)
+    throw 'the settings page was not ready within 75 s'
 }
 function SClick([string]$sel) {
     $r = SSend ('{"type":"cmd","name":"click","args":{"sel":' + ($sel | ConvertTo-Json) + '}}')
