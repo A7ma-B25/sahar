@@ -66,6 +66,11 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public event Action? WhoAmI;
     /// <summary>«دوّر على تحديث»: look for a newer version now.</summary>
     public event Action? CheckUpdate;
+    /// <summary>0.15 T7 «ابعت سجلّي»: her logs in a zip on the Desktop.</summary>
+    public event Action? SendLog;
+    /// <summary>0.15 T8 «اسمح بتصويرها»: her windows in screen recordings, or not (the check shows it).</summary>
+    public event Action? CaptureToggled;
+    public bool AllowCapture { get; set; }
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
     /// <summary>Windows is shutting down, logging off or restarting for an update.</summary>
@@ -193,6 +198,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             case "chat": ChatClicked?.Invoke(); return true;
             case "drawer": DrawerClicked?.Invoke(); return true;
             case "quit": Quit?.Invoke(); return true;
+            case "send-log": SendLog?.Invoke(); return true;
+            case "capture": CaptureToggled?.Invoke(); return true;
             case "settings" when SettingsAvailable(): SettingsClicked?.Invoke(); return true;
             default: return false;
         }

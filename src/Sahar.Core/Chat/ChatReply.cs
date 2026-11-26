@@ -16,11 +16,14 @@ public static class ChatReply
 
     public static string For(ChatCommand c, ChatContext ctx, Gender to) => Address.For(to, Line(c, ctx));
 
+    /// <summary>0.15.0: a timer's length (seconds too); older commands carry minutes only.</summary>
+    public static TimeSpan? TimerLength(ChatCommand c) => c.Duration ?? (c.Minutes is { } m ? TimeSpan.FromMinutes(m) : null);
+
     private static string Line(ChatCommand c, ChatContext ctx) => c.Kind switch
     {
         ChatKind.Empty => "",
-        ChatKind.Timer when c.OutOfRange || c.Minutes is null => "بقدر شغّل مؤقت من دقيقة لـ ٦٠٠ دقيقة.",
-        ChatKind.Timer => $"تمام! شغّلت مؤقت {Digits.ToArabicIndic(c.Minutes.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))} دقيقة.",
+        ChatKind.Timer when c.OutOfRange || TimerLength(c) is null => "بقدر شغّل مؤقت من ثانية لـ ٦٠٠ دقيقة.",
+        ChatKind.Timer => $"تمام! شغّلت مؤقت {Sahar.Core.Tools.TimerInput.Words(TimerLength(c)!.Value)}.",
         ChatKind.Note when c.Text is null => "اكتبلي ياها هون.",
         ChatKind.Note => "حفظتها.",
         ChatKind.Hush => "ماشي، رح اسكت…",

@@ -16,7 +16,12 @@ public enum ChatKind { Empty, Timer, Note, Hush, Sleep, Play, Game, Move, Prayer
 /// Game: <see cref="Game"/>. Move: <see cref="Move"/> (null = a soul hop, «نطّي»).
 /// </summary>
 public sealed record ChatCommand(ChatKind Kind, int? Minutes = null, string? Text = null, TimeSpan? HushFor = null, bool OutOfRange = false,
-    GameKind? Game = null, MotionKind? Move = null);
+    GameKind? Game = null, MotionKind? Move = null, TimeSpan? Duration = null)
+{
+    /// <summary>A timer: its length (0.15.0: seconds and hours too); <see cref="Minutes"/> is set when it is whole minutes.</summary>
+    public static ChatCommand TimerFor(TimeSpan length) =>
+        new(ChatKind.Timer, length.TotalSeconds % 60 == 0 ? (int)length.TotalMinutes : null, Duration: length);
+}
 
 /// <summary>
 /// Her local chat commands (v1, no AI): Arabic or English, any digits (Latin, Arabic-Indic, Persian), diacritics and
@@ -27,7 +32,7 @@ public static class ChatCommands
     public const int DefaultTimerMinutes = 25;
 
     private static readonly HashSet<string> Polite = ["حطيلي", "حطلي", "شغليلي", "شغلي", "اعمليلي", "اعملي", "بدي", "سجلي", "سجليلي", "اكتبيلي", "ضيفي"];
-    private static readonly HashSet<string> TimerWords = ["مؤقت", "موقت", "timer"];
+    private static readonly HashSet<string> TimerWords = ["مؤقت", "موقت", "المؤقت", "الموقت", "تايمر", "التايمر", "timer"];
     private static readonly HashSet<string> NoteWords = ["ملاحظة", "ملاحظه", "note"];
     private static readonly HashSet<string> HushWords = ["اسكتي", "اسكت", "hush", "quiet"];
     private static readonly HashSet<string> SleepWords = ["نامي", "نام", "sleep"];
@@ -50,8 +55,8 @@ public static class ChatCommands
 
         if (TimerWords.Contains(first))
         {
-            if (rest.Length == 0) return new(ChatKind.Timer, DefaultTimerMinutes);
-            return TimerInput.ParseMinutes(rest) is { } m ? new(ChatKind.Timer, m) : new(ChatKind.Timer, OutOfRange: true);
+            if (rest.Length == 0) return ChatCommand.TimerFor(TimeSpan.FromMinutes(DefaultTimerMinutes));
+            return TimerInput.ParseDuration(rest) is { } d ? ChatCommand.TimerFor(d) : new(ChatKind.Timer, OutOfRange: true);
         }
         if (NoteWords.Contains(first))
         {

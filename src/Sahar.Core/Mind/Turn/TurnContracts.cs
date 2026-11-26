@@ -35,3 +35,11 @@ public interface IPromptParts
     /// <summary>The stricter of the model's tag and the Core keyword check.</summary>
     Sensitivity Sensitive(string text, Sensitivity modelTag);
 }
+
+/// <summary>0.15.0: where one turn's time went — the model's steps, waiting for the engine (a tool, or his «إي»), the
+/// first word he could read — and its tokens (prompt/output). Numbers only; the Mind logs <see cref="ToString"/>.</summary>
+public sealed record TurnTiming(int ModelMs, int WaitMs, int FirstWordMs, int Steps, int PromptTokens, int OutTokens)
+{
+    public override string ToString() => System.FormattableString.Invariant(
+        $"model {ModelMs}ms, wait {WaitMs}ms, first word {FirstWordMs}ms, steps {Steps}, tokens {PromptTokens}/{OutTokens}");
+}

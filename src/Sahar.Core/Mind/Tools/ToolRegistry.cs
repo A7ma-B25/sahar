@@ -51,6 +51,7 @@ public sealed class ToolRegistry(IReadOnlyList<ToolSpec> announced) : IToolRegis
         return spec.Name switch
         {
             "reminder.set" => Has(a, "inMinutes") == Has(a, "at") ? Bad("at") : ToolCheck.Valid,
+            "timer.start" => TimerLength(a) is { } t && t >= TimeSpan.FromSeconds(1) && t <= Sahar.Core.Tools.TimerInput.MaxDuration ? ToolCheck.Valid : Bad("seconds"),
             "goal.add" when Has(a, "until") && !DateOnly.TryParseExact(a.GetProperty("until").GetString(), "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _) => Bad("until"),
             _ => ToolCheck.Valid,
@@ -72,6 +73,14 @@ public sealed class ToolRegistry(IReadOnlyList<ToolSpec> announced) : IToolRegis
     public static bool IsTime(string t) =>
         t.Length == 5 && t[2] == ':' && char.IsAsciiDigit(t[0]) && char.IsAsciiDigit(t[1]) && char.IsAsciiDigit(t[3]) && char.IsAsciiDigit(t[4])
         && (t[0] - '0') * 10 + (t[1] - '0') < 24 && t[3] < '6';
+
+    /// <summary>0.15.0: timer.start's length — minutes and/or seconds (at least one; 1 s to 600 min).</summary>
+    public static TimeSpan? TimerLength(JsonElement a)
+    {
+        int? I(string k) => a.ValueKind == JsonValueKind.Object && a.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
+        int? m = I("minutes"), s = I("seconds");
+        return m is null && s is null ? null : TimeSpan.FromSeconds((m ?? 0) * 60L + (s ?? 0));
+    }
 
     private static ToolCheck Bad(string? field) => new(false, Invalid, field);
 
@@ -194,7 +203,7 @@ public sealed class ToolRegistry(IReadOnlyList<ToolSpec> announced) : IToolRegis
         Required(w, t.Args.Where(a => a.Required).Select(a => a.Name));
         w.WriteBoolean("additionalProperties", false);
         w.WriteEndObject();
-        w.WriteStartObject("why"); w.WriteString("type", "string"); w.WriteNumber("maxLength", 80); w.WriteEndObject();
+        w.WriteStartObject("why"); w.WriteString("type", "string"); w.WriteNumber("maxLength", 40); w.WriteEndObject();   // 0.15.0: 80 → 40 (fewer tokens per action)
         w.WriteEndObject();
         Required(w, ["tool", "args", "why"]);
         w.WriteBoolean("additionalProperties", false);

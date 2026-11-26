@@ -3,7 +3,7 @@ namespace Sahar.Core.Settings;
 /// <summary>
 /// What changed between two settings, by group (plan 0.10c Task 2): the engine's settings reload applies only these
 /// and logs their names (never values). Groups, in order: size, activity, address (name, gender), menu (items, header,
-/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran, activities (0.13), mind (0.14).
+/// opening, place, light/dark), stars, life (comments, mood, play), prayer, weather, shortcut, quran, activities (0.13), mind (0.14), capture (0.15).
 /// </summary>
 public static class SettingsChanges
 {
@@ -33,6 +33,7 @@ public static class SettingsChanges
             || a.MindUseGpu != b.MindUseGpu || a.MindLearnChats != b.MindLearnChats || a.MindLearnImports != b.MindLearnImports
             || a.MindLearnExamples != b.MindLearnExamples || a.MindLearnMusic != b.MindLearnMusic
             || a.MindEpisodeDays != b.MindEpisodeDays) list.Add("mind");
+        if (a.AllowCapture != b.AllowCapture) list.Add("capture");
         return list;
     }
 

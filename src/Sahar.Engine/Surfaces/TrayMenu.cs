@@ -8,7 +8,7 @@ namespace Sahar.Engine.Surfaces;
 /// <summary>
 /// Her tray menu (V15Trays; owner ruling 9): her face and how she is, the activity as a segmented control, then
 /// إعداداتي, الحكي, الدرج, فرجيني حركاتك, خبّيني ساعة, الطقس (a clear on/off with the city), مين أنا؟, دوّر على تحديث,
-/// افتح مجلدي, and «سكّري سحورة» last. One language, the app's (Arabic unless English is chosen).
+/// ابعت سجلّي, اسمح بتصويرها (on/off), افتح مجلدي, and «سكّري سحورة» last. One language, the app's (Arabic unless English is chosen).
 /// </summary>
 internal static class TrayMenu
 {
@@ -22,6 +22,8 @@ internal static class TrayMenu
         ("weather", "rain", "الطقس", "Weather"),
         ("who", "user", "مين أنا؟", "Who am I?"),
         ("update", "update", "دوّر على تحديث", "Check for updates"),
+        ("send-log", "download", "ابعت سجلّي", "Send my log"),        // 0.15 T7
+        ("capture", "eye", "اسمح بتصويرها", "Allow screen capture"),   // 0.15 T8: a clear on/off
         ("folder", "folder", "افتح مجلدي", "Open my folder"),
     ];
 
@@ -45,6 +47,7 @@ internal static class TrayMenu
             string label = id == "show" && tray.ShowRunning ? L("وقّف العرض", "Stop the show") : L(ar, e);
             j.Item().S("id", id).S("label", label).S("icon", icon);
             if (id == "weather") j.B("toggle", tray.WeatherCity is not null).S("meta", tray.WeatherCity);
+            if (id == "capture") j.B("toggle", tray.AllowCapture);
             j.End();
             rows.Add(new PickRow(id, label));
         }

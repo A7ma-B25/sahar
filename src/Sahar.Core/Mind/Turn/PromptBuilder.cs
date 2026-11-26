@@ -30,6 +30,7 @@ public static class PromptBuilder
         - احكي سوري بسيط وقصير (أقل من ٢٢٠ حرف)، وبالإنكليزي إذا حكاك إنكليزي.
         - لا تحكي فصحى: قولي شو، هلق، كتير، منيح، بدك، هيك، لسا، ليش، شوي — مو ماذا، الآن، سوف، يمكنني، أستطيع.
         - بالحكي معه say ما بيكون فاضي أبداً: جملة أو جملتين لإلو.
+        - فيكي تحطي إيموجي متل 😊 🌙 💜 🎶 لما بيليق (مو بكل جملة).
         - إذا طلب شي إلو أداة، اعمليه بالأداة هلق (مو بس تحكي عنه).
         - جاوب دايماً بـ JSON حسب الشكل المطلوب: actions، next، say، mood، remember.
         - استعملي الأدوات من القائمة بس، وبالقيم المسموحة بس. إذا ما في أداة للطلب، قولي هيك بلطف ولا تعملي شي.
@@ -58,9 +59,14 @@ public static class PromptBuilder
         b.AppendLine().AppendLine("أمثلة (الشكل بس، مو الكلام نفسه):");
         b.AppendLine("«شلونك؟» → " + Example("[]", "منيحة الحمدلله! وإنت شو أخبارك؟", "happy"));
         if (tools.Any(t => t.Name == "timer.start"))
+        {
             b.AppendLine("«حطيلي مؤقت ١٠ دقايق» → " + Example("""[{"tool":"timer.start","args":{"minutes":10},"why":"طلب مؤقت"}]""", "تكرم، عشر دقايق من هلق ⏳", null));
+            b.AppendLine("«شغلي المؤقت 5 ثواني» → " + Example("""[{"tool":"timer.start","args":{"seconds":5},"why":"ثواني مو دقايق"}]""", "تكرم، خمس ثواني من هلق ⏳", null));
+        }
         if (tools.Any(t => t.Name == "music.control"))
             b.AppendLine("«شغليلي غنية» → " + Example("""[{"tool":"music.control","args":{"op":"toggle"},"why":"بدو موسيقى"}]""", "يلا، هي الموسيقى 🎶", "happy"));
+        if (tools.Any(t => t.Name == "move.play"))
+            b.AppendLine("«العبي مع الفراشة» → " + Example("""[{"tool":"move.play","args":{"move":"butterfly"},"why":"فراشة"}]""", "يلا، رح الحقها 🦋", "happy"));
         b.AppendLine("«تعبان كتير اليوم» → " + Example("[]", "يا عمري… شو اللي تعبك اليوم؟ بدك تفضفض ولا نعمل شي يريّحك شوي؟", "calm"));
         return b.ToString().TrimEnd();
     }

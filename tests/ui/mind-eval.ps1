@@ -62,6 +62,8 @@ function Stage-MindEval {
                 $t64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($row.text))
                 $sw = [Diagnostics.Stopwatch]::StartNew()
                 Send ('{"type":"cmd","name":"menu-chat","args":{"text64":"' + $t64 + '"}}') | Out-Null
+                # 0.15.0: "close": he closes the card right after sending — her reply must still reach her bubble.
+                if ($row.close) { Start-Sleep -Milliseconds 300; Send '{"type":"cmd","name":"menu-close"}' | Out-Null }
                 $seen = [System.Collections.Generic.List[string]]::new()
                 $where = [System.Collections.Generic.List[string]]::new()
                 $mindTurn = $false; $asked = 0; $endAt = $null; $first = $null
@@ -88,7 +90,7 @@ function Stage-MindEval {
                 }
                 $new = @(Eval-Lines $engineLog | Select-Object -Skip $e0)
                 $calls = @($new | ForEach-Object { if ($_ -match 'mind: call (\S+) (\S+)') { "$($Matches[1]) $($Matches[2])" } })
-                $said = @($new | ForEach-Object { if ($_ -match 'mind: said \((\d+) chars\)') { [int]$Matches[1] } })
+                $said = @($new | ForEach-Object { if ($_ -match 'mind: said \((\d+) chars') { [int]$Matches[1] } })
                 $errors = @($new | ForEach-Object { if ($_ -match 'mind: turn error (\S+)') { $Matches[1] } })
                 $drops = @(Eval-Lines $mindLog | Select-Object -Skip $m0 | Where-Object { $_ -match ' (say|turn): (dropped|bad-output|thinking|failed)' } | ForEach-Object { ($_ -split ' ', 3)[2] })
                 if ($row.key) { Screenshot "mind-eval-$($row.id).png" | Out-Null }

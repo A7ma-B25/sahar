@@ -15,7 +15,9 @@ public sealed class PromptAndTemplateTests
     {
         var prefix = PromptBuilder.Prefix("P", ToolCatalog.Core);
         Assert.Equal(prefix, PromptBuilder.Prefix("P", ToolCatalog.Core));
-        Assert.Contains("timer.start(minutes 1–600, label? ≤40)", prefix);
+        Assert.Contains("timer.start(minutes? 0–600, seconds? 0–3600, label? ≤40)", prefix);
+        Assert.Contains("«شغلي المؤقت 5 ثواني»", prefix);   // 0.15.0: seconds are taught by example
+        Assert.Contains("\"seconds\":5", prefix);
         var history = Enumerable.Range(0, 6).Select(i => (new string('س', 1000) + i, "ر" + i)).ToList();
         var msgs = PromptBuilder.Build(prefix, history, new string('x', 10_000), new Situation("10:00", "mon", App: "VS Code"), "chat", "مرحبا");
         Assert.Equal(prefix, msgs[0].Content);
@@ -31,13 +33,35 @@ public sealed class PromptAndTemplateTests
 
     [Theory]
     [InlineData("timer.start", """{"minutes":25}""", "شغّلت مؤقت ٢٥ دقيقة")]
+    [InlineData("timer.start", """{"seconds":5}""", "شغّلت مؤقت ٥ ثواني")]
+    [InlineData("timer.start", """{"minutes":1,"seconds":30}""", "شغّلت مؤقت ١ دقيقة و٣٠ ثانية")]
     [InlineData("music.control", """{"op":"pause"}""", "وقّفت الموسيقى")]
     [InlineData("note.save", """{"text":"x"}""", "حفظت ملاحظة")]
     [InlineData("settings.set", """{"key":"size","value":"large"}""", "كبّرت حجمي")]
     [InlineData("settings.set", """{"key":"weatherEnabled","value":true}""", "شغّلت الطقس")]
     [InlineData("reminder.set", """{"at":"21:30","text":"x"}""", "رح ذكّرك الساعة ٢١:٣٠")]
     [InlineData("hush.on", """{}""", "سكتّ لحد ما تقلّي")]
+    [InlineData("move.play", """{"move":"butterfly"}""", "عم الحق الفراشة 🦋")]
+    [InlineData("move.play", """{"move":"moon"}""", "عم العب بالقمر 🌙")]
     public void Templates_Done(string tool, string args, string line) => Assert.Equal(line, ToolTemplates.Done(Call(tool, args)));
+
+    /// <summary>0.15.0: «العبي مع الفراشة» started the Chase game — every life motion is a move.play value, the game
+    /// tool says it is a game WITH him, and the prompt shows the butterfly as an example.</summary>
+    [Fact]
+    public void Tools_EveryLifeMotionIsAMove_AndGamesAreWithHim()
+    {
+        var move = ToolCatalog.Get("move.play")!;
+        var values = move.Args.Single().Values!;
+        foreach (var v in new[] { "butterfly", "moon", "moon-toss", "walk", "fly", "dance", "stretch", "hop", "celebrate", "curious", "peek", "perch", "hop-icons", "hop-windows", "orbit", "follow", "yawn", "wave" })
+            Assert.Contains(v, values);
+        Assert.Contains("فراشة", move.DescriptionAr);
+        Assert.Contains("القمر", move.DescriptionAr);
+        Assert.Contains("معه", ToolCatalog.Get("game.start")!.DescriptionAr);
+        Assert.All(values, v => Assert.NotEqual("عملتها", ToolTemplates.Done(Call("move.play", $$"""{"move":"{{v}}"}"""))));
+        var prefix = PromptBuilder.Prefix("P", ToolCatalog.Core);
+        Assert.Contains("«العبي مع الفراشة»", prefix);
+        Assert.Contains("\"move\":\"butterfly\"", prefix);
+    }
 
     [Theory]
     [InlineData("settings.set", """{"key":"weatherEnabled","value":true}""", "شغّل الطقس؟")]

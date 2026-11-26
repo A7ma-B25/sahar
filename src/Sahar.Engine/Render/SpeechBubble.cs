@@ -37,6 +37,7 @@ internal sealed class SpeechBubble : IDisposable
 
     public void Say(string text, bool comment = false)
     {
+        bool again = Showing;   // 0.15.0: her streamed words update the bubble in place (no fade per word)
         Remove();
         Text = text;
         _comment = comment;
@@ -75,7 +76,7 @@ internal sealed class SpeechBubble : IDisposable
         fade.InsertKeyFrame(0f, 0f);
         fade.InsertKeyFrame(1f, 1f);
         fade.Duration = TimeSpan.FromMilliseconds(250);
-        _visual.StartAnimation("Opacity", fade);
+        if (!again) _visual.StartAnimation("Opacity", fade);
         _hide.Start();
     }
 

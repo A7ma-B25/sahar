@@ -28,6 +28,8 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
     public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.Now;
     /// <summary>0.14.1: why a reply did not reach him, as a kind (the Mind logs it; never text).</summary>
     public Action<string>? Dropped { get; init; }
+    /// <summary>0.15.0: where each turn's time went (model, waiting for the engine or him, first word), for the log.</summary>
+    public Action<TurnTiming>? Timed { get; init; }
 
     private readonly List<(string User, string Her)> _history = [];
     /// <summary>After a distress reply: a day without proposals (spec §7.4); the engine's hello says Learn = false
@@ -66,16 +68,54 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
             bool learn = hello.Caps?.Learn != false && !(_distressAt is { } at && Now() - at < DistressQuiet);
             var clock = new Stopwatch();
             var outcomes = new List<Outcome>();
-            int calls = 0;
+            int calls = 0, steps = 0, promptTokens = 0, outTokens = 0;
             bool invalid = false, thoughtOnce = false;
             string say = "";
             string? mood = null, risk = null;
+            // 0.15.0: time to her first visible word, and time spent waiting for the engine (or for his «إي»).
+            var turnClock = Stopwatch.StartNew();
+            var waitClock = new Stopwatch();
+            long firstWord = -1;
+            void Partial(string t)
+            {
+                if (firstWord < 0) firstWord = turnClock.ElapsedMilliseconds;
+                io.Send(new MindMsg { T = "partial", Id = id, Text = t });
+            }
+            void Report() => Timed?.Invoke(new TurnTiming((int)clock.ElapsedMilliseconds, (int)waitClock.ElapsedMilliseconds,
+                (int)(firstWord < 0 ? turnClock.ElapsedMilliseconds : firstWord), steps, promptTokens, outTokens));
+            // One action of the decision: re-validated, then run in the Mind (proposals) or sent as a call to the engine.
+            // Null = not a valid call for the announced tools.
+            Task<Outcome>? Start(Decision.Act action)
+            {
+                var call = new ToolCall(action.Tool, action.Args, action.Why);
+                if (!registry.Validate(call).Ok) return null;
+                var spec = registry.Announced.First(t => t.Name == call.Tool);
+                if (ToolCatalog.MindLocal.Contains(call.Tool)) return Task.FromResult(Local(io, id, call, chat && learn));
+                int n = ++calls;
+                io.Send(new MindMsg { T = "call", Id = id, Call = n, Tool = call.Tool, Data = action.Args.GetRawText(), Why = action.Why });
+                return Reply(io, id, n, call, spec.ReadOnly, ct);
+            }
 
             for (int step = 1; step <= MaxSteps; step++)
             {
+                steps = step;
                 var left = budget - clock.Elapsed;
-                if (left <= TimeSpan.Zero) { TimedOut(io, id); return; }
-                var stream = new SayStream(t => io.Send(new MindMsg { T = "partial", Id = id, Text = t }));
+                if (left <= TimeSpan.Zero) { TimedOut(io, id); Report(); return; }
+                // 0.15.0: the first action goes out the moment the model has written the actions (the schema puts them
+                // first), so a game, a move or a timer starts while she is still writing her words. The others follow one
+                // by one as before (CI 45853945366: two Asks at once left one waiting in her bubble).
+                Task<Outcome>? early = null;
+                bool earlySent = false;
+                int earlyCount = 0;
+                bool EarlyOk() => earlyCount == 1 && early is { IsCompletedSuccessfully: true, Result.Ok: true };
+                SayStream NewStream() => new(Partial, acts =>
+                {
+                    if (Decision.ParseActions(acts) is not [var first, ..] parsed) return;
+                    earlyCount = parsed.Count;
+                    earlySent = true;
+                    early = Start(first);
+                }, EarlyOk);
+                var stream = NewStream();
                 LlmReply reply;
                 using (var limit = CancellationTokenSource.CreateLinkedTokenSource(ct))
                 {
@@ -89,11 +129,22 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                             // 0.14.1: a step that came back as a thought only is tried once more (the next one rarely thinks).
                             thoughtOnce = true;
                             Dropped?.Invoke("thinking (tried again)");
-                            stream = new SayStream(t => io.Send(new MindMsg { T = "partial", Id = id, Text = t }));
+                            stream = NewStream();
                             reply = await llm.CompleteAsync(new LlmRequest(messages, schema, Sampling.Chat), stream.Add, limit.Token);
                         }
                     }
-                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { TimedOut(io, id); return; }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // Her action already went out: say what really happened instead of «عم فكّر كتير».
+                        if (early is { } sent)
+                        {
+                            outcomes.Add(await sent);
+                            io.Send(new MindMsg { T = "say", Id = id, Text = Final("", outcomes, false), Final = true });
+                        }
+                        else TimedOut(io, id);
+                        Report();
+                        return;
+                    }
                     catch (MindRuntimeException e)
                     {
                         Dropped?.Invoke(e.Detail is { } detail ? e.Code + " " + detail : e.Code);
@@ -106,6 +157,8 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                     finally { clock.Stop(); }
                 }
                 ct.ThrowIfCancellationRequested();
+                promptTokens += reply.PromptTokens;
+                outTokens += reply.OutputTokens;
                 if (Decision.Parse(reply.Text) is not { } d) { invalid = true; Dropped?.Invoke("unparsable"); break; }
                 say = d.Say;
                 mood = d.Mood;
@@ -113,22 +166,24 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                 if (chat && learn && source != "draft") Remember(io, id, d.Remember);
 
                 bool reads = false;
-                foreach (var action in d.Actions.Take(MaxActions))
+                waitClock.Start();
+                try
                 {
-                    var call = new ToolCall(action.Tool, action.Args, action.Why);
-                    if (!registry.Validate(call).Ok) { if (!invalid) Dropped?.Invoke("invalid-call"); invalid = true; continue; }
-                    var spec = registry.Announced.First(t => t.Name == call.Tool);
-                    if (ToolCatalog.MindLocal.Contains(call.Tool))
+                    bool declined = false;
+                    var acts = d.Actions.Take(MaxActions).ToList();
+                    for (int i = 0; i < acts.Count; i++)
                     {
-                        outcomes.Add(Local(io, id, call, chat && learn));
-                        continue;
+                        // After his «لا» (or no answer) the turn asks nothing more: the rest is not done (her line says so once).
+                        if (declined) { Dropped?.Invoke("asked-no (the rest not asked)"); break; }
+                        var task = i == 0 && earlySent ? early : Start(acts[i]);
+                        if (task is null) { if (!invalid) Dropped?.Invoke("invalid-call"); invalid = true; continue; }
+                        var o = await task;
+                        outcomes.Add(o);
+                        reads |= o.Read && o.Ok;
+                        declined = o.Summary is ToolTemplates.AskedNo or ToolTemplates.NoAnswer;
                     }
-                    int n = ++calls;
-                    io.Send(new MindMsg { T = "call", Id = id, Call = n, Tool = call.Tool, Data = action.Args.GetRawText(), Why = action.Why });
-                    var o = await Reply(io, id, n, call, spec.ReadOnly, ct);
-                    outcomes.Add(o);
-                    reads |= o.Read && o.Ok;
                 }
+                finally { waitClock.Stop(); }
                 if (d.Next != "need-results" || step == MaxSteps || invalid) break;
                 var results = string.Join('\n', outcomes.Where(o => o.Read).Select(o => $"{o.Tool}: {(o.Ok ? o.Data ?? o.Summary : "ما زبط")}"));
                 messages.Add(new ChatMessage("assistant", reply.Text));
@@ -141,6 +196,8 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
             if (chat && final.Trim().Length == 0) { Dropped?.Invoke("empty-say"); final = ToolTemplates.BadOutput; }   // he asked: never silence
             if (chat && source != "draft" && !Fallback(final)) Keep(line, final);
             io.Send(new MindMsg { T = "say", Id = id, Text = final, Mood = mood, Final = true, Risk = risk });
+            if (firstWord < 0) firstWord = turnClock.ElapsedMilliseconds;
+            Report();
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* Esc or a closed card: nothing more */ }
         finally
@@ -262,6 +319,25 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
         internal sealed record Act(string Tool, JsonElement Args, string? Why);
         internal sealed record Memory(string Text, string Kind, string Sensitive);
 
+        /// <summary>0.15.0: the actions array alone (as streamed, before the rest of the decision); null if it is not one.</summary>
+        public static IReadOnlyList<Act>? ParseActions(string arrayJson)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(arrayJson);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+                var list = new List<Act>();
+                foreach (var a in doc.RootElement.EnumerateArray())
+                {
+                    if (a.ValueKind != JsonValueKind.Object || !a.TryGetProperty("tool", out var t) || t.ValueKind != JsonValueKind.String) return null;
+                    var args = a.TryGetProperty("args", out var g) ? g.Clone() : JsonDocument.Parse("{}").RootElement.Clone();
+                    list.Add(new(t.GetString()!, args, a.TryGetProperty("why", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() : null));
+                }
+                return list;
+            }
+            catch (JsonException) { return null; }
+        }
+
         public static Decision? Parse(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return null;
@@ -297,34 +373,41 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
         }
     }
 
-    /// <summary>Streams her words while the model writes them — only once the actions are known to be empty (the
-    /// schema puts them first), only whole sentences, and never a line that claims an action.</summary>
-    private sealed class SayStream(Action<string> send)
+    /// <summary>Streams her words while the model writes them, word by word (0.15.0; it was whole sentences). The
+    /// schema puts the actions first: once their array is written it is handed on (<paramref name="actions"/>) so they
+    /// run at once. A word that claims an action is streamed only when every action already came back done
+    /// (<paramref name="claimsOk"/>); otherwise the stream stops there and her checked final line follows.</summary>
+    private sealed class SayStream(Action<string> send, Action<string> actions, Func<bool> claimsOk)
     {
         private readonly StringBuilder _raw = new();
         private string _sent = "";
-        private bool _stopped;
+        private bool _stopped, _actionsSeen, _acts;
 
         public void Add(string chunk)
         {
             if (_stopped) return;
             _raw.Append(chunk);
             var raw = _raw.ToString();
-            int sayAt = raw.IndexOf("\"say\"", StringComparison.Ordinal);
-            if (sayAt < 0) return;
             int nextAt = raw.IndexOf("\"next\"", StringComparison.Ordinal);
             int actsAt = raw.IndexOf("\"actions\"", StringComparison.Ordinal);
+            if (!_actionsSeen && actsAt >= 0 && nextAt > actsAt)
+            {
+                _actionsSeen = true;
+                var list = raw[(actsAt + 9)..nextAt].Trim().TrimStart(':').Trim().TrimEnd(',').Trim();
+                _acts = list != "[]";
+                if (_acts) actions(list);
+            }
+            int sayAt = raw.IndexOf("\"say\"", StringComparison.Ordinal);
+            if (sayAt < 0) return;
             if (actsAt < 0 || nextAt < actsAt) { _stopped = true; return; }
-            var acts = raw[(actsAt + 9)..nextAt].Trim().TrimStart(':').TrimEnd(',').Trim();
-            if (acts != "[]") { _stopped = true; return; }
             int q = raw.IndexOf('"', raw.IndexOf(':', sayAt) + 1);
             if (q < 0) return;
             var (text, closed) = Decode(raw, q + 1);
             int cut = closed ? text.Length : LastBoundary(text);
             if (cut <= _sent.Length) return;
             var part = text[..cut].TrimEnd();
-            if (Claims(part)) { _stopped = true; return; }
             if (part.Length <= _sent.Length) return;
+            if (Claims(part) && !(_acts && claimsOk())) { _stopped = true; return; }
             _sent = part;
             send(part);
             if (closed) _stopped = true;
@@ -333,7 +416,7 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
         private static int LastBoundary(string s)
         {
             for (int i = s.Length - 1; i >= 0; i--)
-                if (s[i] is '.' or '!' or '?' or '؟' or '،' or '…' or '\n' or '!') return i + 1;
+                if (s[i] is ' ' or '.' or '!' or '?' or '؟' or '،' or '…' or '\n') return i + 1;
             return 0;
         }
 

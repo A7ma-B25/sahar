@@ -27,6 +27,7 @@ public static class SettingsPatch
         "lyricsEnabled", "lyricsConsented", "musicPausedKeep", "shelfScreenshots",
         "mindEnabled", "mindUnloadMinutes", "mindInitiative", "mindSelfActions", "mindVoice", "mindBackend", "mindUseGpu",
         "mindLearnChats", "mindLearnImports", "mindLearnExamples", "mindLearnMusic", "mindEpisodeDays",
+        "allowCapture",
     ];
 
     /// <summary>«فرّغي عقلي بعد» choices, and how long chat episodes are kept (spec §8, §7.3).</summary>
@@ -86,6 +87,7 @@ public static class SettingsPatch
             "mindLearnExamples" => Bool(value) is { } m6 ? s with { MindLearnExamples = m6 } : null,
             "mindLearnMusic" => Bool(value) is { } m7 ? s with { MindLearnMusic = m7 } : null,
             "mindEpisodeDays" => Int(value) is { } ed && EpisodeDays.Contains(ed) ? s with { MindEpisodeDays = ed } : null,
+            "allowCapture" => Bool(value) is { } c1 ? s with { AllowCapture = c1 } : null,
             _ => Unknown(out error),
         };
         if (next is null)

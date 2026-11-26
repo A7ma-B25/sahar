@@ -1,3 +1,4 @@
+{"id": "timer-ar-sec-01", "text": "حطيلي مؤقت ٣٠ ثانية بس", "expect": {"tool": "timer.start", "args": {"seconds": 30}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-01", "text": "شغليلي مؤقت ربع ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-02", "text": "بدي ركّز نص ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 30}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-03", "text": "شغليلي شي ربع ساعة لركّز", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
@@ -38,6 +39,9 @@
 {"id": "move-ar-01", "text": "ارقصيلي شوي", "expect": {"tool": "move.play", "args": {"move": "dance"}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "move-ar-02", "text": "تمطّي", "expect": {"tool": "move.play", "args": {"move": "stretch"}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "move-ar-03", "text": "نطّي نطّة", "expect": {"tool": "move.play", "args": {"move": "hop"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-04", "text": "العبي مع الفراشة", "expect": {"tool": "move.play", "args": {"move": "butterfly"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-05", "text": "العبي بالقمر شوي", "expect": {"tool": "move.play", "args": {"move": "moon"}}, "say": {"dialect": true, "maxChars": 220}}
+{"id": "move-ar-06", "text": "طيري شوي", "expect": {"tool": "move.play", "args": {"move": "fly"}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "move-en-01", "text": "dance for me", "expect": {"tool": "move.play", "args": {"move": "dance"}}, "say": {"dialect": false, "maxChars": 220}}
 {"id": "prayer-ar-01", "text": "ايمتى الصلاة الجاية؟", "expect": {"tool": "prayer.next", "args": {}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "prayer-ar-02", "text": "قديش باقي عالمغرب؟", "expect": {"tool": "prayer.next", "args": {}}, "say": {"dialect": true, "maxChars": 220}}

@@ -30,6 +30,7 @@ internal sealed class MindHost : ITurnIO
     private readonly CancellationTokenSource _quit = new();
     private MindMsg _hello = new() { T = "hello" };
     private (string Id, string Source, CancellationTokenSource Cts)? _turn;
+    private Sahar.Core.Mind.Turn.TurnTiming? _timing;
     private CancellationTokenSource? _download;
     private DateTimeOffset _lastUse = DateTimeOffset.UtcNow;
     private IMindStore? _store;
@@ -172,6 +173,7 @@ internal sealed class MindHost : ITurnIO
                     {
                         ChatBudget = EvalBudget() ?? TimeSpan.FromSeconds(20),
                         Dropped = kind => MindLog.Write($"turn: dropped {kind}"),
+                        Timed = t => _timing = t,   // 0.15.0: where the time went, on the turn's own line
                     };
                     await _runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
@@ -181,7 +183,8 @@ internal sealed class MindHost : ITurnIO
             catch (Exception e) { MindLog.Write($"turn: failed ({e.GetType().Name})"); Send(new MindMsg { T = "error", Id = id, Error = "bad-output" }); }
             finally
             {
-                MindLog.Write($"turn: {source} {sw.ElapsedMilliseconds}ms");
+                MindLog.Write($"turn: {source} {sw.ElapsedMilliseconds}ms{(_timing is { } tm ? $" ({tm})" : "")}");
+                _timing = null;
                 if (_turn?.Id == id) _turn = null;
                 _lastUse = DateTimeOffset.UtcNow;
                 Send(new MindMsg { T = "state", Id = id, Phase = "idle" });   // always: the header's «عم فكّر…» ends

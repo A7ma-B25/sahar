@@ -44,6 +44,7 @@ internal sealed partial class MindEngine
     /// <summary>The turns she is in: id → who started it and his line (clipped; kept only in the encrypted log).</summary>
     private readonly Dictionary<string, (ActSource Source, string? Line, string Kind)> _turns = [];
     private string? _chatTurn;   // the chat turn the header follows
+    private readonly Dictionary<string, string> _ran = [];   // 0.15.0: what the turn's last action really did (Core template)
     private int _turnSeq;
     private DateOnly _offeredOn;
     // initiative
@@ -51,6 +52,8 @@ internal sealed partial class MindEngine
     private int _dismissed, _linesToday;
     private DateOnly _linesDay;
     private string _lastGate = "none";
+    // 0.15.0: when she may even ask her brain (spaced checks, ≥ 20 min between lines, a cap per hour, no repeated topic).
+    private readonly InitiativeSchedule _schedule = new(DateTimeOffset.Now);
     private readonly List<DateTimeOffset> _selfAsks = [];
     private DateTimeOffset _cameraSince = DateTimeOffset.MinValue;
     // the header fact, once a day
@@ -180,8 +183,9 @@ internal sealed partial class MindEngine
         var why = Clip(text, 60);
         switch (c.Kind)
         {
-            case ChatKind.Timer when Timer.Running && c.Minutes is { } m:
-                Append("timer.start", Call("timer.start", $$"""{"minutes":{{m}}}"""), ActSource.User, why, ActionOutcome.Done,
+            case ChatKind.Timer when Timer.Running && ChatReply.TimerLength(c) is { } t:
+                Append("timer.start", Call("timer.start", t.TotalSeconds % 60 == 0 ? $$"""{"minutes":{{(int)t.TotalMinutes}}}""" : $$"""{"seconds":{{(int)t.TotalSeconds}}}"""),
+                    ActSource.User, why, ActionOutcome.Done,
                     TimerTokenNow());
                 break;
             case ChatKind.Note when c.Text is not null && Notes.Store.Latest(1) is [var n]:
@@ -227,14 +231,9 @@ internal sealed partial class MindEngine
     private void CardOpenChanged(bool open)
     {
         if (open) return;
-        // Esc or a closed card stops her thinking (spec §3.2 cancel); a fact shown today stays shown today.
-        if (_chatTurn is { } id && !FromWindow(id))
-        {
-            SendMind(new MindMsg { T = "cancel", Id = id });
-            Log.Write("mind: cancel (card closed)");
-            _turns.Remove(id);   // her late calls for it are refused
-            _chatTurn = null;
-        }
+        // 0.15.0 (owner: «mind: cancel (card closed)» ×4): a closed card — Esc, a click away, or a game or move that
+        // closes it — no longer stops her reply: it goes on in her bubble (ReplyRoute). A new line still replaces it.
+        if (_chatTurn is not null && !ReplyRoute.CardCloseCancels) Log.Write("mind: card closed, reply goes on in her bubble");
         if (_todayFactShown) { _todayFactDay = DateOnly.FromDateTime(DateTime.Now); _todayFactShown = false; }
     }
 
@@ -269,7 +268,9 @@ internal sealed partial class MindEngine
                 else if (m.Phase == "idle") Menu.MindThinking(false);   // review X1: «عم فكّر…» always ends
                 break;
             case "partial" when m.Id is not null && m.Id == _chatTurn && m.Text is { } partial:
-                Menu.MindStream(Words(partial));
+                var words = Words(partial);
+                if (ReplyRoute.Where(Menu.IsOpen, MenuCard.FitsHeader(words)) == ReplyPlace.Header) Menu.MindStream(words);
+                else if (!Menu.IsOpen) Speech.Say(Address.For(Address.You, words));   // 0.15.0: the card closed, her words go on
                 break;
             case "call":
                 HandleCall(m);
@@ -319,6 +320,8 @@ internal sealed partial class MindEngine
             if (text.Trim().Length == 0) { Log.Write("mind: initiative, nothing to say"); return; }
             var gate = _gate.Check(GateInputs());
             if (!gate.Open) { _lastGate = gate.ClosedBy ?? "closed"; Log.Write($"mind: initiative line dropped ({_lastGate})"); return; }   // the moment passed
+            if (_schedule.Repeats(text)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
+            _schedule.Spoke(DateTimeOffset.Now, text, Settings().MindInitiative);
             _lastLine = DateTimeOffset.Now;
             _awaitingAnswerSince = _lastLine;
             _linesToday++;
@@ -326,7 +329,8 @@ internal sealed partial class MindEngine
             Speech.Say(text, comment: true);
             return;
         }
-        if (id != _chatTurn) { _turns.Remove(id); Log.Write("mind: said dropped (late)"); return; }   // a cancelled turn's late words
+        _ran.Remove(id, out var ran);
+        if (id != _chatTurn) { _turns.Remove(id); Log.Write("mind: said dropped (late)"); return; }   // a replaced turn's late words
         _chatTurn = null;
         _turns.Remove(id);
         if (FromWindow(id))
@@ -339,9 +343,12 @@ internal sealed partial class MindEngine
         }
         Menu.MindThinking(false);
         if (text.Length == 0) { Log.Write("mind: said dropped (empty)"); return; }
-        Log.Write($"mind: said ({text.Length} chars)");
-        if (Menu.IsOpen && MenuCard.FitsHeader(text)) Menu.SetReply(text);
-        else Speech.Say(Address.For(Address.You, text));
+        // 0.15.0: the card closed meanwhile (a game or a move closes it): a long reply becomes the short line of what ran.
+        var line = ReplyRoute.Final(text, ran is null ? null : Words(ran), Menu.IsOpen);
+        var place = ReplyRoute.Where(Menu.IsOpen, MenuCard.FitsHeader(line));
+        Log.Write($"mind: said ({line.Length} chars, {(place == ReplyPlace.Header ? "card" : Menu.IsOpen ? "bubble" : "bubble, card closed")}{(line != text ? ", confirmation" : "")})");
+        if (place == ReplyPlace.Header) Menu.SetReply(line);
+        else Speech.Say(Address.For(Address.You, line));
     }
 
     // ---- calls: the engine validates and decides (spec §3.7) ----
@@ -411,6 +418,7 @@ internal sealed partial class MindEngine
             if (!tool.Spec.ReadOnly)
                 Append(call.Tool, call, source, why, o.Ok ? done : ActionOutcome.Failed, o.UndoToken,
                     done == ActionOutcome.AskedYes ? o.Summary : o.Ok ? o.Summary : "ما زبطت: " + ToolTemplates.Done(call));
+            if (o.Ok && !tool.Spec.ReadOnly && id == _chatTurn) _ran[id] = o.Summary;   // her short line if the card closes
             Reply(id, n, o.Ok, o.Error, o.Summary, o.Data);
         })), TaskScheduler.Default);
     }
@@ -491,6 +499,8 @@ internal sealed partial class MindEngine
     private string Initiative(bool force)
     {
         if (!force && !MindReady()) return _lastGate = "no-mind";   // nothing to ask without her brain
+        var level = Settings().MindInitiative;
+        if (!force && !_schedule.MayCheck(DateTimeOffset.Now, level)) return _lastGate = "schedule";   // 0.15.0: not every minute
         var v = _gate.Check(GateInputs());
         _lastGate = v.Open ? "open" : v.ClosedBy ?? "closed";
         if (!v.Open && !force) return _lastGate;
@@ -498,7 +508,8 @@ internal sealed partial class MindEngine
         var id = "i" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
         if (!SendMind(new MindMsg { T = "turn", Id = id, Source = "initiative", Situation = Moment() })) return _lastGate = "no-mind";
         _turns[id] = (ActSource.Self, null, "initiative");
-        Log.Write("mind: turn initiative");
+        _schedule.Asked(DateTimeOffset.Now, level);
+        Log.Write($"mind: turn initiative (next check {_schedule.NextCheck:HH:mm})");
         return _lastGate;
     }
 

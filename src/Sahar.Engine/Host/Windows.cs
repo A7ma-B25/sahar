@@ -70,7 +70,7 @@ internal static unsafe class Win
                 if (handler != null) Handlers[hwnd] = handler;
             }
             if (handler?.OnMessage(hwnd, msg, wParam, lParam) is { } result) return result;
-            if (msg == Native.WM_DESTROY) { Handlers.Remove(hwnd); Own.Remove(hwnd); }
+            if (msg == Native.WM_DESTROY) { Handlers.Remove(hwnd); Own.Remove(hwnd); Capture.Remove(hwnd); }
         }
         catch (Exception e)
         {
@@ -153,7 +153,42 @@ internal static unsafe class Win
         return n > 0 && TransientClasses.Contains(new string(buf, 0, n));
     }
 
-    public static void SetCaptureExcluded(nint hwnd, bool excluded)
+    /// <summary>T8 (0.15): every window that asked to be left out of screen capture, so his «اسمح بتصويرها» reaches
+    /// them all, live.</summary>
+    private static readonly Sahar.Core.Settings.CaptureRegistry Capture = new();
+
+    /// <summary>A window of hers asks to be left out of screen capture (or not: --capturable); his choice decides.</summary>
+    public static void SetCaptureExcluded(nint hwnd, bool excluded) => Affinity(hwnd, Capture.Add(hwnd, excluded));
+
+    /// <summary>His «اسمح بتصويرها»: every window of hers still open is set again (nothing when it did not change).</summary>
+    public static void AllowCapture(bool allowed)
+    {
+        int n = 0;
+        foreach (var (hwnd, excluded) in Capture.SetAllowed(allowed))
+        {
+            if (Native.IsWindow(hwnd) == 0) { Capture.Remove(hwnd); continue; }
+            Affinity(hwnd, excluded);
+            n++;
+        }
+        if (n > 0) Log.Write($"capture: {(allowed ? "allowed" : "hidden")} ({n} windows)");
+    }
+
+    /// <summary>Test mode: his choice, and what Windows says of her open windows (GetWindowDisplayAffinity).</summary>
+    public static unsafe string DescribeCapture()
+    {
+        int windows = 0, hidden = 0;
+        foreach (var hwnd in Own)
+        {
+            uint a;
+            if (Native.IsWindow(hwnd) == 0 || Native.GetWindowDisplayAffinity(hwnd, &a) == 0) continue;
+            windows++;
+            if (a != Native.WDA_NONE) hidden++;
+        }
+        int wanting = Capture.Wanting.Count(h => Native.IsWindow(h) != 0);
+        return $"allowed={(Capture.Allowed ? "true" : "false")} windows={windows} hidden={hidden} wanting={wanting} registered={Capture.Count}";
+    }
+
+    private static void Affinity(nint hwnd, bool excluded)
     {
         if (Native.SetWindowDisplayAffinity(hwnd, excluded ? Native.WDA_EXCLUDEFROMCAPTURE : Native.WDA_NONE) == 0)
             Log.Write($"SetWindowDisplayAffinity failed: {Marshal.GetLastPInvokeError()}");

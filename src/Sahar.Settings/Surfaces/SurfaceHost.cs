@@ -179,6 +179,13 @@ internal sealed class SurfaceHost
             case "theme":
                 foreach (var x in _s.Values) Post(x, m.Dark ? """{"t":"theme","dark":true}""" : """{"t":"theme","dark":false}""");
                 break;
+            case "capture":
+                foreach (var x in _s.Values)
+                {
+                    x.Win.SetCaptureExcluded(!m.Capturable);
+                    if (x.Showing is { } shown) shown.Capturable = m.Capturable;
+                }
+                break;
             case "debug":
                 _pipe?.Send(new SurfaceMsg { T = "reply", Seq = m.Seq, Model = Debug() });
                 break;

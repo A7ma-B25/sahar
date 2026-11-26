@@ -119,4 +119,6 @@ public sealed record SaharSettings
     public bool MindLearnMusic { get; set; }
     /// <summary>Raw chat episodes kept this many days (7 / 30 / 90), then summarised.</summary>
     public int MindEpisodeDays { get; set; } = 30;
+    /// <summary>0.15 «اسمح بتصويرها»: her windows show in screen recordings and screenshots (off: Windows leaves them out).</summary>
+    public bool AllowCapture { get; set; }
 }

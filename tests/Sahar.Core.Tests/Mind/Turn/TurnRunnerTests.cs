@@ -138,7 +138,9 @@ public sealed class TurnRunnerTests
         Assert.Equal("طلب تركيز", call.Why);
         Assert.Equal(1, call.Call);
         Assert.Equal("يلا نركّز! شغّلت مؤقت ربع ساعة", _io.Final.Text);   // all ran: her words stand
-        Assert.Empty(_io.Of("partial"));   // never streamed before the outcome was known
+        // 0.15.0: the call goes out first; her words stream only after it (claims only once it came back done)
+        var sent = _io.Sent.ToList();
+        Assert.True(sent.FindIndex(m => m.T == "call") < sent.FindIndex(m => m.T == "partial"));
     }
 
     [Fact]

@@ -101,6 +101,9 @@ internal sealed class SurfaceClient : IDisposable
 
     public void Theme() => Send(new SurfaceMsg { T = "theme", Dark = Dark() }, queueIfDown: false);
 
+    /// <summary>0.15 «اسمح بتصويرها» changed: every surface window, open or warm, follows now.</summary>
+    public void Capture() => Send(new SurfaceMsg { T = "capture", Capturable = Capturable() }, queueIfDown: false);
+
     /// <summary>Test mode: the host's state (JSON), or a script's result in a surface.</summary>
     public Task<string?> Ask(string t, string? surface = null, string? script = null)
     {
