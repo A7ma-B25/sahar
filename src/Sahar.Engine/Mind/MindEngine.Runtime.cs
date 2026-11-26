@@ -174,7 +174,7 @@ internal sealed partial class MindEngine
             case "state": _phase = m.Phase ?? _phase; break;
             case "ready":
                 _phase = "ready";
-                if (m.Ready is { } r) Log.Write($"mind: ready ({r.Backend}, {r.LoadMs} ms)");
+                if (m.Ready is { } r) Log.Write($"mind: ready ({r.Backend}, {r.LoadMs} ms, vram {r.VramMB} MB)");
                 if (_wantsReady) { _wantsReady = false; Speech.Say(Address.For(Address.You, RuntimeText.Done)); }
                 break;
             case "models":

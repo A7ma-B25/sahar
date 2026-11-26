@@ -6,7 +6,8 @@ namespace Sahar.Mind;
 /// <summary>
 /// Sahar.Mind.exe (spec 0.14 §3): <c>--pipe &lt;name&gt; --parent &lt;pid&gt; [--script &lt;file&gt;]</c>. Connects to the
 /// engine's private pipe (current user only), runs the turn loop on the model runtime, exits when idle or when the
-/// engine goes. <c>--version</c>; <c>--probe</c> prints the hardware tier (numbers only).
+/// engine goes. <c>--version</c>; <c>--probe</c> prints the hardware tier (numbers only); <c>--gpu-memory &lt;pid&gt;</c>
+/// that process's dedicated video memory (numbers only).
 /// </summary>
 internal static class Program
 {
@@ -21,6 +22,14 @@ internal static class Program
             return 0;
         }
         string? Arg(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        // 0.15.0 T9: one process's dedicated video memory from Windows' counter (CI compares it with Get-Counter).
+        if (Arg("--gpu-memory") is { } gp)
+        {
+            if (!int.TryParse(gp, out int gpid) || gpid <= 0) return 2;
+            var (mb, n, status) = GpuPdh.Read(gpid);
+            Console.WriteLine(FormattableString.Invariant($"pid={gpid} dedicatedMB={mb} instances={n} status=0x{status:x8}"));
+            return 0;
+        }
         var pipeName = Arg("--pipe");
         if (pipeName is null) return 2;
         int parent = int.TryParse(Arg("--parent"), out var pid) ? pid : 0;
