@@ -48,6 +48,18 @@ public sealed class StreamingTests
         Assert.Equal("يلا، رح الحق الفراشة هلق 🦋", _io.Final.Text);
     }
 
+    /// <summary>CI run 45853945366: two Asks went out at once, and with the card closed the second one waited two
+    /// minutes in her bubble. Only the first action goes out early; after his «لا» the turn asks nothing more.</summary>
+    [Fact]
+    public async Task AfterHisNo_TheTurnAsksNothingMore()
+    {
+        _io.Engine = c => new MindMsg { T = "answer", Id = c.Id, Call = c.Call, Ok = false };
+        _llm.Reply(Decision("""[{"tool":"timer.start","args":{"minutes":5},"why":"x"},{"tool":"timer.cancel","args":{},"why":"y"}]""", say: "تمام"));
+        await Runner().RunAsync(Chat("مؤقت"), Hello(), _io, default);
+        Assert.Single(_io.Of("call"));
+        Assert.Equal(ToolTemplates.AskedNo, _io.Final.Text);
+    }
+
     [Fact]
     public async Task AFailedEarlyAction_NeverStreamsAClaim()
     {

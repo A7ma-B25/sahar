@@ -101,11 +101,20 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                 steps = step;
                 var left = budget - clock.Elapsed;
                 if (left <= TimeSpan.Zero) { TimedOut(io, id); Report(); return; }
-                // 0.15.0: the actions go out the moment the model has written them (the schema puts them first), so a
-                // game, a move or a timer starts while she is still writing her words.
-                List<Task<Outcome>?>? early = null;
-                bool EarlyOk() => early is { } e && e.All(t => t is { IsCompletedSuccessfully: true, Result.Ok: true });
-                SayStream NewStream() => new(Partial, acts => early = Decision.ParseActions(acts)?.Take(MaxActions).Select(Start).ToList(), EarlyOk);
+                // 0.15.0: the first action goes out the moment the model has written the actions (the schema puts them
+                // first), so a game, a move or a timer starts while she is still writing her words. The others follow one
+                // by one as before (CI 45853945366: two Asks at once left one waiting in her bubble).
+                Task<Outcome>? early = null;
+                bool earlySent = false;
+                int earlyCount = 0;
+                bool EarlyOk() => earlyCount == 1 && early is { IsCompletedSuccessfully: true, Result.Ok: true };
+                SayStream NewStream() => new(Partial, acts =>
+                {
+                    if (Decision.ParseActions(acts) is not [var first, ..] parsed) return;
+                    earlyCount = parsed.Count;
+                    earlySent = true;
+                    early = Start(first);
+                }, EarlyOk);
                 var stream = NewStream();
                 LlmReply reply;
                 using (var limit = CancellationTokenSource.CreateLinkedTokenSource(ct))
@@ -126,10 +135,10 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                     }
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                     {
-                        // Her actions already went out: say what really happened instead of «عم فكّر كتير».
-                        if (early is { Count: > 0 } sent && sent.All(t => t is not null))
+                        // Her action already went out: say what really happened instead of «عم فكّر كتير».
+                        if (early is { } sent)
                         {
-                            foreach (var t in sent) outcomes.Add(await t!);
+                            outcomes.Add(await sent);
                             io.Send(new MindMsg { T = "say", Id = id, Text = Final("", outcomes, false), Final = true });
                         }
                         else TimedOut(io, id);
@@ -157,16 +166,21 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                 if (chat && learn && source != "draft") Remember(io, id, d.Remember);
 
                 bool reads = false;
-                var started = early ?? d.Actions.Take(MaxActions).Select(Start).ToList();
                 waitClock.Start();
                 try
                 {
-                    foreach (var task in started)
+                    bool declined = false;
+                    var acts = d.Actions.Take(MaxActions).ToList();
+                    for (int i = 0; i < acts.Count; i++)
                     {
+                        // After his «لا» (or no answer) the turn asks nothing more: the rest is not done (her line says so once).
+                        if (declined) { Dropped?.Invoke("asked-no (the rest not asked)"); break; }
+                        var task = i == 0 && earlySent ? early : Start(acts[i]);
                         if (task is null) { if (!invalid) Dropped?.Invoke("invalid-call"); invalid = true; continue; }
                         var o = await task;
                         outcomes.Add(o);
                         reads |= o.Read && o.Ok;
+                        declined = o.Summary is ToolTemplates.AskedNo or ToolTemplates.NoAnswer;
                     }
                 }
                 finally { waitClock.Stop(); }
