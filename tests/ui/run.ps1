@@ -158,7 +158,10 @@ Add-Type -AssemblyName System.Windows.Forms
 if ('$kind' -eq 'scene-light') { `$f.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#DCD9E3') }   # the mockups' scenes (0.13)
 if ('$kind' -eq 'scene-dark') { `$f.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#0F0E12') }
 if ('$kind' -eq 'borderless') { `$f.FormBorderStyle = 'None'; `$f.TopMost = `$true }
-if ('$kind' -eq 'typing') {
+if ('$kind' -eq 'seek') {   # 0.16 hide-and-seek: a dark, captioned window she can hide behind
+    `$f.StartPosition = 'Manual'; `$f.Location = New-Object System.Drawing.Point(160, 140); `$f.Size = New-Object System.Drawing.Size(620, 440)
+    `$f.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#0F0E12')
+} elseif ('$kind' -eq 'typing') {
     `$f.StartPosition = 'Manual'; `$f.Location = New-Object System.Drawing.Point(150, 120); `$f.Size = New-Object System.Drawing.Size(560, 380)
     `$t = New-Object System.Windows.Forms.TextBox; `$t.Multiline = `$true; `$t.Dock = 'Fill'; `$t.Font = New-Object System.Drawing.Font('Segoe UI', 14)
     `$f.Controls.Add(`$t)
@@ -174,7 +177,7 @@ if ('$kind' -eq 'typing') {
     Start-Sleep -Milliseconds 300
     # Windows refuses a new process the foreground while the runner's terminal has it; a real click on the
     # window takes it (Sahar's overlay is click-through, and she sits bottom-right, away from this point).
-    $click = if ($kind -eq 'typing') { '430,320' } else { '120,300' }   # inside the window
+    $click = if ($kind -eq 'typing') { '430,320' } elseif ($kind -eq 'seek') { '470,360' } else { '120,300' }   # inside the window
     & agent-desktop --headed mouse-click --xy $click 2>&1 | Out-Null
     Start-Sleep -Milliseconds 300
     $p
@@ -2800,6 +2803,30 @@ function Stage-Prayer {
 
 function Game { Kv 'debug-game' }
 
+function Wait-Game([scriptblock]$cond, [int]$ms, [string]$what) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do {
+        $g = Game
+        if (& $cond $g) { return $g }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+    throw "$what not seen within $ms ms (state $($g.state), spot $($g.spot), whisper $($g.whisper))"
+}
+
+if (-not ('SeekWin' -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class SeekWin {
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
+    /// Moves a window by dx,dy without activating it or changing its z-order.
+    public static void Nudge(IntPtr h, int dx, int dy) { RECT r; GetWindowRect(h, out r); SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010); }
+}
+"@
+}
+
 function Stage-Games {
     Step 'start engine' {
         Stop-Engine
@@ -2856,33 +2883,166 @@ function Stage-Games {
         }
         finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null; [Mouse]::Move(5, 5) }
     }
-    Step 'hide and seek: she hides at an edge, a click on what shows finds her' {
-        Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek"}}' | Out-Null
-        $deadline = (Get-Date).AddSeconds(4)
-        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden-1' -and (Get-Date) -lt $deadline)
-        if ($g.state -ne 'hidden-1') { throw "not hidden: $($g.state)" }
-        $x = [int]$g.x; $y = [int]$g.y; $w = [int]$g.w; $h = [int]$g.h
-        $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-        $l = [Math]::Max($x, $work.Left); $t = [Math]::Max($y, $work.Top); $r = [Math]::Min($x + $w, $work.Right); $b = [Math]::Min($y + $h, $work.Bottom)
-        $shown = ($r - $l) * ($b - $t) / ($w * $h)
+    Step 'hide and seek: no words while she counts; she hides at an edge; a click on what shows finds her' {
+        [Mouse]::Move(5, 5)
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Edge"}}' | Out-Null
+        Start-Sleep -Milliseconds 900
+        $g = Game
+        if ($g.state -ne 'counting-1') { throw "not counting: $($g.state)" }
+        if ($g.said64) { throw "she spoke while counting: '$(Text64 $g.said64)'" }
+        Screenshot 'game-hide-count.png' | Out-Null
+        $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden in round 1'
+        if ($g.spot -ne 'Edge' -or $g.clip -ne 'off') { throw "round 1: spot $($g.spot) clip $($g.clip)" }
+        $shown = [int]$g.vw * [int]$g.vh / ([int]$g.w * [int]$g.h)
         if ($shown -gt 0.4 -or $shown -lt 0.15) { throw "she shows $([int]($shown * 100))% of herself" }
-        Screenshot 'game-hide.png' | Out-Null
-        $px = [int](($l + $r) / 2); $py = [int](($t + $b) / 2)
+        Screenshot 'game-hide-edge.png' | Out-Null
+        $px = [int]$g.vx + [int]$g.vw / 2; $py = [int]$g.vy + [int]$g.vh / 2
         Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$px`",`"y`":`"$py`"}}" | Out-Null
-        if ((Game).state -ne 'found-1') { throw "not found: $((Game).state)" }
-        if ((Text64 (Kv 'debug-comment').text64) -ne 'لقيتني! 😆') { throw "found line: '$(Text64 (Kv 'debug-comment').text64)'" }
+        $g = Game
+        if ($g.state -ne 'found-1' -or $g.score -ne '1') { throw "not found: $($g.state) score $($g.score)" }
+        $said = Text64 $g.said64
+        if ($said -notmatch '^لقيتني! بـ [١-٩][٠-٩]* ثانية$') { throw "found line: '$said'" }
+        if ((Text64 (Kv 'debug-comment').text64) -ne $said) { throw "the bubble says '$(Text64 (Kv 'debug-comment').text64)'" }
+        Start-Sleep -Milliseconds 250
+        Screenshot 'game-hide-found.png' | Out-Null
         # Round 2 with the real mouse: her own input window must not take the click from the game.
-        $deadline = (Get-Date).AddSeconds(8)
-        do { Start-Sleep -Milliseconds 200; $g = Game } while ($g.state -ne 'hidden-2' -and (Get-Date) -lt $deadline)
-        if ($g.state -ne 'hidden-2') { throw "round 2 not hidden: $($g.state)" }
-        $x = [int]$g.x; $y = [int]$g.y; $w = [int]$g.w; $h = [int]$g.h
-        $l = [Math]::Max($x, 0); $t = [Math]::Max($y, 0); $r = [Math]::Min($x + $w, $work.Right); $b = [Math]::Min($y + $h, [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Bottom)
-        $xy = '{0},{1}' -f [int](($l + $r) / 2), [int](($t + $b) / 2)
+        $g = Wait-Game { param($g) $g.state -eq 'hidden-2' } 8000 'hidden in round 2'
+        $xy = '{0},{1}' -f ([int]$g.vx + [int]$g.vw / 2), ([int]$g.vy + [int]$g.vh / 2)
         & agent-desktop --headed mouse-click --xy $xy | Out-Null
         Start-Sleep -Milliseconds 300
         if ((Game).state -ne 'found-2') { throw "a real click on her did not find her: $((Game).state) (clicked $xy)" }
-        Send '{"type":"cmd","name":"game-stop"}' | Out-Null
-        if ((Text64 (Kv 'debug-comment').text64) -notmatch '^لقيتني بـ \d+ ثانية بالمعدل') { throw "result: '$(Text64 (Kv 'debug-comment').text64)'" }
+        # Round 3: Esc gives the round up — she sticks her tongue out, «هون كنت!», a dashed outline where she was.
+        $g = Wait-Game { param($g) $g.state -eq 'hidden-3' } 8000 'hidden in round 3'
+        $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        [Mouse]::Click([int]($work.Left + $work.Width / 2), [int]($work.Top + 40), $false)   # the game's catcher takes the keyboard
+        Start-Sleep -Milliseconds 150
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        $g = Wait-Game { param($g) $g.state -eq 'gaveup-3' } 2000 'Esc gives the round up'
+        if ((Text64 $g.said64) -ne 'هون كنت!') { throw "give-up line: '$(Text64 $g.said64)'" }
+        if ($g.running -ne 'true') { throw 'one Esc ended the game' }
+        Start-Sleep -Milliseconds 300
+        Screenshot 'game-hide-gaveup.png' | Out-Null
+        # After three rounds: one line and «يلا» / «خلص».
+        $g = Wait-Game { param($g) $g.state -eq 'again' } 4000 'the result card'
+        if ((Text64 $g.said64) -ne 'لقيتني مرتين من تلاتة. منعيدها؟') { throw "result: '$(Text64 $g.said64)'" }
+        Start-Sleep -Milliseconds 300
+        Screenshot 'game-hide-again.png' | Out-Null
+        Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$($g.againX)`",`"y`":`"$($g.againY)`"}}" | Out-Null
+        $g = Game
+        if ($g.state -ne 'counting-1' -or $g.found -ne '0') { throw "«يلا» did not start again: $($g.state) found $($g.found)" }
+        $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden again'
+        [Mouse]::Click([int]($work.Left + $work.Width / 2), [int]($work.Top + 40), $false)
+        Start-Sleep -Milliseconds 150
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Start-Sleep -Milliseconds 200
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Wait-Game { param($g) $g.running -eq 'false' } 2000 'Esc twice quits' | Out-Null
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'game: hide spot Edge') { throw 'no hide spot in the log' }
+    }
+    Step 'hide and seek: behind a real window she is clipped at its edge; warmer/colder; the window moves and she slides to an edge' {
+        $win = Start-TestWindow 'seek'
+        try {
+            $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            [Mouse]::Move($work.Right - 20, $work.Top + 20)
+            Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
+            $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden behind the window'
+            if ($g.spot -ne 'Window' -or $g.clip -ne 'on') { throw "spot $($g.spot) clip $($g.clip)" }
+            Start-Sleep -Milliseconds 300
+            $shot = Screenshot 'game-hide-window.png'
+            # Clipped: just inside the window's edge, where her hidden half is, the window still shows (#0F0E12);
+            # just outside it, what shows of her is drawn.
+            $vx = [int]$g.vx; $vy = [int]$g.vy; $vw = [int]$g.vw; $vh = [int]$g.vh
+            $edge = if ($g.side -eq '2') { $vx } else { $vx + $vw }
+            $in = if ($g.side -eq '2') { $edge - 14 } else { $edge + 14 }
+            $behind = Pixel $shot $in ($vy + [int]($vh / 2))
+            if ($behind.R + $behind.G + $behind.B -gt 150) { throw "she is drawn over the window at $in,$($vy + [int]($vh / 2)): $behind" }
+            $out = if ($g.side -eq '2') { $edge + [int]($vw / 2) } else { $edge - [int]($vw / 2) }
+            $her = Pixel $shot $out ($vy + [int]($vh / 2))
+            if ($her.R + $her.G + $her.B -lt 360) { throw "nothing of her shows past the edge at $out: $her" }
+            Assert-NoCover 'hide-and-seek'
+            # Warmer or colder: nothing in the first 5 s; then the resting pointer, far away, gets «برد…» beside it.
+            if ((Game).whisper -ne 'none') { throw 'a whisper in the first 5 s' }
+            $g2 = Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper'
+            if ([double]$g2.hidden -lt 5) { throw "a whisper after only $($g2.hidden) s" }
+            Start-Sleep -Milliseconds 200
+            Screenshot 'game-hide-cold.png' | Out-Null
+            # Close by and resting: «دافي… دافي كتير!» (at most one chip every 3 s).
+            $hx = if ($g.side -eq '2') { $vx + $vw + 150 } else { $vx - 150 }
+            [Mouse]::Move($hx, $vy + [int]($vh / 2))
+            Wait-Game { param($g) $g.whisper -eq 'Hot' } 4500 'a hot whisper' | Out-Null
+            Start-Sleep -Milliseconds 200
+            Screenshot 'game-hide-warm.png' | Out-Null
+            # The window moves (without taking the focus): she slides to the nearest edge.
+            [SeekWin]::Nudge($win.MainWindowHandle, 300, 0)
+            $g = Wait-Game { param($g) $g.spot -eq 'Edge' -and $g.state -eq 'hidden-1' } 3000 'a slide to an edge'
+            if ($g.clip -ne 'off') { throw "still clipped at an edge" }
+            $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+            if ($log -notmatch 'game: spot gone \(Window\), sliding to an edge') { throw 'no slide in the log' }
+            if ($log -match 'Sahar test seek') { throw 'a window title is in engine.log' }
+        }
+        finally {
+            Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+            if ($win -and -not $win.HasExited) { $win.Kill() }
+            [Mouse]::Move(5, 5)
+        }
+    }
+    Step 'hide and seek: behind the taskbar only her leaf and crown show' {
+        Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Taskbar"}}' | Out-Null
+        try {
+            $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden behind the taskbar'
+            if ($g.spot -ne 'Taskbar' -or $g.clip -ne 'on') { throw "spot $($g.spot) clip $($g.clip)" }
+            $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            if ([Math]::Abs([int]$g.vy + [int]$g.vh - $work.Bottom) -gt 2) { throw "what shows ends at $([int]$g.vy + [int]$g.vh), the bar's top is $($work.Bottom)" }
+            if ([int]$g.vh -gt [int]$g.h) { throw "too much of her shows: $($g.vh) of $($g.h)" }
+            Start-Sleep -Milliseconds 300
+            Screenshot 'game-hide-taskbar.png' | Out-Null
+            Assert-NoCover 'hide-and-seek behind the taskbar'
+        }
+        finally { Send '{"type":"cmd","name":"game-stop"}' | Out-Null }
+    }
+    Step 'hide and seek in dark: the chip, the give-up and the result card' {
+        Stop-Engine
+        Set-Content -Path (Join-Path $env:APPDATA 'Sahar\settings.json') -Value '{ "helloDone": true, "appearance": "dark" }' -Encoding UTF8
+        Start-Engine
+        Pose-Body 600 350 | Out-Null
+        $win = Start-TestWindow 'seek'
+        try {
+            $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            [Mouse]::Move($work.Right - 20, $work.Top + 20)
+            Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
+            $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden (dark)'
+            Screenshot 'game-hide-window-dark.png' | Out-Null
+            Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper (dark)' | Out-Null
+            Start-Sleep -Milliseconds 200
+            Screenshot 'game-hide-cold-dark.png' | Out-Null
+            $hx = if ($g.side -eq '2') { [int]$g.vx + [int]$g.vw + 300 } else { [int]$g.vx - 300 }
+            [Mouse]::Move($hx, [int]$g.vy + [int]$g.vh / 2)
+            Wait-Game { param($g) $g.whisper -eq 'Warm' } 4500 'a warm whisper' | Out-Null
+            Start-Sleep -Milliseconds 200
+            Screenshot 'game-hide-warm-dark.png' | Out-Null
+            foreach ($round in 1..3) {
+                $g = Wait-Game { param($g) $g.state -eq "hidden-$round" } 8000 "hidden in round $round (dark)"
+                [Mouse]::Click([int]($work.Left + $work.Width / 2), [int]($work.Bottom - 30), $true)   # a right-click gives the round up
+                Wait-Game { param($g) $g.state -eq "gaveup-$round" } 2000 "right-click gives round $round up" | Out-Null
+                if ($round -eq 1) { Start-Sleep -Milliseconds 250; Screenshot 'game-hide-gaveup-dark.png' | Out-Null }
+            }
+            $g = Wait-Game { param($g) $g.state -eq 'again' } 4000 'the result card (dark)'
+            if ((Text64 $g.said64) -ne 'ما لقيتني ولا مرة. منعيدها؟') { throw "result: '$(Text64 $g.said64)'" }
+            Start-Sleep -Milliseconds 300
+            Screenshot 'game-hide-again-dark.png' | Out-Null
+            Send "{`"type`":`"cmd`",`"name`":`"game-click`",`"args`":{`"x`":`"$($g.doneX)`",`"y`":`"$($g.doneY)`"}}" | Out-Null
+            if ((Game).running -ne 'false') { throw '«خلص» did not end the game' }
+        }
+        finally {
+            Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+            if ($win -and -not $win.HasExited) { $win.Kill() }
+            [Mouse]::Move(5, 5)
+            Stop-Engine
+            Remove-Item (Join-Path $env:APPDATA 'Sahar\settings.json') -ErrorAction SilentlyContinue
+            Start-Engine
+            Pose-Body 600 350 | Out-Null
+        }
     }
     Step 'ball: a flick throws it, she fetches it and brings it back' {
         Send '{"type":"cmd","name":"game-start","args":{"kind":"Ball"}}' | Out-Null

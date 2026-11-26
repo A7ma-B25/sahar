@@ -1075,6 +1075,7 @@ internal sealed unsafe class App
             pipe.Register("game-start", r =>
             {
                 if (r.Args?.TryGetValue("kind", out var k) != true || !Enum.TryParse<GameKind>(k, true, out var kind)) return new PipeReply(false, "game-start needs kind");
+                games.SeekPrefer = r.Args.TryGetValue("spot", out var sp) && Enum.TryParse<SpotKind>(sp, true, out var spot) ? spot : null;   // test: show each hiding spot
                 games.Start(kind, r.Args.ContainsKey("seconds") ? Arg(r, "seconds") : null);
                 return new PipeReply(true, games.Describe());
             });

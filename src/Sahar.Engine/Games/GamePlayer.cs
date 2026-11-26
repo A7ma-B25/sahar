@@ -1,5 +1,6 @@
 using System.Numerics;
 using Sahar.Core.Art;
+using Sahar.Core.Expressions;
 using Sahar.Core.Games;
 using Sahar.Core.Geometry;
 using Sahar.Core.Motion;
@@ -54,7 +55,8 @@ internal sealed class GamePlayer : IDisposable
             Down = p => Safe(() => Down(p)),
             Moved = p => Safe(() => { _pointer = p; if (_ballHeld) _drag.Add((_clock, p)); }),
             Up = p => Safe(() => Up(p)),
-            Quit = () => Safe(() => Stop()),
+            Quit = () => Safe(() => { if (Kind == GameKind.HideSeek) SeekQuit(); else Stop(); }),
+            Lost = () => Safe(() => Stop()),
         };
     }
 
@@ -96,7 +98,7 @@ internal sealed class GamePlayer : IDisposable
         switch (kind)
         {
             case GameKind.Chase: _limit = seconds ?? Chase.Seconds; StartChase(); break;
-            case GameKind.HideSeek: _limit = seconds ?? 3 * 60f; StartHide(); break;
+            case GameKind.HideSeek: _limit = seconds ?? 20 * 60f; StartHide(); break;
             case GameKind.Ball: _limit = seconds ?? Ball.Seconds; StartBall(); break;
             default: _limit = seconds ?? StarRain.Seconds; StartStars(); break;
         }
@@ -132,11 +134,17 @@ internal sealed class GamePlayer : IDisposable
         try { ClearVisuals(); }
         catch (Exception e) { Log.Write($"game cleanup error: {e.GetType().Name}"); }
         _ballHeld = false;
+        if (kind == GameKind.HideSeek)
+        {
+            try { EndSeek(); }
+            catch (Exception e) { Log.Write($"game cleanup error: {e.GetType().Name}"); }
+        }
         _motion.EndGame();
         _gameMonitor = null;
         RunningChanged?.Invoke(false);
         Log.Write($"game: {kind} over, score {Score}");
-        if (sayScore) _say(Sahar.Core.Settings.Address.ToYou(GameText.Result(kind, Score)));
+        // Hide-and-seek gives its result in its own «منعيدها؟» card; a game stopped early says nothing more.
+        if (sayScore && kind != GameKind.HideSeek) _say(Sahar.Core.Settings.Address.ToYou(GameText.Result(kind, Score)));
     }
 
     private void Down(Vector2 p)
@@ -185,7 +193,7 @@ internal sealed class GamePlayer : IDisposable
         {
             GameKind.Ball => $" ball={_ballState} ballX={_ball.Position.X:0} ballY={_ball.Position.Y:0}",
             GameKind.Stars => $" stars={_rain?.Stars.Count ?? 0} spawned={_rain?.Spawned ?? 0}",
-            GameKind.HideSeek => $" round={_round}",
+            GameKind.HideSeek => DescribeSeek(),
             _ => "",
         };
         return FormattableString.Invariant(
@@ -285,93 +293,382 @@ internal sealed class GamePlayer : IDisposable
         MoveTo(new Vector2(w.X + (float)_rng.NextDouble() * (w.Width - Size.X), w.Y + (float)_rng.NextDouble() * (w.Height - Size.Y)), 0.4f);
     }
 
-    // ---------- 🙈 غمّضلي ----------
+    // ---------- «الغميضة» (0.16: she really hides behind his windows) ----------
 
+    private enum SeekPhase { Counting, Zipping, Hidden, Out, Ask }
+
+    private SeekScene? _scene;
+    private SeekScene Scene => _scene ??= new SeekScene(_host, _v);
+    private SeekPhase _phase;
+    private float _phaseT, _hiddenT, _checkT, _zipSecs, _wiggleT = -1, _wiggleDeg;
+    private double _nextGiggle;
     private int _round;
-    private float _roundClock;
-    private readonly List<float> _found = [];
-    private bool _hidden, _hinted;
+    private readonly List<bool> _results = [];
+    private readonly List<HideSpot> _used = [];
+    private HideSpot? _spot;
+    private Vector2 _reveal, _zipFrom, _zipCtrl, _zipTo;
+    private bool _hinted, _zipShrink, _waitLogged;
+    private readonly WhisperGate _gate = new();
+    private (Eyes Eyes, Mouth Mouth) _faceBefore;
+    private string _said = "";
+
+    /// <summary>Test mode: the kind of spot she prefers when one is free (the ui harness shows each kind).</summary>
+    public SpotKind? SeekPrefer { get; set; }
+
+    private int Found => _results.Count(x => x);
 
     private void StartHide()
     {
+        Sahar.Core.Settings.Appearance? look = null;
+        try { look = Sahar.Core.Settings.SettingsStore.Load(Sahar.Core.Settings.SettingsStore.DefaultPath).Appearance; } catch { /* her defaults */ }
+        Scene.Dark = look switch { Sahar.Core.Settings.Appearance.Dark => true, Sahar.Core.Settings.Appearance.Light => false, _ => Theme.AppsDark() };
+        Scene.Reduced = ReducedMotion.AnimationsOff();
+        Scene.Dpi = Dpi;
+        _faceBefore = _v.FaceShown;
         _round = 0;
-        _found.Clear();
-        NextRound();
-        _tick = dt =>
-        {
-            Moving(dt);
-            _roundClock += dt;
-            if (_round > HideSeek.Rounds) return false;   // the last round is over: no extra hide
-            if (!_hidden)
-            {
-                if (_roundClock >= 1.5f) Hide();
-                return true;
-            }
-            if (!_hinted && HideSeek.Hint(_roundClock)) { _hinted = true; _motion.Squish(); _express("notification", true); }
-            if (HideSeek.GiveUp(_roundClock)) { PopOut(found: false); }
-            return _round <= HideSeek.Rounds;
-        };
+        _results.Clear();
+        _used.Clear();
+        _said = "";
+        StartRound();
+        _tick = SeekTick;
     }
 
-    private void NextRound()
+    private void StartRound()
     {
         _round++;
-        _roundClock = 0;
-        _hidden = false;
-        _hinted = false;
-        if (_round > HideSeek.Rounds) return;
+        _phase = SeekPhase.Counting;
+        _phaseT = 0;
+        _spot = null;
+        _reveal = Vector2.Zero;
+        _waitLogged = false;
+        Score = Found;
         State = $"counting-{_round}";
-        _say(Sahar.Core.Settings.Address.ToYou("غمّض عيونك… 🙈"));
+        Scene.Clip(null);
+        Scene.CloseAsk();
+        // The cover pose, with no words: paws over her eyes, a blush, «٣ ٢ ١» over her head, the pips under her.
+        _v.SetFace(Eyes.Closed, Mouth.Smile, ExpressionPlayer.Fade);
+        _v.BlushLayer.Container.Opacity = 1f;
+        Scene.Paws(true);
+        var h = HerRect;
+        Scene.Countdown(new Vector2(h.X + h.Width / 2, h.Y - h.Height * 0.45f - 22 * Dpi));
+        Scene.Pips(new Vector2(h.X + h.Width / 2, h.Bottom + 12 * Dpi), _round, _results);
+    }
+
+    private bool SeekTick(float dt)
+    {
+        _phaseT += dt;
+        Scene.Step(dt);
+        switch (_phase)
+        {
+            case SeekPhase.Counting:
+                if (_phaseT >= 3 * SeekScene.CountSeconds + 0.15f) Hide();
+                break;
+            case SeekPhase.Zipping:
+                Zip();
+                break;
+            case SeekPhase.Hidden:
+                Hidden(dt);
+                break;
+            case SeekPhase.Out:
+                Moving(dt);
+                if (_phaseT >= 2f)
+                {
+                    if (_round >= HideSeek.Rounds) AskAgain();
+                    else StartRound();
+                }
+                break;
+            case SeekPhase.Ask:
+                if (_phaseT >= 20f) return false;   // no answer: the game ends quietly
+                break;
+        }
+        Wiggle(dt);
+        return true;
     }
 
     private void Hide()
     {
-        var m = Monitor;
-        var (_, barEdge, _) = Taskbar.Get(m.Handle);
-        int taskbar = barEdge switch { Edge.Left => 0, Edge.Top => 1, Edge.Right => 2, _ => 3 };
-        var edges = HideSeek.OpenEdges(ToF(m.Bounds), Monitors.All().Select(x => ToF(x.Bounds)).ToList(), taskbar);
-        if (edges.Count == 0) edges = [taskbar == 1 ? 3 : 1];   // boxed in by screens: a peek over the top (or bottom)
-        var spot = HideSeek.Spot(ToF(m.Bounds), Size, edges[_rng.Next(edges.Count)], (float)_rng.NextDouble());
-        _motion.GameMoveTo(spot);
-        _hidden = true;
-        _roundClock = 0;
+        var world = SeekScene.World(Monitor, Size);
+        var spots = HideSeek.Spots(world, _pointer, _rng, _used);
+        if (SeekPrefer is { } prefer) spots = [.. spots.Where(x => x.Kind == prefer), .. spots.Where(x => x.Kind != prefer)];
+        if (spots.Count == 0)
+        {
+            // Nowhere far enough from the pointer (or a full-screen app): she keeps her eyes covered and looks again.
+            if (!_waitLogged) Log.Write("game: hide waits (no spot)");
+            _waitLogged = true;
+            _phaseT = 3 * SeekScene.CountSeconds - 0.35f;
+            return;
+        }
+        var spot = spots[0];
+        _spot = spot;
+        _used.Add(spot);
+        Log.Write($"game: hide spot {spot.Kind} (of {spots.Count})");   // kinds and counts only: never a window's title
+        Scene.Paws(false);
+        Scene.Pips(null, _round, _results);
+        _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
+        StartZip(spot.TopLeft, trail: true);
+        State = $"hiding-{_round}";
+    }
+
+    /// <summary>She shrinks with a squash and zips along a curve to <paramref name="to"/> (reduced motion: she is there).</summary>
+    private void StartZip(Vector2 to, bool trail)
+    {
+        _phase = SeekPhase.Zipping;
+        _phaseT = 0;
+        Scene.Clip(null);
+        _zipFrom = Her;
+        _zipTo = to;
+        _zipCtrl = SeekScene.Curve(_zipFrom, _zipTo, _rng);
+        _zipShrink = trail;
+        _zipSecs = Scene.Reduced ? 0 : trail ? 0.75f : 0.35f;
+        var root = _v.Root;
+        root.StopAnimation("Scale");
+        root.CenterPoint = new Vector3((SaharVisual.BodyUnits.X + SaharVisual.BodyUnits.Width / 2) * _v.Scale,
+            (SaharVisual.BodyUnits.Y + SaharVisual.BodyUnits.Height / 2) * _v.Scale, 0);
+        if (trail && !Scene.Reduced) Scene.Trail(_zipFrom + Size / 2, _zipCtrl + Size / 2, _zipTo + Size / 2, _zipSecs);
+        Zip();
+    }
+
+    private void Zip()
+    {
+        float u = _zipSecs <= 0 ? 1 : MathF.Min(1, _phaseT / _zipSecs);
+        float e = u < 0.5f ? 2 * u * u : 1 - MathF.Pow(-2 * u + 2, 2) / 2;
+        _motion.GameMoveTo(SeekScene.Bezier(_zipFrom, _zipCtrl, _zipTo, e));
+        if (_zipShrink && _zipSecs > 0)
+        {
+            // Squash (0–15 %), small in flight, back to size as she lands (85–100 %).
+            float k = u < 0.15f ? 1 - 0.45f * u / 0.15f : u > 0.85f ? 0.55f + 0.45f * (u - 0.85f) / 0.15f : 0.55f;
+            float squash = u < 0.15f ? 0.15f * MathF.Sin(MathF.PI * u / 0.15f) : 0;
+            _v.Root.Scale = new Vector3(k * (1 + squash), k * (1 - squash), 1);
+        }
+        if (_spot is { } s && u > 0.85f) Scene.Clip(SeekScene.Keep(s));   // her landing is already behind the edge
+        if (u < 1) return;
+        _v.Root.Scale = Vector3.One;
+        if (_spot is { } spot) Land(spot, fresh: _zipShrink);
+    }
+
+    /// <param name="fresh">A new hide (false: she slid on from a spot that went; the round's clock and cues go on).</param>
+    private void Land(HideSpot s, bool fresh)
+    {
+        _phase = SeekPhase.Hidden;
+        _phaseT = 0;
+        _checkT = 0;
+        _reveal = Vector2.Zero;
+        if (fresh)
+        {
+            _hiddenT = 0;
+            _hinted = false;
+            _gate.Reset();
+            _nextGiggle = HideSeek.NextGiggle(_rng);
+        }
+        Scene.Clip(SeekScene.Keep(s));
+        // The peek pose: one eye round the edge.
+        var o = Outward(s);
+        _v.SetFace(Eyes.Look, Mouth.Smile, ExpressionPlayer.Fade);
+        _v.FaceGroup.Offset = s.Kind == SpotKind.Taskbar ? Vector3.Zero : new Vector3(MathF.Sign(o.X) * 3 * _v.Scale, 0, 0);
         State = $"hidden-{_round}";
+    }
+
+    /// <summary>The way out of hiding: past the window's edge, up from the bar, or in from the screen's edge.</summary>
+    private static Vector2 Outward(HideSpot s) => s.Kind switch
+    {
+        SpotKind.Window => new Vector2(s.Side == 0 ? -1 : 1, 0),
+        SpotKind.Taskbar => new Vector2(0, -1),
+        _ => s.Side switch { 0 => new Vector2(1, 0), 1 => new Vector2(0, 1), 2 => new Vector2(-1, 0), _ => new Vector2(0, -1) },
+    };
+
+    /// <summary>What shows of her with her top-left at <paramref name="at"/> (screen px).</summary>
+    private RectF VisibleAt(HideSpot s, Vector2 at)
+    {
+        var body = new RectF(at.X, at.Y, Size.X, Size.Y);
+        return s.Kind switch
+        {
+            SpotKind.Window => body.Intersect(SeekScene.Keep(s)!.Value).Intersect(Work),
+            SpotKind.Taskbar => new RectF(at.X + Size.X * 0.3f, at.Y - Size.Y * 0.38f, Size.X * 0.4f, MathF.Max(0, s.Behind.Y - (at.Y - Size.Y * 0.38f))),
+            _ => body.Intersect(Work),
+        };
+    }
+
+    private HideSpot Shown => _spot is { } s ? s with { Visible = VisibleAt(s, s.TopLeft + _reveal) } : default;
+
+    private void Hidden(float dt)
+    {
+        if (_spot is not { } spot) return;
+        _hiddenT += dt;
+        // The window she is behind moved, closed or got covered: she slides to the nearest edge.
+        _checkT += dt;
+        if (_checkT >= 0.25f)
+        {
+            _checkT = 0;
+            var world = SeekScene.World(Monitor, Size);
+            if (!HideSeek.StillThere(spot, world))
+            {
+                var next = HideSeek.Fallback(world, _pointer, Her, _used);
+                if (next is null) { Log.Write("game: spot gone, nowhere to go"); PopOut(found: false); return; }
+                Log.Write($"game: spot gone ({spot.Kind}), sliding to an edge");
+                _spot = next;
+                _used.Add(next.Value);
+                _v.FaceGroup.Offset = Vector3.Zero;
+                StartZip(next.Value.TopLeft, trail: false);
+                State = $"moving-{_round}";
+                return;
+            }
+        }
+        var shown = Shown;
+        float dist = HideSeek.DistanceDip(shown, _pointer, Dpi);
+        // Within 120 DIP she trembles from the giggle (±1.5 px).
+        var shake = !Scene.Reduced && HideSeek.Trembles(dist) ? new Vector2(MathF.Sin(_hiddenT * MathF.Tau * 14) * 1.5f * Dpi, 0) : Vector2.Zero;
+        _motion.GameMoveTo(spot.TopLeft + _reveal + shake);
+        Scene.Clip(SeekScene.Keep(spot));
+        // A giggle every 8 ± 2 s, with a leaf wiggle.
+        if (_hiddenT >= _nextGiggle)
+        {
+            _nextGiggle = _hiddenT + HideSeek.NextGiggle(_rng);
+            var v = shown.Visible;
+            var at = spot.Kind == SpotKind.Taskbar ? new Vector2(v.Right + 16 * Dpi, v.Y + 8 * Dpi) : new Vector2(v.X + v.Width / 2, v.Y - 14 * Dpi);
+            Scene.Giggle(new Vector2(Math.Clamp(at.X, Work.X + 20 * Dpi, Work.Right - 20 * Dpi), Math.Clamp(at.Y, Work.Y + 12 * Dpi, Work.Bottom - 12 * Dpi)));
+            StartWiggle(10);
+        }
+        // After 20 s: a stronger wiggle, and a bit more of her shows.
+        if (!_hinted && HideSeek.Hint(_hiddenT))
+        {
+            _hinted = true;
+            _reveal = Outward(spot) * (spot.Kind == SpotKind.Taskbar ? Size.Y : Size.X) * 0.12f;
+            StartWiggle(18);
+        }
+        // Warmer or colder, when the pointer rests.
+        if (_gate.Update(_hiddenT, _pointer, Dpi)) Scene.Whisper(HideSeek.Warmth(dist), _pointer, Work);
+        if (HideSeek.GiveUp(_hiddenT)) PopOut(found: false);
+    }
+
+    private void StartWiggle(float deg) => (_wiggleT, _wiggleDeg) = (0, deg);
+
+    /// <summary>The leaf: a decaying wiggle after a giggle; behind the taskbar it also sways (1.6 s).</summary>
+    private void Wiggle(float dt)
+    {
+        if (Scene.Reduced) return;
+        float deg = 0;
+        if (_wiggleT >= 0)
+        {
+            _wiggleT += dt;
+            if (_wiggleT > 0.7f) _wiggleT = -1;
+            else deg += _wiggleDeg * (1 - _wiggleT / 0.7f) * MathF.Sin(_wiggleT * MathF.Tau * 6);
+        }
+        if (_phase == SeekPhase.Hidden && _spot is { Kind: SpotKind.Taskbar }) deg += 6 * MathF.Sin(_hiddenT * MathF.Tau / 1.6f);
+        _v.Leaf.Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, deg * MathF.PI / 180);
     }
 
     private void HideClick(Vector2 p)
     {
-        if (!_hidden || !Chase.Hit(HerRect.Intersect(ToF(Monitor.Bounds)), p)) return;
-        PopOut(found: true);
+        switch (_phase)
+        {
+            case SeekPhase.Hidden when HideSeek.Hit(Shown, p, Dpi):
+                PopOut(found: true);
+                break;
+            case SeekPhase.Ask when Scene.AgainButton.Contains(p.X, p.Y):
+                Log.Write("game: hide again");
+                Scene.CloseAsk();
+                _round = 0;
+                _results.Clear();
+                _used.Clear();
+                StartRound();
+                break;
+            case SeekPhase.Ask when Scene.DoneButton.Contains(p.X, p.Y):
+                Stop(sayScore: false);
+                break;
+        }
+    }
+
+    /// <summary>Esc or a right-click: while she hides it gives up the round (a second one quits); otherwise it quits.</summary>
+    private void SeekQuit()
+    {
+        if (_phase is SeekPhase.Hidden or SeekPhase.Zipping && _spot is not null) PopOut(found: false);
+        else Stop(sayScore: false);
     }
 
     private void PopOut(bool found)
     {
-        _hidden = false;
-        if (found) _found.Add(_roundClock);
-        Score = _found.Count == 0 ? 0 : Math.Max(1, (int)MathF.Ceiling(_found.Average()));   // a find under a second is still "1 s"
-        var w = Work;
-        MoveTo(new Vector2(w.X + w.Width / 2 - Size.X / 2, w.Y + w.Height / 2 - Size.Y / 2), 0.5f);
-        _say(Sahar.Core.Settings.Address.ToYou(found ? "لقيتني! 😆" : "هون كنت! 😜"));
-        _express(found ? "poked" : "celebrate", true);
-        _roundClock = -2f;   // a short pause before the next round's counting
-        State = found ? $"found-{_round}" : $"gaveup-{_round}";
-        if (_round >= HideSeek.Rounds) { _round++; return; }
-        NextRoundSoon();
+        if (_spot is not { } spot) return;
+        var shown = Shown;
+        var from = spot.TopLeft + _reveal;
+        _phase = SeekPhase.Out;
+        _phaseT = 0;
+        _results.Add(found);
+        Score = Found;
+        Scene.Clip(null);
+        _v.Root.Scale = Vector3.One;
+        _v.FaceGroup.Offset = Vector3.Zero;
+        // Out past the edge, fully seen, inside the work area (room above for her leaf).
+        var o = Outward(spot);
+        var to = from + o * new Vector2(Size.X * (spot.Kind == SpotKind.Window ? 1 : 0.85f) + 12 * Dpi, Size.Y + 24 * Dpi);
+        if (spot.Kind == SpotKind.Window) to.Y = from.Y;
+        if (spot.Kind == SpotKind.Taskbar) to = new Vector2(from.X, spot.Behind.Y - Size.Y - 24 * Dpi);
+        to = new Vector2(Math.Clamp(to.X, Work.X, Work.Right - Size.X), Math.Clamp(to.Y, Work.Y + Size.Y * 0.45f, Work.Bottom - Size.Y));
+        MoveTo(to, Scene.Reduced ? 0.01f : 0.35f);
+        if (!Scene.Reduced) _motion.Squish();   // the squash-and-stretch hop
+        var centre = to + Size / 2;
+        if (found)
+        {
+            _v.SetFace(Eyes.Happy, Mouth.Grin, ExpressionPlayer.Fade);
+            _v.BlushLayer.Container.Opacity = 1f;
+            Scene.Burst(centre, Size.X / 2);
+            Say(HideSeekText.Found(_hiddenT));
+            State = $"found-{_round}";
+        }
+        else
+        {
+            _v.SetFace(Eyes.Wink, Mouth.Tongue, ExpressionPlayer.Fade);   // the tease
+            Scene.Spot(new RectF(from.X, from.Y - (spot.Kind == SpotKind.Taskbar ? Size.Y * 0.38f : 0), Size.X, Size.Y)
+                .Intersect(spot.Kind == SpotKind.Taskbar ? new RectF(Work.X, Work.Y, Work.Width, spot.Behind.Y - Work.Y + 1) : Work));
+            Say(HideSeekText.GaveUp);
+            State = $"gaveup-{_round}";
+        }
+        Scene.Pips(new Vector2(centre.X, to.Y + Size.Y + 12 * Dpi), _round, _results);
+        Log.Write($"game: hide round {_round} {(found ? "found" : "gave up")} ({shown.Kind})");
+        _spot = null;
     }
 
-    private void NextRoundSoon()
+    private void AskAgain()
     {
-        // The tick counts _roundClock up from −2: the next round starts at 0.
-        var tick = _tick;
-        _tick = dt =>
-        {
-            Moving(dt);
-            _roundClock += dt;
-            if (_roundClock < 0) return true;
-            _tick = tick;
-            NextRound();
-            return true;
-        };
+        _phase = SeekPhase.Ask;
+        _phaseT = 0;
+        State = "again";
+        _v.SetFace(Eyes.Happy, Mouth.Smile, ExpressionPlayer.Fade);
+        _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
+        var line = Sahar.Core.Settings.Address.ToYou(HideSeekText.End(Found));
+        _said = line;
+        Scene.Ask(line, HerRect, Work);
+        Scene.Pips(new Vector2(HerRect.X + HerRect.Width / 2, HerRect.Bottom + 12 * Dpi), HideSeek.Rounds + 1, _results);
+        Log.Write($"game: hide over, found {Found} of {HideSeek.Rounds}");
+    }
+
+    private void Say(string line)
+    {
+        _said = Sahar.Core.Settings.Address.ToYou(line);
+        _say(_said);
+    }
+
+    /// <summary>The game is over: every piece goes, and her face, blush and leaf are hers again.</summary>
+    private void EndSeek()
+    {
+        _scene?.Clear();
+        _v.Leaf.Orientation = Quaternion.Identity;
+        _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
+        _v.FaceGroup.Offset = Vector3.Zero;
+        _v.SetFace(_faceBefore.Eyes, _faceBefore.Mouth, ExpressionPlayer.Fade);
+        _spot = null;
+    }
+
+    private string DescribeSeek()
+    {
+        var s = Shown;
+        string spot = _spot is { } sp
+            ? FormattableString.Invariant($" spot={sp.Kind} side={sp.Side} vx={s.Visible.X:0} vy={s.Visible.Y:0} vw={s.Visible.Width:0} vh={s.Visible.Height:0}")
+            : " spot=none";
+        string ask = _scene?.AskShown == true
+            ? FormattableString.Invariant($" againX={Scene.AgainButton.X + Scene.AgainButton.Width / 2:0} againY={Scene.AgainButton.Y + Scene.AgainButton.Height / 2:0} doneX={Scene.DoneButton.X + Scene.DoneButton.Width / 2:0} doneY={Scene.DoneButton.Y + Scene.DoneButton.Height / 2:0}")
+            : "";
+        return FormattableString.Invariant(
+            $" round={_round} found={Found} phase={_phase}{spot} clip={(_scene?.ClipOn == true ? "on" : "off")} whisper={_scene?.LastWhisper?.ToString() ?? "none"} hidden={_hiddenT:0.0}{ask} said64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(_said))}");
     }
 
     // ---------- ⚽ الطابة ----------
@@ -482,6 +779,7 @@ internal sealed class GamePlayer : IDisposable
     {
         _watch.Stop();
         ClearVisuals();
+        _scene?.Dispose();
         foreach (var s in _emoji.Values) s.Dispose();
         _emoji.Clear();
     }

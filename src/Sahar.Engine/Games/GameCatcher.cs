@@ -18,6 +18,8 @@ internal sealed class GameCatcher : IWindowHandler
     public Action<Vector2>? Moved { get; set; }
     public Action<Vector2>? Up { get; set; }
     public Action? Quit { get; set; }
+    /// <summary>Another window became active (null: <see cref="Quit"/>). Esc and a right-click stay <see cref="Quit"/>.</summary>
+    public Action? Lost { get; set; }
     public bool Visible { get; private set; }
 
     public GameCatcher(bool capturable)
@@ -74,7 +76,7 @@ internal sealed class GameCatcher : IWindowHandler
                 Quit?.Invoke();
                 return 0;
             case Native.WM_ACTIVATE when (wParam & 0xFFFF) == 0 && Visible:   // another window took over
-                Quit?.Invoke();
+                (Lost ?? Quit)?.Invoke();
                 return null;
             default:
                 return null;
