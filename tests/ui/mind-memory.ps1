@@ -129,6 +129,7 @@ function Stage-MindMemory {
         if ($log -match 'منحكي') { throw 'the draft is in engine.log' }
         Send '{"type":"cmd","name":"chat-close"}' | Out-Null
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        SOk 'front'   # the chat window took the foreground: the settings page comes back in front for the next step
     }
     Step 'mind (memory): «انسي كل شي» leaves nothing in mind\' {
         if ((Mind-Files).Count -lt 3) { throw "mind\ has $((Mind-Files).Count) file(s) before forgetting" }
