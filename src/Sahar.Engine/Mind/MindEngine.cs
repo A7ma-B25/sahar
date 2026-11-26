@@ -31,8 +31,9 @@ internal sealed partial class MindEngine
     public required Action<Func<SaharSettings, SaharSettings>> Save { get; init; }
     public required MenuCard Menu { get; init; }
     public required SpeechBubble Speech { get; init; }
-    public required TextBubble Bubble { get; init; }
-    public required ListBubble ListBubble { get; init; }
+    public required Surfaces.Panel Panel { get; init; }
+    /// <summary>0.16: the chat window (her drafts, inline asks and the replies he asked for in it).</summary>
+    public Surfaces.ChatHub? Chat { get; set; }
     public required TimerTool Timer { get; init; }
     public required DndTool Dnd { get; init; }
     public required NoteTool Notes { get; init; }

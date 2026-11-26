@@ -109,6 +109,14 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
         Save(c, writeIndex: false);
     }
 
+    /// <summary>One message changed (an ask answered); out of range does nothing.</summary>
+    public void ReplaceAt(string id, int index, Func<ChatEntry, ChatEntry> change)
+    {
+        if (!All().TryGetValue(id, out var c) || index < 0 || index >= c.Messages.Count) return;
+        c.Messages[index] = change(c.Messages[index]);
+        Save(c, writeIndex: false);
+    }
+
     public void Rename(string id, string title)
     {
         if (!All().TryGetValue(id, out var c)) return;

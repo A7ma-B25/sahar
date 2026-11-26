@@ -24,6 +24,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         var options = Options.Parse(args);
+        // 0.16: her warm surface host (pickers, inputs, ask bubbles, tray menu, «الدرج», the chat), started by the engine.
+        if (args.Contains("--surfaces")) return Surfaces.SurfaceHost.Run(options);
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Sahar.Settings", out bool first);
         if (!first)
         {
@@ -76,9 +78,7 @@ internal static class Program
                     bool missing = RuntimeMissing();
                     SettingsLog.Write($"webview2: failed ({(missing ? "runtime missing" : "runtime present")}, {LogRules.Kind(e)})");
                     ExitCode = ExitWebView2;
-                    if (!options.TestMode)
-                        Native.MessageBoxW(0, SettingsAppPolicy.StartFailed(missing), HostWindow.Title,
-                            Native.MB_OK | Native.MB_ICONINFORMATION | Native.MB_RTLREADING | Native.MB_RIGHT);
+                    // 0.16: no white Windows message box — she says it herself (the engine reads exit code 2).
                     window.Close();
                 }
             }, null);

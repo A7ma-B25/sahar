@@ -26,4 +26,11 @@ public static class Digits
             });
         return b.ToString();
     }
+
+    /// <summary>A number as she shows it: Latin digits in English, Arabic-Indic otherwise.</summary>
+    public static string Format(long n, Settings.UiLanguage language)
+    {
+        var s = n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return language == Settings.UiLanguage.English ? s : ToArabicIndic(s);
+    }
 }

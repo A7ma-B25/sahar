@@ -30,6 +30,9 @@ internal static class SettingsLauncher
         return Ok(Registry.LocalMachine, @"SOFTWARE\WOW6432Node\" + WebView2) || Ok(Registry.CurrentUser, @"Software\" + WebView2);
     }
 
+    /// <summary>The settings app could not start WebView2 (it exited 2); raised on a worker thread.</summary>
+    public static Action? StartFailed { get; set; }
+
     public static bool Open(bool testMode)
     {
         if (!Available) return false;
@@ -38,8 +41,11 @@ internal static class SettingsLauncher
             // A second start only brings the open window to the front (the app's own single-instance rule); she may let
             // it take the foreground, as the click was hers.
             Native.AllowSetForegroundWindow(0xFFFFFFFF /* ASFW_ANY */);
-            Process.Start(new ProcessStartInfo(ExePath) { UseShellExecute = false, Arguments = testMode ? "--test-mode" : "" });
+            var p = Process.Start(new ProcessStartInfo(ExePath) { UseShellExecute = false, Arguments = testMode ? "--test-mode" : "" });
             Log.Write("settings: opened");
+            // 0.16: no Windows message box from the settings app any more — it exits 2 and she says why, in her voice.
+            if (p is not null && StartFailed is { } failed)
+                _ = p.WaitForExitAsync().ContinueWith(_ => { try { if (p.ExitCode == 2) failed(); } catch (Exception) { } });
             return true;
         }
         catch (Exception e)

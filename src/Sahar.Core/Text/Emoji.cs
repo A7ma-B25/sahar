@@ -1,6 +1,7 @@
 namespace Sahar.Core.Text;
 
-/// <summary>Owner ruling 3 (0.15 spec): no emoji in anything she says or shows. Pictographs, dingbats used as emoji,
+/// <summary>Emoji detection (0.16). Owner ruling 3 was REVERSED 2026-11-26: her speech keeps its emoji — never wire
+/// <see cref="Strip"/> into anything she says. Kept for tests and UI-chrome checks only. Pictographs, dingbats used as emoji,
 /// variation selector 16, ZWJ and skin tones count; typographic marks (✓ · — « » …) do not.</summary>
 public static class Emoji
 {

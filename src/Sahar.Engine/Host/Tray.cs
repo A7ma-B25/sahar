@@ -4,7 +4,8 @@ using Sahar.Engine.Diagnostics;
 namespace Sahar.Engine.Host;
 
 /// <summary>
-/// A hidden window for system messages plus the notification-area icon: menu "Hide 1 h" and "Quit".
+/// A hidden window for system messages plus the notification-area icon; its right-click menu is her Porcelain tray
+/// menu (0.16, Surfaces.TrayMenu).
 /// The icon re-adds itself when Explorer restarts (TaskbarCreated). Power and session-lock messages
 /// arrive here too and are passed on.
 /// </summary>
@@ -17,8 +18,6 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint WM_CONTEXTMENU = 0x007B, WM_RBUTTONUP = 0x0205, NIN_SELECT = 0x0400, WM_LBUTTONUP = 0x0202;
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
-    private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
-    private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdSettings = 7, CmdUpdate = 8, CmdActivity = 10;   // 10 + (int)ActivityLevel
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -162,57 +161,38 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         return null;
     }
 
+    /// <summary>0.16: right-click opens her Porcelain tray menu (a surface) just above the icon, not a Windows menu
+    /// (owner ruling 9: one language, her look). The point is the icon's top centre (the cursor when Explorer does not say).</summary>
+    public event Action<System.Numerics.Vector2>? MenuAsked;
+    /// <summary>«الحكي» and «الدرج» (0.16).</summary>
+    public event Action? ChatClicked;
+    public event Action? DrawerClicked;
+
     private void ShowMenu()
     {
-        nint menu = Native.CreatePopupMenu();
-        nint levels = Native.CreatePopupMenu();
-        foreach (var (level, text) in new[] { (ActivityLevel.Calm, "هادية / Calm"), (ActivityLevel.Medium, "متوسطة / Medium"), (ActivityLevel.Lively, "نشيطة / Lively") })
-            fixed (char* t = text)
-                Native.AppendMenu(levels, MF_STRING | (level == Activity ? MF_CHECKED : 0), (nuint)(CmdActivity + (int)level), t);
-        fixed (char* activity = "نشاطها / Activity")
-        fixed (char* hide = "إخفاء ساعة / Hide 1 h")
-        fixed (char* folder = Sahar.Core.Settings.Address.ToYou("افتح مجلد سَحَر / Open Sahar folder"))
-        fixed (char* show = Sahar.Core.Settings.Address.ToYou(ShowRunning ? "وقّف العرض / Stop the show" : "فرجيني حركاتك / Show me your moves"))
-        fixed (char* weather = WeatherCity is { } city ? $"الطقس: {city} — {Sahar.Core.Settings.Address.ToYou("وقّف")} / Weather: {city} — off" : "الطقس… / Weather…")
-        fixed (char* who = "مين أنا؟ (اسمي) / Who am I?")
-        fixed (char* settings = "إعداداتي / Settings")
-        fixed (char* update = "دوّر على تحديث / Check for update")
-        fixed (char* quit = "إغلاق / Quit")
-        {
-            if (SettingsAvailable()) Native.AppendMenu(menu, MF_STRING, CmdSettings, settings);
-            Native.AppendMenu(menu, MF_STRING, CmdShow, show);
-            Native.AppendMenu(menu, MF_POPUP, (nuint)levels, activity);
-            Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
-            Native.AppendMenu(menu, MF_STRING, CmdHide, hide);
-            Native.AppendMenu(menu, MF_STRING, CmdWeather, weather);
-            Native.AppendMenu(menu, MF_STRING, CmdWho, who);
-            Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
-            Native.AppendMenu(menu, MF_STRING, CmdUpdate, update);
-            Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
-            Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
-        }
         var p = Native.CursorPos();
-        Native.SetForegroundWindow(Hwnd);   // so the menu closes when clicking elsewhere
-        int cmd = Native.TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, p.X, p.Y, 0, Hwnd, 0);
-        Native.DestroyMenu(menu);
-        if (cmd is >= CmdActivity and <= CmdActivity + 2) ActivityChosen?.Invoke((ActivityLevel)(cmd - CmdActivity));
-        else if (cmd == CmdHide) HideHour?.Invoke();
-        else if (cmd == CmdFolder) OpenFolder();
-        else if (cmd == CmdShow) ShowToggled?.Invoke();
-        else if (cmd == CmdWeather) WeatherClicked?.Invoke();
-        else if (cmd == CmdWho) WhoAmI?.Invoke();
-        else if (cmd == CmdSettings) SettingsClicked?.Invoke();
-        else if (cmd == CmdUpdate) CheckUpdate?.Invoke();
-        else if (cmd == CmdQuit) Quit?.Invoke();
+        var at = new System.Numerics.Vector2(p.X, p.Y);
+        if (IconRect() is { } r && r.Right > r.Left) at = new System.Numerics.Vector2((r.Left + r.Right) / 2f, r.Top);
+        MenuAsked?.Invoke(at);
     }
 
-    /// <summary>Test mode: a tray item as a click would pick it.</summary>
+    /// <summary>A tray-menu item (a click in the menu, or the pipe in test mode).</summary>
     public bool Pick(string item)
     {
         switch (item)
         {
+            case "calm": ActivityChosen?.Invoke(ActivityLevel.Calm); return true;
+            case "medium": ActivityChosen?.Invoke(ActivityLevel.Medium); return true;
+            case "lively": ActivityChosen?.Invoke(ActivityLevel.Lively); return true;
+            case "hide": HideHour?.Invoke(); return true;
+            case "folder": OpenFolder(); return true;
+            case "show": ShowToggled?.Invoke(); return true;
+            case "weather": WeatherClicked?.Invoke(); return true;
             case "who": WhoAmI?.Invoke(); return true;
             case "update": CheckUpdate?.Invoke(); return true;
+            case "chat": ChatClicked?.Invoke(); return true;
+            case "drawer": DrawerClicked?.Invoke(); return true;
+            case "quit": Quit?.Invoke(); return true;
             case "settings" when SettingsAvailable(): SettingsClicked?.Invoke(); return true;
             default: return false;
         }

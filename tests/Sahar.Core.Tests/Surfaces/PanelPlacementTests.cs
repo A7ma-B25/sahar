@@ -49,4 +49,25 @@ public class PanelPlacementTests
         var p = PanelPlacement.Place(new RectF(-1250, 800, 120, 120), work, new SizeF(480, 900), 1.5f);
         Assert.True(work.Contains(p.Rect));
     }
+
+    [Fact]
+    public void Above_CentredOverHer_OrBelowWhenSheIsAtTheTop()
+    {
+        var r = PanelPlacement.Above(new RectF(900, 600, 100, 100), Work, new SizeF(264, 90), 1f);
+        Assert.Equal(950, r.X + r.Width / 2, 1);
+        Assert.True(r.Bottom <= 600);
+        var top = PanelPlacement.Above(new RectF(900, 0, 100, 100), Work, new SizeF(264, 90), 1f);
+        Assert.True(top.Y >= 100);
+        Assert.True(Work.Contains(top));
+    }
+
+    [Fact]
+    public void Anchor_AboveTheTrayIcon_InsideTheWorkArea()
+    {
+        var r = PanelPlacement.Anchor(1900, 1060, Work, new SizeF(300, 420), 1f);
+        Assert.True(Work.Contains(r));
+        Assert.Equal(1040, r.Bottom);
+        var left = PanelPlacement.Anchor(20, 1060, Work, new SizeF(300, 420), 1.5f);
+        Assert.Equal(0, left.X);
+    }
 }

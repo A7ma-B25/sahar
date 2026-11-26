@@ -235,11 +235,11 @@ internal sealed partial class MindEngine
     public void OfferDownloadQuestion()
     {
         var model = ModelCatalog.Find(ModelCatalog.DefaultId)!;
-        ListBubble.Show(Motion.Body, Address.For(Address.You, RuntimeText.Ask(model.Bytes)), [RuntimeText.Yes, RuntimeText.Later], RuntimeText.No, i =>
+        Surfaces.Cards.Ask(Panel, "mind-download", Address.For(Address.You, RuntimeText.Ask(model.Bytes)), RuntimeText.Yes, RuntimeText.Later, yes =>
         {
-            Log.Write($"mind: download question answered ({(i == 0 ? "yes" : "later")})");
-            if (i == 0) EnsureAndSend(new MindMsg { T = "download", Op = "start", Model = model.Id });
-        }, () => Log.Write("mind: download question answered (no)"));
+            Log.Write($"mind: download question answered ({(yes ? "yes" : "later")})");
+            if (yes) EnsureAndSend(new MindMsg { T = "download", Op = "start", Model = model.Id });
+        }, yesIcon: "download");
     }
 
     private string Status()

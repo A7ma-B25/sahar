@@ -2,6 +2,7 @@ using Sahar.Core.Geometry;
 using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
 using Sahar.Engine.Senses;
+using Sahar.Engine.Surfaces;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.System;
@@ -10,7 +11,7 @@ using Q = Sahar.Core.Quran.Quran;
 namespace Sahar.Engine.Tools;
 
 /// <summary>
-/// 📖 القرآن (spec §7.1): pick a surah (the last one first) and a reciter; it streams from the islamic.network CDN.
+/// القرآن (spec §7.1): pick a surah (the last one first) and a reciter; it streams from the islamic.network CDN.
 /// Any playing music is paused first; while it plays she is quiet and still with the quran face. The end of the
 /// surah, a stop or an error (a gentle line, no retry) bring her back.
 /// </summary>
@@ -19,7 +20,7 @@ internal sealed class QuranTool : IDisposable
     public const string Failed = "ما قدرت شغّل التلاوة هلق";
 
     private readonly DispatcherQueue _ui;
-    private readonly ListBubble _list;
+    private readonly Panel _panel;
     private readonly Func<RectF> _body;
     private readonly Media _media;
     private readonly Action<string> _say;
@@ -30,10 +31,10 @@ internal sealed class QuranTool : IDisposable
     private IRecitation? _player;
     private int _generation;
 
-    public QuranTool(DispatcherQueue ui, ListBubble list, Func<RectF> body, Media media, Action<string> say,
+    public QuranTool(DispatcherQueue ui, Panel panel, Func<RectF> body, Media media, Action<string> say,
         Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> set, string? baseUrl)
     {
-        (_ui, _list, _body, _media, _say, _get, _set, _base) = (ui, list, body, media, say, get, set, baseUrl);
+        (_ui, _panel, _body, _media, _say, _get, _set, _base) = (ui, panel, body, media, say, get, set, baseUrl);
         // A recitation that never opens (a network that hangs) gives up once, gently: no endless "playing".
         _openTimeout = ui.CreateTimer();
         _openTimeout.IsRepeating = false;
@@ -47,40 +48,74 @@ internal sealed class QuranTool : IDisposable
     public string State { get; private set; } = "idle";
     public event Action<bool>? PlayingChanged;
 
-    public void Open()
+    /// <summary>0.16 (Task 8 wires it): where he stopped in a surah, as the resume row shows it («وقفت عند ١٢:٠٤»).</summary>
+    public Func<int, string?>? ResumeMeta { get; set; }
+
+    /// <summary>«شو بدك تسمع؟» (V15Pickers): the resume row first, then the 114 surahs; search by name or number;
+    /// the reciter is a drill in the same panel. Nothing typed or picked is logged beyond the surah number.</summary>
+    public void Open() => _panel.Show(SurahSpec(), OnPanel);
+
+    private string D(int n) => Sahar.Core.Text.Digits.Format(n, _get().Language);
+
+    private PanelSpec SurahSpec()
     {
         var s = _get();
-        var lines = new List<string>();
-        int offset = 0;
-        if (s.QuranLastSurah is int last and >= 1 and <= 114) { lines.Add($"▶ {Line(last)}"); offset = 1; }
-        for (int n = 1; n <= 114; n++) lines.Add(Line(n));
-        string reciter = s.QuranReciter;
-        _list.Show(_body(), "📖 اختار سورة", lines, $"القارئ: {Q.ReciterName(reciter)}",
-            i =>
-            {
-                int surah = offset == 1 && i == 0 ? s.QuranLastSurah!.Value : i - offset + 1;
-                if (surah is >= 1 and <= 114) _ui.TryEnqueue(() => Safe(() => Play(surah, Valid(_get().QuranReciter))));
-            },
-            () => _ui.TryEnqueue(() => Safe(OpenReciters)));
+        var reciter = Valid(s.QuranReciter);
+        var rows = new List<PickRow>();
+        if (s.QuranLastSurah is int last and >= 1 and <= 114)
+            rows.Add(new PickRow("resume", Address.ToYou("كمّل ") + Q.SurahName(last)) { Meta = ResumeMeta?.Invoke(last), Play = true, Sel = true, Pinned = true, Strong = true });
+        for (int n = 1; n <= 114; n++) rows.Add(new PickRow(n.ToString(System.Globalization.CultureInfo.InvariantCulture), Q.SurahName(n)) { Num = n, NumText = D(n) });
+        return new PanelSpec
+        {
+            Kind = "list", Name = "surah", Title = Address.ToYou("شو بدك تسمع؟"), Sub = "بصوت " + Q.ReciterName(reciter), SubAction = "reciter",
+            Search = Address.ToYou("دوّر على سورة أو رقمها"), EnterHint = Address.ToYou("Enter لتشغّلها"), Rows = rows,
+            None = new PickBox("ما لقيت سورة بهالاسم", Address.ToYou("جرّب رقمها، مثلاً ٢٥، أو أول حرفين منها."), "book"),
+            Now = Playing ? (Address.ToYou("عم تسمع ") + Q.SurahName(Surah), Q.ReciterName(reciter), "وقّف") : null,
+        };
     }
 
-    private static string Line(int n) => $"{n}. {Q.SurahName(n)}";
-
-    private static string Valid(string reciter) => Q.Reciters.Any(r => r.Id == reciter) ? reciter : Q.Reciters[0].Id;
-
-    private void OpenReciters()
+    private PanelSpec ReciterSpec()
     {
         var current = Valid(_get().QuranReciter);
-        _list.Show(_body(), "اختار القارئ", Q.Reciters.Select(r => (r.Id == current ? "✓ " : "") + r.Name).ToList(), "رجوع",
-            i =>
-            {
-                if (i < 0 || i >= Q.Reciters.Count) return;
-                _set(s => s with { QuranReciter = Q.Reciters[i].Id });
-                Log.Write($"quran: reciter {Q.Reciters[i].Id}");
-                _ui.TryEnqueue(() => Safe(Open));
-            },
-            () => _ui.TryEnqueue(() => Safe(Open)));
+        return new PanelSpec
+        {
+            Kind = "list", Name = "reciter", Title = Address.ToYou("مين بدك يقرأ؟"), Back = true, Sub = Address.ToYou("بتسمع صوته من السورة الجاية"),
+            Rows = Q.Reciters.Select(r => new PickRow(r.Id, r.Name) { Sel = r.Id == current, Check = r.Id == current }).ToList(),
+        };
     }
+
+    private void OnPanel(SurfaceEvent e) => Safe(() =>
+    {
+        bool reciters = _panel.Name == "reciter";
+        switch (e.Kind)
+        {
+            case "pick" when reciters:
+                if (Q.Reciters.FirstOrDefault(r => r.Id == e.Value) is not { } who) return;
+                _set(s => s with { QuranReciter = who.Id });
+                Log.Write($"quran: reciter {who.Id}");
+                _panel.Update(SurahSpec());
+                break;
+            case "back" when reciters:
+                _panel.Update(SurahSpec());
+                break;
+            case "action" when e.Value == "reciter":
+                _panel.Update(ReciterSpec());
+                break;
+            case "action" when e.Value == "now-stop":
+                Stop();
+                _panel.Update(SurahSpec());
+                break;
+            case "pick":
+                var last = _get().QuranLastSurah;
+                int surah = e.Value == "resume" && last is int l ? l : int.TryParse(e.Value, out var n) ? n : 0;
+                if (surah is < 1 or > 114) return;
+                _panel.Done();
+                Play(surah, Valid(_get().QuranReciter));
+                break;
+        }
+    });
+
+    private static string Valid(string reciter) => Q.Reciters.Any(r => r.Id == reciter) ? reciter : Q.Reciters[0].Id;
 
     /// <param name="make">Test mode: a stand-in player (CI's Windows Server has no MP3 decoder).</param>
     public void Play(int surah, string reciter, Func<IRecitation>? make = null)

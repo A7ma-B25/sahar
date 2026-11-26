@@ -246,9 +246,14 @@ internal sealed unsafe class App
         dismissDirector = director;
         var timerTool = new TimerTool(ui, sahar, director);
         var dndTool = new DndTool(ui, director);
-        var bubble = new TextBubble(_options.Capturable);
-        var notes = new NoteTool(bubble, new NotesStore(NotesStore.DefaultPath), () => motion.Body, Express);
-        var listBubble = new ListBubble(_options.Capturable);
+        // 0.16: her surfaces (pickers, input cards, ask bubbles, the chat) in the warm surface host, not white Win32 popups.
+        using var surfaces = new Sahar.Engine.Surfaces.SurfaceClient(ui, _options.TestMode)
+        {
+            Capturable = () => _options.Capturable, Dark = () => menu.Dark(), Still = () => soul.Reduced,
+        };
+        var panel = new Sahar.Engine.Surfaces.Panel(surfaces, () => motion.Body);
+        surfaces.Start(TimeSpan.FromSeconds(_options.TestMode ? 1 : 3));
+        var notes = new NoteTool(panel, new NotesStore(NotesStore.DefaultPath), Express);
         sahar.Rescaled += () => Safe(timerTool.Redraw);
         host.DeviceLost += () => Safe(() => { timerTool.Redraw(); menu.DeviceLost(); });
         using var tray = new Tray { Activity = settings.Activity };
@@ -304,7 +309,7 @@ internal sealed unsafe class App
         life = lifeDirector;
         // What you copy (spec §7.2): kept by the rules, a short "copied" face at most every 30 s.
         var clipboard = new ClipboardSense(tray.Hwnd, new ClipboardHistory(ClipboardHistory.DefaultFolder));
-        var clipboardTool = new ClipboardTool(listBubble, clipboard, () => motion.Body);
+        var clipboardTool = new ClipboardTool(panel, clipboard);
         var lastCopiedFace = DateTimeOffset.MinValue;
         clipboard.Kept += () =>
         {
@@ -345,18 +350,12 @@ internal sealed unsafe class App
         var weatherPlace = settings.WeatherEnabled ? Sahar.Core.Activities.WeatherCity.Resolve(settings) : null;
         using var weather = new Weather(ui, _options.WeatherStubDir, weatherPlace?.Lat, weatherPlace?.Lon);
         tray.WeatherCity = weather.On ? settings.WeatherCity : null;
-        void AskCity(string title) => bubble.Show(motion.Body, title, [], city => SetCity(city));
-        void SetCity(string city) => weather.FindAsync(city).ContinueWith(t =>
+        void AskCity(string why) => Sahar.Engine.Surfaces.Cards.City(panel, ui, why, weather.FindAsync, (place, city) => Safe(() =>
         {
-            var (place, error) = t.IsCompletedSuccessfully ? t.Result : (null, "ما في نت هلق، جرّب بعدين");
-            ui.TryEnqueue(() => Safe(() =>
-            {
-                if (place is null) { AskCity($"{error} — جرّب مدينة تانية"); return; }
-                Save(s => s with { WeatherEnabled = true, WeatherCity = place.Name ?? city.Trim(), WeatherLatitude = place.Latitude, WeatherLongitude = place.Longitude });
-                tray.WeatherCity = settings.WeatherCity;
-                weather.Use(place);
-            }));
-        });
+            Save(s => s with { WeatherEnabled = true, WeatherCity = place.Name ?? city.Trim(), WeatherLatitude = place.Latitude, WeatherLongitude = place.Longitude });
+            tray.WeatherCity = settings.WeatherCity;
+            weather.Use(place);
+        }));
         tray.WeatherClicked += () => Safe(() =>
         {
             if (weather.On)
@@ -365,10 +364,10 @@ internal sealed unsafe class App
                 Save(s => s with { WeatherEnabled = false });
                 tray.WeatherCity = null;
             }
-            else AskCity("شو مدينتك؟ (للمطر بس)");
+            else AskCity("بس لأعرف إذا رح تشتي.");
         });
         // 🕌 Prayer times: the city search is the weather's (same stub in tests).
-        using var prayer = new PrayerTool(ui, listBubble, bubble, () => motion.Body, weather.FindAsync, director,
+        using var prayer = new PrayerTool(ui, panel, () => motion.Body, weather.FindAsync, director,
             line => speech.Say(line), () => settings, Save, _options.TestMode);
         lifeDirector.AdhanOn = () => director.Adhan;
 
@@ -440,13 +439,7 @@ internal sealed unsafe class App
         {
             Log.Write("hello: asking who you are");
             speech.Say("أهلين! أنا سَحَر 🌙");
-            bubble.Show(motion.Body, "شو بدك ناديك؟ (اسمك)", [], text => Safe(() =>
-            {
-                var name = Address.CleanName(text);
-                ui.TryEnqueue(() => Safe(() => listBubble.Show(motion.Body, "انت شب ولا بنت؟", ["شب 👦", "بنت 👧"], "ما بدي قول",
-                    i => ui.TryEnqueue(() => Safe(() => FinishHello(name, i switch { 0 => Gender.Male, 1 => Gender.Female, _ => Gender.Unknown }))),
-                    () => ui.TryEnqueue(() => Safe(() => FinishHello(name, Gender.Unknown))))));
-            }));
+            Sahar.Engine.Surfaces.Cards.Hello(panel, (name, you) => ui.TryEnqueue(() => Safe(() => FinishHello(name, you))));
         }
 
         void FinishHello(string? name, Gender you)
@@ -461,6 +454,8 @@ internal sealed unsafe class App
         tray.WhoAmI += () => Safe(StartHello);
         tray.SettingsAvailable = () => SettingsLauncher.Available;
         tray.SettingsClicked += () => Safe(() => SettingsLauncher.Open(_options.TestMode));
+        SettingsLauncher.StartFailed = () => ui.TryEnqueue(() => Safe(() =>
+            speech.Say(Address.ToYou("ما قدرت افتح الإعدادات. ناقصها قطعة من ويندوز اسمها WebView2، نزّلها من موقع مايكروسوفت وجرّب كمان مرة."))));
         if (!_options.TestMode && !settings.HelloDone)
         {
             var helloTimer = ui.CreateTimer();
@@ -470,7 +465,7 @@ internal sealed unsafe class App
             helloTimer.Start();
         }
         var music = new MusicTool(ui, media, line => speech.Say(line));
-        using var quran = new QuranTool(ui, listBubble, () => motion.Body, media, line => speech.Say(line),
+        using var quran = new QuranTool(ui, panel, () => motion.Body, media, line => speech.Say(line),
             () => settings, Save, _options.QuranBase);
         quran.PlayingChanged += on => Safe(() => director.SetQuran(on));
         menu.State = () => new Sahar.Core.Menu.MenuState(timerTool.Running, dndTool.On, quran.Playing);
@@ -618,15 +613,7 @@ internal sealed unsafe class App
                 case "quran": quran.Open(); break;
                 case "quran-stop": quran.Stop(); break;
                 case "timer-custom":
-                    bubble.Show(motion.Body, "كم دقيقة؟ (1–600)", [], text => Safe(() =>
-                    {
-                        if (TimerInput.ParseMinutes(text) is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
-                        else
-                        {
-                            Log.Write($"timer: typed time not understood ({text.Length} characters)");   // never what was typed (spec §14)
-                            Express("error", true);
-                        }
-                    }));
+                    Sahar.Engine.Surfaces.Cards.Timer(panel, minutes => Safe(() => timerTool.Start(TimeSpan.FromMinutes(minutes))), () => Express("error", true));
                     break;
                 case "dnd-30": dndTool.TurnOn(TimeSpan.FromMinutes(30)); break;
                 case "dnd-60": dndTool.TurnOn(TimeSpan.FromHours(1)); break;
@@ -659,13 +646,24 @@ internal sealed unsafe class App
             finally { chatHop = false; }
         }
         Sahar.Engine.Mind.MindEngine? mind = null;   // 0.14: her brain (built once the pipe exists)
-        menu.ChatSent += text => Safe(() =>
+        // 0.16: the chat window. A line he sends there runs like the card's chat row; her answer comes back to it.
+        var chat = new Sahar.Engine.Surfaces.ChatHub(ui, surfaces, () => motion.Body, () => settings)
+        {
+            // Answered while the window was closed: a content-free line, never in full screen or quiet.
+            AnsweredWhileClosed = () => Safe(() => { if (!director.Quiet && !_state.Hidden) speech.Say(Address.ToYou("ردّيت عليك، بالحكي")); }),
+        };
+        void ChatLine(string text, bool window)
         {
             var c = Sahar.Core.Chat.ChatCommands.Parse(text);
-            Log.Write($"chat: {c.Kind}");
+            Log.Write($"chat: {c.Kind}{(window ? " (window)" : "")}");
             if (c.Kind == Sahar.Core.Chat.ChatKind.Empty) return;
-            if (mind?.TakeChat(c, text) == true) return;   // 0.14: the Mind took a line the fast path does not run
+            if (window ? mind?.TakeWindowChat(c, text) == true : mind?.TakeChat(c, text) == true) return;   // 0.14: the Mind took a line the fast path does not run
             var reply = Sahar.Core.Chat.ChatReply.For(c, new Sahar.Core.Chat.ChatContext(prayer.Next(), greetings), Address.You);
+            void Away(Action act)
+            {
+                if (window) chat.Said(reply); else { menu.Close(); speech.Say(reply); }
+                act();
+            }
             switch (c.Kind)
             {
                 case Sahar.Core.Chat.ChatKind.Greeting: greetings++; break;
@@ -673,29 +671,24 @@ internal sealed unsafe class App
                     if (!c.OutOfRange && c.Minutes is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
                     break;
                 case Sahar.Core.Chat.ChatKind.Note when c.Text is { } note: notes.Save(note); break;
-                case Sahar.Core.Chat.ChatKind.Note: menu.Close(); notes.Open(); return;   // «ملاحظة» alone: the note bubble (Ruling 9)
+                case Sahar.Core.Chat.ChatKind.Note: menu.Close(); notes.Open(); return;   // «ملاحظة» alone: the note card (Ruling 9)
                 case Sahar.Core.Chat.ChatKind.Hush: dndTool.TurnOn(c.HushFor); break;
-                case Sahar.Core.Chat.ChatKind.Sleep:
-                    menu.Close();
-                    speech.Say(reply);
-                    sleepTimer.Stop();
-                    sleepTimer.Start();
-                    return;
-                case Sahar.Core.Chat.ChatKind.Play: menu.Press("play"); break;
-                case Sahar.Core.Chat.ChatKind.Game when c.Game is { } game:
-                    menu.Close();
-                    speech.Say(reply);
-                    games.Start(game);
-                    return;
-                case Sahar.Core.Chat.ChatKind.Move when c.Move is { } move:
-                    menu.Close();
-                    speech.Say(reply);
-                    motion.Play(move);
-                    return;
+                case Sahar.Core.Chat.ChatKind.Sleep: Away(() => { sleepTimer.Stop(); sleepTimer.Start(); }); return;
+                case Sahar.Core.Chat.ChatKind.Play when !window: menu.Press("play"); break;
+                case Sahar.Core.Chat.ChatKind.Game when c.Game is { } game: Away(() => games.Start(game)); return;
+                case Sahar.Core.Chat.ChatKind.Move when c.Move is { } move: Away(() => motion.Play(move)); return;
                 case Sahar.Core.Chat.ChatKind.Prayer when prayer.Next() is null: menu.Close(); prayer.Open(); return;
             }
+            if (window) { chat.Said(reply); return; }
             menu.SetReply(reply);
             ChatHop();
+        }
+        menu.ChatSent += text => Safe(() => ChatLine(text, window: false));
+        chat.Send = text => Safe(() => ChatLine(text, window: true));
+        menu.ChatContinue += text => Safe(() =>
+        {
+            chat.Open();
+            if (!string.IsNullOrWhiteSpace(text)) { chat.Mine(text.Trim()); ChatLine(text.Trim(), window: true); }
         });
         // A newer version (owner roadmap: installer + auto-update): she asks in her bubble; yes runs the signed setup.
         // Test mode reaches only a fake GitHub given with --update-host, and checks only when the pipe says so.
@@ -703,10 +696,10 @@ internal sealed unsafe class App
         if (_options.TestMode && _options.UpdateKeyFile is { } keyFile)
             try { updateKey = File.ReadAllText(keyFile).Trim(); } catch (Exception e) { Log.Write($"update: test key not read ({e.GetType().Name})"); }
         string? updateHost = _options.TestMode ? _options.UpdateHost : null;
-        using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), listBubble, () => motion.Body,
+        using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), panel, () => motion.Body,
             line => speech.Say(line), () => settings, Save,
             busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
-                listBubble.IsOpen || bubble.IsOpen || Sulking(),
+                panel.IsOpen || Sulking(),
             automatic: !_options.TestMode, reachable: !_options.TestMode || updateHost is not null,
             installed: InstallInfo.Installed(), marker: Path.Combine(Log.Folder, "moved-to-installer.txt"));
         var movedTimer = ui.CreateTimer();
@@ -881,11 +874,38 @@ internal sealed unsafe class App
             EraseRequested = true;
             Native.PostQuitMessage(0);
         });
+        // 0.16: the tray menu and «الدرج» are surfaces too (owner rulings 9 and 12).
+        var drawer = new Sahar.Engine.Surfaces.Drawer();
+        acts.Happened += a => Safe(() => drawer.Happened(a));
+        Sahar.Engine.Surfaces.PanelSpec DrawerSpec()
+        {
+            var own = new List<(string, string, string?)>();
+            if (timerTool.Remaining is { } left) own.Add(("مؤقت", "clock", Sahar.Core.Text.Digits.ToArabicIndic($"{(int)left.TotalMinutes}:{left.Seconds:00}")));
+            if (dndTool.On) own.Add((Address.ToYou("ما بزعجك"), "moon", null));
+            if (quran.Playing) own.Add((Sahar.Core.Quran.Quran.SurahName(quran.Surah), "book", null));
+            return drawer.Spec(acts.Stack.All(DateTimeOffset.Now), own, shelfSource.Items);
+        }
+        void OpenDrawer() => panel.Show(DrawerSpec(), e => Safe(() =>
+        {
+            if (e.Kind != "pick" || e.Value is not { } id) return;
+            panel.Done();
+            if (id.StartsWith("act:", StringComparison.Ordinal)) acts.OpenCard(id[4..]);
+            else if (id.StartsWith("shelf:", StringComparison.Ordinal)) acts.OpenCard("shelf");
+        }));
+        tray.DrawerClicked += () => Safe(OpenDrawer);
+        tray.ChatClicked += () => Safe(() => chat.Open());
+        void OpenTrayMenu(Vector2 at) => panel.Show(Sahar.Engine.Surfaces.TrayMenu.Spec(tray, settings.Activity, _state.Hidden, settings.Language), e => Safe(() =>
+        {
+            if (e.Kind == "seg" && e.Value is { } level) { tray.Pick(level); panel.Update(Sahar.Engine.Surfaces.TrayMenu.Spec(tray, settings.Activity, _state.Hidden, settings.Language)); }
+            else if (e.Kind == "pick" && e.Value is { } item) { panel.Done(); tray.Pick(item); }
+        }), mode: "anchor", anchor: at);
+        tray.MenuAsked += at => Safe(() => OpenTrayMenu(at));
+
         // 0.14: her brain. Each stream fills its own MindEngine.*.cs; App.cs only builds it here.
         mind = new Sahar.Engine.Mind.MindEngine
         {
             Ui = ui, Pipe = pipe, TestMode = _options.TestMode, Settings = () => settings, Save = Save, Menu = menu, Speech = speech,
-            Bubble = bubble, ListBubble = listBubble, Timer = timerTool, Dnd = dndTool, Notes = notes, Director = director,
+            Panel = panel, Chat = chat, Timer = timerTool, Dnd = dndTool, Notes = notes, Director = director,
             Games = games, Motion = motion, Soul = soul, Prayer = prayer, Music = music, Quran = quran, Media = media, Idle = idle,
             CameraMic = cameraMic, Activities = acts, Express = Express, SinceKeyboard = () => tray.SinceKeyboard,
             ActivityTools = new Sahar.Engine.Mind.ActivityToolsAdapter(weatherSource, claudeSource, shelfSource, acts, () => settings),
@@ -1039,20 +1059,10 @@ internal sealed unsafe class App
                 $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));
             pipe.Register("debug-keys", _ => new PipeReply(true, $"printScreen={printScreenSeen}"));
             pipe.Register("debug-cpu", r => { cpu.Simulate(Arg(r, "percent"), (int)Arg(r, "count")); return new PipeReply(true, State: _state.Snapshot()); });
-            pipe.Register("debug-list", _ => new PipeReply(true, $"open={(listBubble.IsOpen ? "true" : "false")} lines={listBubble.Lines} " +
-                $"lines64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(listBubble.Text))} button64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(listBubble.ButtonText))}"));
-            pipe.Register("list-pick", r =>
-            {
-                if (!listBubble.IsOpen) return new PipeReply(false, "no list");
-                listBubble.PickLine((int)Arg(r, "index"));
-                return new PipeReply(true);
-            });
-            pipe.Register("list-button", _ =>
-            {
-                if (!listBubble.IsOpen) return new PipeReply(false, "no list");
-                listBubble.PressButton();
-                return new PipeReply(true);
-            });
+            // 0.16: the old list / typing-bubble commands now read and drive the panel surface (the same handler a click runs).
+            pipe.Register("debug-list", _ => new PipeReply(true, panel.Spec?.Kind is "input" ? "open=false lines=0" : panel.Describe()));
+            pipe.Register("list-pick", r => panel.PickLine((int)Arg(r, "index")) ? new PipeReply(true) : new PipeReply(false, "no list"));
+            pipe.Register("list-button", _ => panel.PressButton() ? new PipeReply(true) : new PipeReply(false, "no list"));
             pipe.Register("quran-play", r =>
             {
                 int surah = (int)Arg(r, "surah");
@@ -1087,6 +1097,13 @@ internal sealed unsafe class App
             pipe.Register("game-stop", _ => { games.Stop(); return new PipeReply(true, games.Describe()); });
             pipe.Register("debug-game", _ => new PipeReply(true, games.Describe()));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
+            pipe.Register("tray-open", r => { OpenTrayMenu(new Vector2(Arg(r, "x"), Arg(r, "y"))); return new PipeReply(true, panel.Describe()); });
+            pipe.Register("drawer-open", r =>
+            {
+                if (r.Args?.TryGetValue("text64", out var t) == true) drawer.Happened(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)), "bell");
+                OpenDrawer();
+                return new PipeReply(true, panel.Describe());
+            });
             pipe.Register("tray-pick", r =>
             {
                 if (r.Args?.TryGetValue("item", out var item) != true || item is null || !tray.Pick(item)) return new PipeReply(false, "unknown tray item");
@@ -1103,7 +1120,7 @@ internal sealed unsafe class App
             {
                 string? answer = r.Args?.TryGetValue("answer", out var a) == true ? a : null;
                 if (answer is not ("yes" or "later")) return new PipeReply(false, "update-answer needs answer yes or later");
-                listBubble.Close();
+                panel.Done();
                 if (answer == "yes") updates.Install(); else updates.Later();
                 return new PipeReply(true, updates.Describe());
             });
@@ -1118,7 +1135,7 @@ internal sealed unsafe class App
                 prayer.SetClock(when);
                 return new PipeReply(true, prayer.Describe());
             });
-            pipe.Register("list-close", _ => { listBubble.Close(); return new PipeReply(true); });
+            pipe.Register("list-close", _ => { panel.Close(); return new PipeReply(true); });
             pipe.Register("showcase", r =>
             {
                 show.Start(r.Args?.ContainsKey("from") == true ? (int)Arg(r, "from") : 0);
@@ -1128,14 +1145,8 @@ internal sealed unsafe class App
             pipe.Register("debug-showcase", _ => new PipeReply(true, show.Describe()));
             pipe.Register("timer", r => { timerTool.Start(TimeSpan.FromSeconds(Arg(r, "seconds"))); return new PipeReply(true, timerTool.Describe()); });
             pipe.Register("debug-dnd", _ => new PipeReply(true, dndTool.Describe()));
-            pipe.Register("debug-bubble", _ =>
-            {
-                var e = bubble.EditRect;
-                return new PipeReply(true, bubble.IsOpen
-                    ? $"open=true x={e.Left} y={e.Top} w={e.Width} h={e.Height} edit={(long)bubble.EditHwnd} title64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(bubble.Title))} " +
-                      $"lines64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', bubble.Lines)))}"
-                    : "open=false");
-            });
+            pipe.Register("debug-bubble", _ => new PipeReply(true, panel.Spec?.Kind is "input" ? panel.Describe() : "open=false"));
+            Sahar.Engine.Surfaces.SurfaceTests.Register(pipe, ui, surfaces, panel, chat);
             pipe.Register("debug-life", _ => new PipeReply(true, lifeDirector.Describe()));
             pipe.Register("life", r =>
             {

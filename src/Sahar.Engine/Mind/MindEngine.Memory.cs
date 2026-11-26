@@ -57,6 +57,7 @@ internal sealed partial class MindEngine
         Pipe.Register("mind-stop", _ =>
         {
             bool sent = SendIfRunning(new MindMsg { T = "quit" });
+            Chat?.Pause();   // no chat line is written while the folder is shredded
             Log.Write($"mind: stop for forget ({(sent ? "was running" : "not running")})");
             return new PipeReply(true, "ok=true");
         });
@@ -64,6 +65,7 @@ internal sealed partial class MindEngine
         {
             Log.Write("mind: forgot everything");
             NewMemory();   // her own store saw the old key: a fresh one starts from nothing
+            Chat?.Forget();   // the chat window empties at once
             Speech.Say(Address.ToYou("نسيت كل شي… مرحبا من جديد 🌙"));
             return new PipeReply(true, "ok=true");
         });
@@ -82,7 +84,7 @@ internal sealed partial class MindEngine
                 var text = Text(r.Args?.GetValueOrDefault("text64"));
                 if (text is null) return new PipeReply(false, "no-text");
                 ShowDraft(text);
-                return new PipeReply(true, $"open={(ListBubble.IsOpen ? "true" : "false")} button64={Convert.ToBase64String(Encoding.UTF8.GetBytes(ListBubble.ButtonText))} lines={ListBubble.Lines}");
+                return new PipeReply(true, $"open={(Chat?.IsOpen == true ? "true" : "false")} drafts={Chat?.Drafts ?? 0}");
             });
             // The UI stage's way to put proposals in (the Mind would, from their chats): through the real store and key.
             Pipe.Register("debug-mind-propose", r =>
@@ -109,17 +111,11 @@ internal sealed partial class MindEngine
             });
     }
 
+    /// <summary>«بصوتك» (0.16): the draft goes into the chat window as her draft card with «انسخها»; she never sends it.</summary>
     private void ShowDraft(string text)
     {
         Log.Write($"mind: draft shown ({text.Length} chars)");   // its length only, never its words
-        var lines = Wrap(text, 34);
-        ListBubble.Show(Motion.Body, Draft.SelfLabel + " ✍️", lines, "انسخها 📋", _ => { },
-            () => Ui.TryEnqueue(() =>
-            {
-                bool ok = Copy(text);
-                Log.Write($"mind: draft {(ok ? "copied" : "not copied")}");
-                Speech.Say(ok ? Address.ToYou("نسختها! الصقها وين ما بدك 📋") : "ما قدرت انسخها، جرّب كمان مرة؟");
-            }));
+        Chat?.Draft(text, Draft.SelfLabel, copy: Copy);
     }
 
     /// <summary>Her bubble's lines: words kept whole, about <paramref name="width"/> characters a line.</summary>

@@ -7,13 +7,14 @@ using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
 using Sahar.Engine.Host;
 using Sahar.Engine.Senses;
+using Sahar.Engine.Surfaces;
 using Windows.System;
 using P = Sahar.Core.Prayer.Prayer;
 
 namespace Sahar.Engine.Tools;
 
 /// <summary>
-/// 🕌 أوقات الصلاة (spec §7.1): the next prayer and today's times for the city you typed (computed on the PC,
+/// أوقات الصلاة (spec §7.1): the next prayer and today's times for the city you typed (computed on the PC,
 /// in the PC's time zone), a reminder before each prayer (face 19, her drawing your eye, a line of words),
 /// and quiet for the minutes after its time. The city never reaches the log (spec §14).
 /// </summary>
@@ -21,8 +22,7 @@ internal sealed class PrayerTool : IDisposable
 {
     private static readonly P[] Shown = [P.Fajr, P.Sunrise, P.Dhuhr, P.Asr, P.Maghrib, P.Isha];
 
-    private readonly ListBubble _list;
-    private readonly TextBubble _bubble;
+    private readonly Panel _panel;
     private readonly Func<RectF> _body;
     private readonly Func<string, Task<(GeoResult? Place, string? Error)>> _find;
     private readonly Director _director;
@@ -36,12 +36,12 @@ internal sealed class PrayerTool : IDisposable
     private DateTimeOffset? _fakeBase;
     private readonly Stopwatch _fakeClock = new();
 
-    public PrayerTool(DispatcherQueue ui, ListBubble list, TextBubble bubble, Func<RectF> body,
+    public PrayerTool(DispatcherQueue ui, Panel panel, Func<RectF> body,
         Func<string, Task<(GeoResult? Place, string? Error)>> find, Director director, Action<string> say,
         Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> set, bool testMode)
     {
-        (_ui, _list, _bubble, _body, _find, _director, _say, _get, _set, _testMode) =
-            (ui, list, bubble, body, find, director, say, get, set, testMode);
+        (_ui, _panel, _body, _find, _director, _say, _get, _set, _testMode) =
+            (ui, panel, body, find, director, say, get, set, testMode);
         Rebuild();
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(testMode ? 1 : 20);
@@ -72,51 +72,88 @@ internal sealed class PrayerTool : IDisposable
             : null;
     }
 
+    private const string Why = "لأعرف أوقات الصلاة عندك.";
+
+    /// <summary>«أوقات الصلاة» (V15Lists): today's six times, the next one soft with «بعد ٤٢ د», past ones dim; the city
+    /// chip and the method link are drills in the same panel.</summary>
     public void Open()
     {
         var s = _get();
-        if (_schedule is null || s.PrayerCity is null) { AskCity("شو مدينتك؟ (لأوقات الصلاة)"); return; }
+        if (_schedule is null || s.PrayerCity is null) { AskCity(); return; }
+        _panel.Show(TimesSpec(), OnPanel);
+    }
+
+    private PanelSpec TimesSpec()
+    {
+        var s = _get();
         var now = Now.ToOffset(Offset(Now));
-        var day = _schedule.Day(DateOnly.FromDateTime(now.Date), now);
-        var lines = new List<string>();
-        lines.Add(_schedule.Next(now) is { } next ? PrayerText.NextLine(next.Prayer, next.At - now) : "");
-        lines.AddRange(Shown.Select(p => PrayerText.TimeLine(p, day[p].ToOffset(Offset(day[p])))));
-        lines.Add(PrayerText.MethodLine(s.PrayerMethod));
-        _list.Show(_body(), "🕌 أوقات الصلاة", lines, PrayerText.CityLine(s.PrayerCity),
-            i => { if (i == lines.Count - 1) _ui.TryEnqueue(() => Safe(OpenMethods)); },
-            () => _ui.TryEnqueue(() => Safe(() => AskCity("شو مدينتك؟ (لأوقات الصلاة)"))));
-    }
-
-    private void OpenMethods()
-    {
-        var methods = Enum.GetValues<PrayerMethod>();
-        var current = _get().PrayerMethod;
-        _list.Show(_body(), "طريقة الحساب", methods.Select(m => (m == current ? "✓ " : "") + PrayerNames.Method(m)).ToList(), "رجوع",
-            i =>
-            {
-                if (i < 0 || i >= methods.Length) return;
-                _set(s => s with { PrayerMethod = methods[i] });
-                Log.Write($"prayer: method {methods[i]}");
-                Rebuild();
-                _ui.TryEnqueue(() => Safe(Open));
-            },
-            () => _ui.TryEnqueue(() => Safe(Open)));
-    }
-
-    private void AskCity(string title) => _bubble.Show(_body(), title, [], city => Safe(() => SetCity(city)));
-
-    private void SetCity(string city) => _find(city).ContinueWith(t =>
-    {
-        var (place, error) = t.IsCompletedSuccessfully ? t.Result : (null, "ما في نت هلق، جرّب بعدين");
-        _ui.TryEnqueue(() => Safe(() =>
+        var day = _schedule!.Day(DateOnly.FromDateTime(now.Date), now);
+        var next = _schedule.Next(now);
+        string Clock(DateTimeOffset t)
         {
-            if (place is null) { AskCity($"{error} — جرّب مدينة تانية"); return; }
-            _set(s => s with { PrayerCity = place.Name ?? city.Trim(), PrayerLatitude = place.Latitude, PrayerLongitude = place.Longitude });
-            Log.Write("prayer: city set");   // never which city (spec §14)
-            Rebuild();
-            Open();
-        }));
+            var local = t.ToOffset(Offset(t));
+            int h = local.Hour % 12 == 0 ? 12 : local.Hour % 12;
+            return Sahar.Core.Text.Digits.ToArabicIndic($"{h}:{local.Minute:00}");
+        }
+        var rows = Shown.Select(p =>
+        {
+            bool isNext = next is { } n && n.Prayer == p && n.At.Date == day[p].Date;
+            string meta = isNext ? Sahar.Core.Text.Digits.ToArabicIndic($"بعد {Short(next!.Value.At - now)}   ") + Clock(day[p]) : Clock(day[p]);
+            return new PickRow(p.ToString(), PrayerNames.Arabic(p)) { Meta = meta, Sel = isNext, Dim = !isNext && day[p] < now };
+        }).ToList();
+        return new PanelSpec
+        {
+            Kind = "list", Name = "prayer", Title = "أوقات الصلاة", Sub = s.PrayerCity + " · غيّر", SubAction = "city", SubIcon = "pin",
+            Rows = rows, ListHeight = 6 * 43, FootLink = new PickAction("method", PrayerText.MethodLine(s.PrayerMethod), "calc"),
+        };
+    }
+
+    private static string Short(TimeSpan left)
+    {
+        int m = (int)Math.Ceiling(left.TotalMinutes - 1e-9);
+        return m < 60 ? $"{Math.Max(1, m)} د" : m % 60 == 0 ? $"{m / 60} س" : $"{m / 60} س و{m % 60} د";
+    }
+
+    private PanelSpec MethodSpec()
+    {
+        var current = _get().PrayerMethod;
+        return new PanelSpec
+        {
+            Kind = "list", Name = "method", Title = "طريقة الحساب", Back = true, Sub = Address.ToYou("كل بلد إلها طريقة، اختار الأقرب إلك."),
+            Rows = Enum.GetValues<PrayerMethod>().Select(m => new PickRow(m.ToString(), PrayerNames.Method(m)) { Sel = m == current, Check = m == current }).ToList(),
+        };
+    }
+
+    private void OnPanel(Surfaces.SurfaceEvent e) => Safe(() =>
+    {
+        bool methods = _panel.Name == "method";
+        switch (e.Kind)
+        {
+            case "pick" when methods && Enum.TryParse<PrayerMethod>(e.Value, out var m):
+                _set(s => s with { PrayerMethod = m });
+                Log.Write($"prayer: method {m}");
+                Rebuild();
+                _panel.Update(TimesSpec());
+                break;
+            case "back" when methods:
+                _panel.Update(TimesSpec());
+                break;
+            case "action" when e.Value == "method":
+                _panel.Update(MethodSpec());
+                break;
+            case "action" when e.Value == "city":
+                AskCity();
+                break;
+        }
     });
+
+    private void AskCity() => Cards.City(_panel, _ui, Why, _find, (place, typed) => Safe(() =>
+    {
+        _set(s => s with { PrayerCity = place.Name ?? typed.Trim(), PrayerLatitude = place.Latitude, PrayerLongitude = place.Longitude });
+        Log.Write("prayer: city set");   // never which city (spec §14)
+        Rebuild();
+        Open();
+    }));
 
     /// <summary>A reminder before each prayer; at its time, quiet for the adhan and the reminder ends.</summary>
     public void Check()

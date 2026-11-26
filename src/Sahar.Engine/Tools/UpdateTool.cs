@@ -19,7 +19,7 @@ internal sealed class UpdateTool : IDisposable
 {
     private readonly DispatcherQueue _ui;
     private readonly Updater _updater;
-    private readonly ListBubble _list;
+    private readonly Surfaces.Panel _panel;
     private readonly Func<RectF> _body;
     private readonly Action<string> _say;
     private readonly Func<SaharSettings> _get;
@@ -41,10 +41,10 @@ internal sealed class UpdateTool : IDisposable
     /// <param name="reachable">False in test mode without a fake GitHub: no request ever leaves (CI never hits GitHub).</param>
     /// <param name="installed">She runs from the installer's folder (else portable: the wizard, not a silent setup).</param>
     /// <param name="marker">Where a portable her notes that she left for the wizard (in %LocalAppData%\Sahar).</param>
-    public UpdateTool(DispatcherQueue ui, Updater updater, ListBubble list, Func<RectF> body, Action<string> say,
+    public UpdateTool(DispatcherQueue ui, Updater updater, Surfaces.Panel panel, Func<RectF> body, Action<string> say,
         Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> save, Func<bool> busy, bool automatic, bool reachable, bool installed, string marker)
     {
-        (_ui, _updater, _list, _body, _say, _get, _save, _busy, _marker) = (ui, updater, list, body, say, get, save, busy, marker);
+        (_ui, _updater, _panel, _body, _say, _get, _save, _busy, _marker) = (ui, updater, panel, body, say, get, save, busy, marker);
         (Reachable, Installed) = (reachable, installed);
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromMinutes(1);
@@ -119,10 +119,9 @@ internal sealed class UpdateTool : IDisposable
         _status = "asked";
         // Asking snoozes for a day: "later", Esc or a click elsewhere all mean "ask me tomorrow".
         _save(s => s with { UpdateAskAfter = UpdateSchedule.AskedAt(now) });
-        _say($"في نسخة جديدة مني {offer.Version}، بدك ثبّتها؟");
-        _list.Show(_body(), $"سَحَر {offer.Version} ✨", ["إي، ثبّتها هلق"], "بعدين",
-            _ => _ui.TryEnqueue(() => Safe(Install)),
-            () => _ui.TryEnqueue(() => Safe(Later)));
+        // V15Lists «في نسخة جديدة»: one ask bubble above her (the old white list is gone).
+        Surfaces.Cards.Ask(_panel, "update", Sahar.Core.Settings.Address.ToYou($"طلعت نسخة جديدة مني ({offer.Version}). بتحب ثبّتها هلق؟"), "ثبّتها", "بعدين",
+            yes => _ui.TryEnqueue(() => Safe(yes ? Install : Later)), yesIcon: "download");
     }
 
     public void Later()

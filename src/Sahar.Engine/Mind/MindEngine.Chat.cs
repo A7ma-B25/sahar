@@ -69,7 +69,11 @@ internal sealed partial class MindEngine
         _pausedUntil = LoadPause();
         IsDraftAsk ??= t => Sahar.Core.Mind.Drafts.DraftAsk.Parse(t) is not null;
         Ui.TryEnqueue(() => Safe(_tools.ArmSaved));   // her reminders from before a restart
-        _ask = new AskDrill(Ui, Menu, ListBubble, () => Motion.Body);
+        _ask = new AskDrill(Ui, Menu, Panel)
+        {
+            InChat = (q, a) => Chat?.Ask(q, a) ?? false,   // 0.16: while the chat window is open the ask goes there
+            TimedOutInChat = t => Chat?.AskEnded(t),
+        };
         OfferDownload ??= OfferDownloadQuestion;
         ChatHandler = OnChat;
         Received += OnMind;
@@ -107,6 +111,21 @@ internal sealed partial class MindEngine
     }
 
     private bool MindReady() => _fake || Ready();
+
+    /// <summary>0.16: the turn he started from the chat window (its words, thinking and errors go back there, and closing
+    /// the card never cancels it).</summary>
+    private string? _windowTurn;
+
+    /// <summary>A line from the chat window: like the card's row, but her answer comes back to the window.</summary>
+    public bool TakeWindowChat(ChatCommand c, string text)
+    {
+        if (!TakeChat(c, text)) return false;
+        _windowTurn = _chatTurn;
+        Chat?.Thinking(true);
+        return true;
+    }
+
+    private bool FromWindow(string? id) => id is not null && id == _windowTurn;
 
     private bool SendMind(MindMsg m)
     {
@@ -209,7 +228,7 @@ internal sealed partial class MindEngine
     {
         if (open) return;
         // Esc or a closed card stops her thinking (spec §3.2 cancel); a fact shown today stays shown today.
-        if (_chatTurn is { } id)
+        if (_chatTurn is { } id && !FromWindow(id))
         {
             SendMind(new MindMsg { T = "cancel", Id = id });
             Log.Write("mind: cancel (card closed)");
@@ -239,6 +258,12 @@ internal sealed partial class MindEngine
     {
         switch (m.T)
         {
+            case "state" when m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id):
+                Chat?.Thinking(m.Phase == "thinking");
+                break;
+            case "partial" when m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id) && m.Text is { } windowPartial:
+                Chat?.Partial(Address.For(Address.You, Words(windowPartial)));
+                break;
             case "state" when m.Id is not null && m.Id == _chatTurn:
                 if (m.Phase == "thinking") Menu.MindThinking(true);
                 else if (m.Phase == "idle") Menu.MindThinking(false);   // review X1: «عم فكّر…» always ends
@@ -254,7 +279,12 @@ internal sealed partial class MindEngine
                 break;
             case "error" when m.Id is not null:
                 Log.Write($"mind: turn error {m.Error}");
-                if (m.Id == _chatTurn)
+                if (m.Id == _chatTurn && FromWindow(m.Id))
+                {
+                    if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Chat?.Said(Address.For(Address.You, ChatReply.Learning));
+                    else if (m.Error != "timeout") Chat?.Thinking(false);
+                }
+                else if (m.Id == _chatTurn)
                 {
                     Menu.MindThinking(false);
                     if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Menu.SetReply(Address.For(Address.You, ChatReply.Learning));
@@ -299,6 +329,14 @@ internal sealed partial class MindEngine
         if (id != _chatTurn) { _turns.Remove(id); Log.Write("mind: said dropped (late)"); return; }   // a cancelled turn's late words
         _chatTurn = null;
         _turns.Remove(id);
+        if (FromWindow(id))
+        {
+            _windowTurn = null;
+            if (text.Length == 0) { Chat?.Thinking(false); Log.Write("mind: said dropped (empty)"); return; }
+            Log.Write($"mind: said to the chat ({text.Length} chars)");
+            Chat?.Said(Address.For(Address.You, text));
+            return;
+        }
         Menu.MindThinking(false);
         if (text.Length == 0) { Log.Write("mind: said dropped (empty)"); return; }
         Log.Write($"mind: said ({text.Length} chars)");

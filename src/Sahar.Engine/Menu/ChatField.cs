@@ -53,6 +53,8 @@ internal sealed unsafe class ChatField : IWindowHandler
     public bool HasFocus => _edit != 0 && Native.GetFocus() == _edit;
 
     public event Action<string>? Submitted;
+    /// <summary>Ctrl+Enter (0.16): the line goes on in the chat window.</summary>
+    public event Action<string>? Continued;
     /// <summary>0.14: a letter typed (true for the first one in an empty field); never the text.</summary>
     public event Action<bool>? Typed;
     public event Action? Escaped;
@@ -142,6 +144,9 @@ internal sealed unsafe class ChatField : IWindowHandler
             case WM_APP_TYPED:
                 Typed?.Invoke(wParam != 0);
                 return 0;
+            case WM_APP_ENTER when wParam != 0:
+                Continued?.Invoke(Text);
+                return 0;
             case WM_APP_ENTER:
                 Submitted?.Invoke(Text);
                 return 0;
@@ -184,7 +189,7 @@ internal sealed unsafe class ChatField : IWindowHandler
         {
             switch ((int)wParam)
             {
-                case VK_RETURN: Native.PostMessage(s_owner, WM_APP_ENTER, 0, 0); return 0;
+                case VK_RETURN: Native.PostMessage(s_owner, WM_APP_ENTER, Native.GetKeyState(0x11) < 0 ? 1u : 0u, 0); return 0;   // Ctrl+Enter: «كمّل بالمحادثة»
                 case Native.VK_ESCAPE: Native.PostMessage(s_owner, WM_APP_ESC, 0, 0); return 0;
                 case VK_TAB: Native.PostMessage(s_owner, Native.GetKeyState(0x10) < 0 ? WM_APP_SHIFTTAB : WM_APP_TAB, 0, 0); return 0;
             }

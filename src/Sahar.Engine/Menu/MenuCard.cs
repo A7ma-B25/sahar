@@ -64,6 +64,8 @@ internal sealed partial class MenuCard : IDisposable
     public event Action<string>? RingOpened;
     /// <summary>A chat line was sent (Enter or send). The text is the user's: never logged.</summary>
     public event Action<string>? ChatSent;
+    /// <summary>0.16 «كمّل بالمحادثة» (Ctrl+Enter in the chat row): the chat window opens with this line (maybe empty).</summary>
+    public event Action<string>? ChatContinue;
 
     public MenuCard(CompositionHost host, bool capturable, Func<RectF> body, SaharVisual sahar, DispatcherQueue ui)
     {
@@ -89,6 +91,12 @@ internal sealed partial class MenuCard : IDisposable
             if (_focus == "chat") _chat.Focus();
         });
         _chat.Submitted += text => Safe(() => Send(text));
+        _chat.Continued += text => Safe(() =>
+        {
+            _chat.Clear();
+            Close();
+            ChatContinue?.Invoke(text);
+        });
         _chat.Typed += first => Safe(() => { _typedAt = Environment.TickCount64; if (first) ChatTyped?.Invoke(); });
         _chat.Escaped += () => Safe(Close);
         _chat.TabbedOut += shift => Safe(() => { _catcher.Focus(); Key(shift ? MenuKey.ShiftTab : MenuKey.Tab); });

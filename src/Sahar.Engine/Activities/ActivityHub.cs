@@ -54,6 +54,8 @@ internal sealed class ActivityHub : IDisposable
     public event Action<string, Activity?>? Pressed;
     /// <summary>A tag click that has no card of its own (her timer): the caller opens what fits.</summary>
     public event Action<Activity>? TagClicked;
+    /// <summary>0.16 «الدرج»: something began or happened (a new live activity, a moment), for its history of the day.</summary>
+    public event Action<Activity>? Happened;
 
     public ActivityHub(DispatcherQueue ui, CompositionHost host, bool capturable, SaharVisual sahar, Func<RectF> body)
     {
@@ -107,6 +109,7 @@ internal sealed class ActivityHub : IDisposable
         _stack.Set(a, DateTimeOffset.Now);
         if (isNew)
         {
+            Happened?.Invoke(a);
             Log.Write($"activity: {a.Kind} on");
             if (a.Kind == ActivityKind.ClaudeAsk) Knocked(a);
         }
@@ -118,6 +121,7 @@ internal sealed class ActivityHub : IDisposable
     {
         if (card is not null) _cards[a.Id] = card;
         if (!ActivitySwitch.On(a.Kind, Settings())) return;
+        if (a.Kind != ActivityKind.Volume) Happened?.Invoke(a);
         if (_away.Locked || _fullscreenAway) _away.Note(a.Kind, DateTimeOffset.Now, a.Alert);   // kept kinds only (AwayLog)
         if (_fullscreenAway)
         {

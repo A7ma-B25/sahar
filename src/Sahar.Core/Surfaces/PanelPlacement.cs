@@ -26,4 +26,25 @@ public static class PanelPlacement
         float clasp = Math.Clamp(body.Y + body.Height * 0.45f, y + 24 * dpi, y + h - 24 * dpi);
         return new PanelPlace(new RectF(x, y, w, h), left, clasp);
     }
+
+    /// <summary>An ask / choose bubble: centred above her head (its tail points at her leaf), inside the work area.</summary>
+    public static RectF Above(RectF body, RectF work, SizeF card, float dpi)
+    {
+        float w = MathF.Min(card.Width, work.Width), h = MathF.Min(card.Height, work.Height);
+        float x = body.X + body.Width / 2 - w / 2, y = body.Y - 12 * dpi - h;
+        if (y < work.Y) y = body.Bottom + 12 * dpi;   // no room above her (she sits at the top): below her instead
+        x = Math.Clamp(x, work.X, MathF.Max(work.X, work.Right - w));
+        y = Math.Clamp(y, work.Y, MathF.Max(work.Y, work.Bottom - h));
+        return new RectF(x, y, w, h);
+    }
+
+    /// <summary>The tray menu: just above the point it was opened at (the tray icon), centred on it, inside the work area.</summary>
+    public static RectF Anchor(float px, float py, RectF work, SizeF card, float dpi)
+    {
+        float w = MathF.Min(card.Width, work.Width), h = MathF.Min(card.Height, work.Height);
+        float x = px - w / 2, y = py - 8 * dpi - h;
+        x = Math.Clamp(x, work.X, MathF.Max(work.X, work.Right - w));
+        y = Math.Clamp(y, work.Y, MathF.Max(work.Y, work.Bottom - h));
+        return new RectF(x, y, w, h);
+    }
 }

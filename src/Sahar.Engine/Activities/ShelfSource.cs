@@ -107,6 +107,8 @@ internal sealed partial class ShelfSource : IDisposable
 
     /// <summary>0.14 (her brain's shelf tools): whether anything is on her shelf; tidy (drop what is gone); empty it.</summary>
     public bool HasItems => _shelf.Items.Count > 0;
+    /// <summary>0.16 «الدرج»: what is on the shelf now.</summary>
+    public IReadOnlyList<ShelfItem> Items => _shelf.Items;
 
     public bool Tidy()
     {
