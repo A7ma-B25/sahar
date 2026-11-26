@@ -57,8 +57,11 @@ internal static class Cards
         GeoResult? found = null;
         string? foundFor = null;
         int asked = 0;
+        bool submitting = false;
         void Search(string text, bool submit)
         {
+            if (submitting && !submit) return;   // his Enter wins over a late suggestion search
+            submitting |= submit;
             int n = ++asked;
             find(text).ContinueWith(t =>
             {
@@ -74,7 +77,7 @@ internal static class Cards
                         panel.Update(CitySpec(why, text, [new PickRow("found", place.Name ?? text.Trim()) { Icon = "pin" }], null));
                         return;
                     }
-                    if (submit) panel.Update(CitySpec(why, text, null, A.ToYou(error ?? "ما لقيت هالمدينة. جرّب اسم تاني.")));
+                    if (submit) { submitting = false; panel.Update(CitySpec(why, text, null, A.ToYou(error ?? "ما لقيت هالمدينة. جرّب اسم تاني."))); }
                     else panel.Update(CitySpec(why, text, null, null));
                 });
             });

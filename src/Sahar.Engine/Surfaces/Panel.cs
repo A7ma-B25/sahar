@@ -103,6 +103,6 @@ internal sealed class Panel(SurfaceClient client, Func<RectF> body)
         static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s));
         if (_spec is not { } s) return "open=false lines=0 lines64= button64= title64= kind=none";
         return $"open=true kind={s.Name} lines={s.Lines.Count} lines64={B64(string.Join('\n', s.Lines))} button64={B64(s.Button?.Label ?? "")} " +
-               $"title64={B64(s.Title)} error64={B64(s.Error ?? "")} value64={B64(s.Value ?? "")}";
+               $"title64={B64(s.Sub is null ? s.Title : s.Title + "\n" + s.Sub)} error64={B64(s.Error ?? "")} value64={B64(s.Value ?? "")} placeholder64={B64(s.Placeholder ?? "")}";
     }
 }

@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'look', 'mindeval')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -1124,16 +1124,40 @@ function Kv([string]$cmd) {
     foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
     $h
 }
+function Surface {
+    $r = Send '{"type":"cmd","name":"surface-debug"}'
+    if (-not $r.ok) { return $null }
+    $h = @{}; foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($h.json64)) | ConvertFrom-Json
+}
+function Wait-Surface([string]$name = 'panel', [int]$ms = 60000) {
+    # The warm host may still be starting WebView2 on a fresh runner (cold): wait for the card to be really on screen.
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do { $s = Surface; if ($s -and $s.$name.open -and $s.$name.visible) { return $s }; Start-Sleep -Milliseconds 200 } while ((Get-Date) -lt $deadline)
+    throw "the $name surface did not show"
+}
 function Type-InBubble([string]$text, [switch]$Enter) {
-    # Real focus by a click, then the characters straight to the edit box (SendKeys can't type every Arabic letter).
-    $b = Kv 'debug-bubble'
-    if ($b.open -ne 'true') { throw 'no typing bubble' }
-    [Mouse]::Click([int]$b.x + 20, [int]$b.y + [int]([int]$b.h / 2), $false)
+    # 0.16: the card is a WebView2 page now; the text goes into its field the way typing does (its input and key handlers).
+    if ((Kv 'debug-panel').open -ne 'true') { throw 'no typing card' }
+    Wait-Surface 'panel' | Out-Null
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text))
+    $r = Send ('{"type":"cmd","name":"bubble-type","args":{"text64":"' + $b64 + '","enter":"' + $(if ($Enter) { 'true' } else { 'false' }) + '"}}')
+    if (-not $r.ok) { throw "bubble-type: $($r.error)" }
     Start-Sleep -Milliseconds 300
-    $edit = [IntPtr][long]$b.edit
-    foreach ($ch in $text.ToCharArray()) { [Shell]::PostMessage($edit, 0x0102, [IntPtr][int]$ch, [IntPtr]1) | Out-Null }
-    Start-Sleep -Milliseconds 200
-    if ($Enter) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x0D, [IntPtr]1) | Out-Null; Start-Sleep -Milliseconds 300 }
+}
+function Panel-State([string]$surface = 'panel') {
+    Wait-Surface $surface | Out-Null
+    $r = Send ('{"type":"cmd","name":"panel-state","args":{"surface":"' + $surface + '"}}')
+    if (-not $r.ok) { throw "panel-state: $($r.error)" }
+    $h = @{}; foreach ($pair in ($r.error -split ' ')) { $k, $v = $pair -split '=', 2; $h[$k] = $v }
+    $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($h.result64))   # a JSON string holding JSON
+    ($json | ConvertFrom-Json) | ConvertFrom-Json
+}
+function Close-Panel {
+    if ((Kv 'debug-panel').open -ne 'true') { return }
+    Send '{"type":"cmd","name":"panel-key","args":{"key":"Escape"}}' | Out-Null
+    $deadline = (Get-Date).AddSeconds(5)
+    while ((Kv 'debug-panel').open -eq 'true' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 150 }
 }
 
 # Two copies of her at once (a "ghost"). A cross-fade mixes the old picture and the new one, so no pixel of a frame
@@ -1572,26 +1596,24 @@ function Stage-Menu {
         Start-Sleep -Milliseconds 400
         $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
         if ($lines[0] -ne $text) { throw "bubble lines: $($lines -join ' | ')" }
-        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
-        $edit = [IntPtr][long](Kv 'debug-bubble').edit
-        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
-        Start-Sleep -Milliseconds 400
-        if ((Kv 'debug-bubble').open -ne 'false') { throw 'Esc did not close the bubble' }
+        Wait-Surface 'panel' | Out-Null
+        Close-Panel
+        if ((Kv 'debug-bubble').open -ne 'false') { throw 'Esc did not close the card' }
         $count = ((Get-Content $notes -Raw -Encoding UTF8) | ConvertFrom-Json).Count
         if ($count -ne 1) { throw "$count notes after Esc" }
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'note'
         Start-Sleep -Milliseconds 400
+        Wait-Surface 'panel' | Out-Null
         Screenshot 'note-bubble.png' | Out-Null
-        $edit = [IntPtr][long](Kv 'debug-bubble').edit
-        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+        Close-Panel
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'timer'
         Press 'timer-custom'
         Start-Sleep -Milliseconds 400
+        Wait-Surface 'panel' | Out-Null
         Screenshot 'timer-bubble.png' | Out-Null
-        $edit = [IntPtr][long](Kv 'debug-bubble').edit
-        if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+        Close-Panel
     }
     Step 'four notes: the bubble shows the last three, newest first' {
         foreach ($n in 2, 3, 4) {
@@ -1608,8 +1630,7 @@ function Stage-Menu {
         Start-Sleep -Milliseconds 300
         $lines = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Kv 'debug-bubble').lines64)) -split "`n"
         if (($lines -join ',') -ne 'note 4,note 3,note 2') { throw "bubble lines: $($lines -join ',')" }
-        $edit = [IntPtr][long](Kv 'debug-bubble').edit
-        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+        Close-Panel
     }
     Step 'the show plays every step with a caption' {
         Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
@@ -1726,8 +1747,7 @@ function Stage-Menu {
             Press 'back'
             Press 'note'
             Start-Sleep -Milliseconds 150
-            $edit = [IntPtr][long](Kv 'debug-bubble').edit
-            if ($edit -ne [IntPtr]::Zero) { [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null }
+            Send '{"type":"cmd","name":"list-close"}' | Out-Null
             Start-Sleep -Milliseconds 150
             $ri = Info
             $rounds.Add(("{0}:{1:N1}/{2}/{3}" -f $i, ((State).workingSetBytes / 1MB), $ri.workingSetMB, $ri.gcHeapMB))
@@ -2273,11 +2293,10 @@ function Stage-Senses {
         Type-InBubble 'Damascus' -Enter
         Start-Sleep -Seconds 2
         $b = Kv 'debug-bubble'
-        $title = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b.title64))
-        if ($b.open -ne 'true' -or $title -notmatch 'نت') { throw "bubble: open=$($b.open) '$title'" }
+        $err = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b.error64))
+        if ($b.open -ne 'true' -or $err -notmatch 'نت') { throw "card: open=$($b.open) '$err'" }
         if ((Kv 'debug-weather').on -ne 'false') { throw 'weather turned on without a city' }
-        $edit = [IntPtr][long]$b.edit
-        [Shell]::PostMessage($edit, 0x0100, [IntPtr]0x1B, [IntPtr]1) | Out-Null
+        Close-Panel
     }
     Step 'clear all empties it' {
         Send '{"type":"cmd","name":"clipboard-clear"}' | Out-Null
@@ -2594,25 +2613,24 @@ function Stage-Prayer {
         do { Start-Sleep -Milliseconds 200; $l = Kv 'debug-list' } while ($l.open -ne 'true' -and (Get-Date) -lt $deadline)
         if ($l.open -ne 'true') { throw 'the prayer list did not open' }
         $lines = (Text64 $l.lines64) -split "`n"
-        if ($lines.Count -ne 8) { throw "list lines: $($lines.Count)" }
-        if ($lines[0] -notmatch '^الجاية: ') { throw "first line: $($lines[0])" }
-        foreach ($name in 'الفجر', 'الشروق', 'الضهر', 'العصر', 'المغرب', 'العشا') {
-            if (-not ($lines | Where-Object { $_ -match "^$name — \d\d:\d\d$" })) { throw "no time line for $name" }
-        }
-        if ($lines[7] -notmatch 'طريقة الحساب: أم القرى') { throw "method line: $($lines[7])" }
+        if ($lines.Count -ne 6) { throw "list lines: $($lines.Count)" }
+        foreach ($name in 'الفجر', 'الشروق', 'الضهر', 'العصر', 'المغرب', 'العشا') { if ($lines -notcontains $name) { throw "no row for $name" } }
+        $st = Panel-State
+        if ($st.text -notmatch 'طريقة الحساب: أم القرى') { throw "method link: $($st.text)" }
+        if ($st.text -notmatch 'بعد') { throw 'the next prayer has no «بعد …»' }
         if ((Text64 $l.button64) -notmatch 'Damascus') { throw "city button: $(Text64 $l.button64)" }
         if ((Get-Content $settings -Raw) -notmatch '"prayerCity"\s*:\s*"Damascus"') { throw 'city not saved' }
     }
     Step 'the method line opens the methods and a pick is saved' {
-        Send '{"type":"cmd","name":"list-pick","args":{"index":"7"}}' | Out-Null
-        Start-Sleep -Milliseconds 300
+        Send '{"type":"cmd","name":"panel-click","args":{"id":"method"}}' | Out-Null
+        Start-Sleep -Milliseconds 500
         $l = Kv 'debug-list'
-        if ($l.open -ne 'true' -or [int]$l.lines -ne 5) { throw "methods list: open=$($l.open) lines=$($l.lines)" }
+        if ($l.open -ne 'true' -or $l.kind -ne 'method' -or [int]$l.lines -ne 5) { throw "methods list: open=$($l.open) kind=$($l.kind) lines=$($l.lines)" }
         Send '{"type":"cmd","name":"list-pick","args":{"index":"1"}}' | Out-Null
         Start-Sleep -Milliseconds 300
         if ((Get-Content $settings -Raw) -notmatch '"prayerMethod"\s*:\s*"muslimWorldLeague"') { throw "method not saved: $(Get-Content $settings -Raw)" }
         $l = Kv 'debug-list'
-        if ($l.open -ne 'true' -or (Text64 $l.lines64) -notmatch 'رابطة العالم الإسلامي') { throw 'the prayer list did not come back with the new method' }
+        if ($l.open -ne 'true' -or $l.kind -ne 'prayer' -or (Panel-State).text -notmatch 'رابطة العالم الإسلامي') { throw 'the prayer list did not come back with the new method' }
         Send '{"type":"cmd","name":"list-close"}' | Out-Null
     }
     Step 'ten minutes before Asr: the reminder face and words' {
@@ -2729,7 +2747,7 @@ function Stage-Prayer {
         $lines = (Text64 $l.lines64) -split "`n"
         if ($l.open -ne 'true' -or $lines.Count -ne 115) { throw "surah list: open=$($l.open) lines=$($lines.Count)" }
         if ($lines[0] -notmatch 'الإخلاص' -or $lines[1] -notmatch 'الفاتحة' -or $lines[114] -notmatch 'الناس') { throw "list order: $($lines[0]) / $($lines[1]) / $($lines[114])" }
-        if ((Text64 $l.button64) -ne 'القارئ: مشاري العفاسي') { throw "reciter button: $(Text64 $l.button64)" }
+        if ((Text64 $l.button64) -notmatch 'مشاري العفاسي') { throw "reciter chip: $(Text64 $l.button64)" }
         Send '{"type":"cmd","name":"list-button"}' | Out-Null
         Start-Sleep -Milliseconds 400
         $l = Kv 'debug-list'
@@ -2756,7 +2774,7 @@ function Stage-Prayer {
         Type-InBubble 'Sami' -Enter
         $deadline = (Get-Date).AddSeconds(4)
         do { Start-Sleep -Milliseconds 200; $l = Kv 'debug-list' } while ($l.open -ne 'true' -and (Get-Date) -lt $deadline)
-        if ($l.open -ne 'true' -or [int]$l.lines -ne 2 -or (Text64 $l.lines64) -notmatch 'بنت') { throw "no man/woman question (open=$($l.open))" }
+        if ($l.open -ne 'true' -or [int]$l.lines -ne 3 -or (Text64 $l.lines64) -notmatch 'بنت') { throw "no man/woman question (open=$($l.open))" }
         Send '{"type":"cmd","name":"list-pick","args":{"index":"1"}}' | Out-Null
         Start-Sleep -Milliseconds 500
         $raw = Get-Content $settings -Raw
@@ -2765,9 +2783,9 @@ function Stage-Prayer {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Press 'note'
         Start-Sleep -Milliseconds 400
-        $title = Text64 (Kv 'debug-bubble').title64
-        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
-        if ($title -ne 'اكتبي ملاحظة…') { throw "the note bubble to a woman: '$title'" }
+        $hint = Text64 (Kv 'debug-bubble').placeholder64
+        Close-Panel
+        if ($hint -ne 'اكتبي ملاحظة…') { throw "the note card to a woman: '$hint'" }
         # Only her own words change: what you copied stays exactly as you copied it.
         $copied = -join ([char[]](0x0631, 0x062C, 0x0639, 0x062A, 0x0020, 0x0645, 0x0646, 0x0020, 0x0627, 0x0644, 0x0634, 0x063A, 0x0644))   # رجعت من الشغل
         Set-Clipboard -Value $copied
@@ -2779,7 +2797,7 @@ function Stage-Prayer {
         $first = ((Text64 $l.lines64) -split "`n")[0]
         $button = Text64 $l.button64
         Send '{"type":"cmd","name":"list-close"}' | Out-Null
-        if ($first -ne "📄 $copied") { throw "the copied text changed in the list: '$first'" }
+        if ($first -ne $copied) { throw "the copied text changed in the list: '$first'" }
         if ($button -ne 'امسحي الكل') { throw "her button to a woman: '$button'" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         if ($log -match 'Sami') { throw 'the name is in engine.log' }
@@ -2788,7 +2806,7 @@ function Stage-Prayer {
         Send '{"type":"cmd","name":"tray-pick","args":{"item":"who"}}' | Out-Null
         Start-Sleep -Milliseconds 500
         $b = Kv 'debug-bubble'
-        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Close-Panel
         if ($b.open -ne 'true' -or (Text64 $b.title64) -notmatch 'شو بدك ناديك') { throw 'the tray did not ask again' }
     }
     Step 'the city never reaches the log' {
@@ -4480,6 +4498,7 @@ function Stage-Activities {
 . (Join-Path $PSScriptRoot 'mind-memory.ps1')
 . (Join-Path $PSScriptRoot 'mind-autonomy.ps1')
 . (Join-Path $PSScriptRoot 'mind-eval.ps1')   # 0.14.1: opt-in, mind-eval.yml only
+. (Join-Path $PSScriptRoot 'look.ps1')   # 0.16: the new surfaces, light and dark
 function Stage-Mind {
     Stage-MindRuntime
     Stage-MindMemory
@@ -4951,6 +4970,7 @@ try {
             'activities' { Stage-Activities }
             'mind' { Stage-Mind }
             'install' { Stage-Install }
+            'look' { Stage-Look }
             'mindeval' { Stage-MindEval }
         }
     }

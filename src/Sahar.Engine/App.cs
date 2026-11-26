@@ -1044,7 +1044,7 @@ internal sealed unsafe class App
                 cameraMic.Simulate(r.Args?.TryGetValue("on", out var on) == true && on == "true");
                 return new PipeReply(true, lifeDirector.Describe());
             });
-            pipe.Register("weather-open", _ => { if (!weather.On) AskCity("شو مدينتك؟ (للمطر بس)"); return new PipeReply(true); });
+            pipe.Register("weather-open", _ => { if (!weather.On) AskCity("بس لأعرف إذا رح تشتي."); return new PipeReply(true); });
             pipe.Register("debug-weather", _ => new PipeReply(true, $"on={(weather.On ? "true" : "false")}"));
             pipe.Register("debug-apptime", _ => new PipeReply(true, apps.Describe()));
             pipe.Register("apptime-skip", r => { apps.Skip(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, apps.Describe()); });

@@ -4,12 +4,13 @@ from ui_groups import ALL, plan
 
 
 class UiGroupsTests(unittest.TestCase):
-    def test_all_is_seven_groups_covering_every_stage_once(self):
+    def test_all_is_eight_groups_covering_every_stage_once(self):
         groups = plan("all")
-        self.assertEqual(7, len(groups))
+        self.assertEqual(8, len(groups))
         self.assertIn({"name": "settings", "stages": "settings"}, groups)   # 0.12: the settings app has its own job
         self.assertIn({"name": "activities", "stages": "activities"}, groups)   # 0.13: so do the activities
         self.assertIn({"name": "mind", "stages": "mind"}, groups)   # 0.14: and her brain (a tiny model on the CPU)
+        self.assertIn({"name": "look", "stages": "look"}, groups)   # 0.16: and the new surfaces, light and dark
         stages = [s for g in groups for s in g["stages"].split(",")]
         self.assertEqual(sorted(ALL), sorted(stages))
         self.assertEqual(len(stages), len(set(stages)))

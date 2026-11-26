@@ -7,11 +7,13 @@ const web = window.chrome && window.chrome.webview;
 const post = (m) => web && web.postMessage(m);
 const stage = document.getElementById('stage');
 
-let cur = null;   // { seq, kind, model, st, margin }
+let cur = null;
+let liveTimer = 0;   // { seq, kind, model, st, margin }
 let composing = false;
 
 function emit(kind, value) {
   if (!cur) return;
+  if (kind === 'submit' || kind === 'pick') clearTimeout(liveTimer);   // a late search never overtakes his Enter
   const st = cur.st;
   if (kind === 'confirm') { st.confirm = true; render(); return; }
   if (kind === 'confirm-no') { st.confirm = false; render(); return; }
@@ -48,7 +50,6 @@ function render(first = false) {
   if (sel) sel.scrollIntoView({ block: 'nearest' });
 }
 
-let liveTimer = 0;
 function typed(field) {
   const st = cur.st;
   if (field.dataset.id === 'search') { st.query = field.value; st.selected = 0; render(); return; }

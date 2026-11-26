@@ -110,13 +110,25 @@ function Stage-MindMemory {
         SNav 'today'; SNav 'you'
         if (-not (Exists '#you-proposed-none')) { throw 'it came back after a reload' }
     }
-    Step 'mind (memory): a draft in his voice — «بصوتك», copy, never sent' {
-        $r = Kva 'debug-mind-draft' ('{"text64":"' + (B64 'يلا خلص، منحكي بكرا 👍') + '"}')
-        if ($r.open -ne 'true') { throw 'no draft bubble' }
-        if ((Text64 $r.button64) -notmatch 'انسخها') { throw "button: $(Text64 $r.button64)" }
+    Step 'mind (memory): a draft in his voice goes into the chat — «بصوتك», copy, never sent; kept encrypted' {
+        $text = 'يلا خلص، منحكي بكرا 👍'
+        $r = Kva 'debug-mind-draft' ('{"text64":"' + (B64 $text) + '"}')
+        if ([int]$r.drafts -lt 1) { throw 'no draft in the chat' }
+        Wait-Surface 'chat' | Out-Null
+        $st = Panel-State 'chat'
+        if ($st.text -notmatch 'انسخها' -or $st.text -notmatch 'بصوتك' -or $st.text -notmatch 'منحكي بكرا') { throw "the chat shows: $($st.text)" }
+        $c = Kv 'debug-chat'
+        $id = 'copy-m' + ([int]$c.count - 1)
+        Send ('{"type":"cmd","name":"panel-click","args":{"surface":"chat","id":"' + $id + '"}}') | Out-Null
+        Wait-Until { ((Get-Clipboard -Raw) -replace '\s+$', '') -eq $text } 3000 'the draft is not on the clipboard (exact, Unicode)'
         $shot = Screenshot 'mind-draft.png'
+        foreach ($f in Mind-Files) {
+            if ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($f.FullName)) -match 'منحكي بكرا') { throw "plain text in $($f.Name)" }
+        }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -match 'منحكي') { throw 'the draft is in engine.log' }
+        Send '{"type":"cmd","name":"chat-close"}' | Out-Null
         Send '{"type":"cmd","name":"menu-close"}' | Out-Null
-        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
     }
     Step 'mind (memory): «انسي كل شي» leaves nothing in mind\' {
         if ((Mind-Files).Count -lt 3) { throw "mind\ has $((Mind-Files).Count) file(s) before forgetting" }
@@ -128,6 +140,7 @@ function Stage-MindMemory {
         if (-not (Test-Path $script:SettingsFile)) { throw 'settings went with it' }
         if (-not (Exists '#you-proposed-none') -or (Exists '#conf-0')) { throw 'the page still shows items' }
         Wait-Until { (Text64 (Kv 'debug-comment').text64) -match 'نسيت كل شي' } 3000 'she did not say «نسيت كل شي»'
+        Wait-Until { (Kv 'debug-chat').chats -eq '0' } 3000 'the chat kept its history after «انسي كل شي»'
     }
     Step 'mind (memory): logs hold kinds and counts, never his words or titles' {
         $logs = @((Join-Path $env:LOCALAPPDATA 'Sahar\engine.log'), (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log')) | Where-Object { Test-Path $_ }
