@@ -60,9 +60,12 @@ internal sealed class QuranTool : IDisposable
     /// <summary>Anything the bar shows changed (state, surah, a seek).</summary>
     public event Action? Changed;
 
-    public TimeSpan Position => Try(() => _player?.Position) ?? TimeSpan.Zero;
-    public TimeSpan? Duration => Try(() => _player?.Duration);
-    public bool CanSeek => Try(() => _player?.CanSeek) ?? false;
+    // 0.16 (final ui-test 45882237735): Windows' player is never asked while it opens — its PlaybackSession can hold
+    // her UI thread for seconds then (a stream that hangs); only an opened recitation has a place, a length and seeking.
+    private bool Opened => State is "playing" or "paused";
+    public TimeSpan Position => Opened ? Try(() => _player?.Position) ?? TimeSpan.Zero : TimeSpan.Zero;
+    public TimeSpan? Duration => Opened ? Try(() => _player?.Duration) : null;
+    public bool CanSeek => Opened && (Try(() => _player?.CanSeek) ?? false);
 
     public RecitationState Recitation => State switch
     {
