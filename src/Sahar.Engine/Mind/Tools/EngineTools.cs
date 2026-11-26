@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Sahar.Core.Brain;
 using Sahar.Core.Games;
+using Sahar.Core.Life;
 using Sahar.Core.Mind.Tools;
 using Sahar.Core.Motion;
 using Sahar.Core.Prayer;
@@ -129,12 +130,15 @@ internal sealed class EngineTools
         Add("move.play", c =>
         {
             _m.Menu.Close();
-            bool played = Str(c, "move") switch
+            var move = Str(c, "move");
+            bool played = move switch
             {
-                "dance" => _m.Motion.Play(MotionKind.Dance),
-                "stretch" => _m.Motion.Play(MotionKind.Stretch),
-                _ => _m.Soul.Hop(1f),
+                "hop" or null => _m.Soul.Hop(1f),
+                "fly" => Fly(null),
+                "wave" => Fly(FlightPattern.Wave),
+                _ => MoveKind(move) is { } kind && _m.Motion.Play(kind),
             };
+            Log.Write($"mind: move {move ?? "hop"} {(played ? "played" : "not now")}");
             return played ? Ok(c) : ToolOutcome.Fail("unavailable", "مو هلق، بعدين.");
         });
         Add("prayer.next", c =>
@@ -183,6 +187,28 @@ internal sealed class EngineTools
     }
 
     /// <summary>The tools she has now, in catalog order (memory/goal proposals are announced too: the Mind keeps them).</summary>
+    /// <summary>0.15.0: a move.play value → the life motion she already does alone (ToolCatalog.Moves).</summary>
+    internal static MotionKind? MoveKind(string? move) => move switch
+    {
+        "dance" => MotionKind.Dance, "stretch" => MotionKind.Stretch, "butterfly" => MotionKind.ChaseButterfly,
+        "moon" => MotionKind.PlayWithMoon, "moon-toss" => MotionKind.MoonToss, "walk" => MotionKind.WalkTaskbar,
+        "wander" => MotionKind.Wander, "celebrate" => MotionKind.CelebrateLoop, "curious" => MotionKind.Curious,
+        "peek" => MotionKind.PeekTaskbar, "perch" => MotionKind.PerchWindow, "hop-icons" => MotionKind.HopIcons,
+        "hop-windows" => MotionKind.HopWindows, "orbit" => MotionKind.OrbitCursor, "follow" => MotionKind.FollowCursor,
+        "hide-window" => MotionKind.HideBehindWindow, "breathe" => MotionKind.Breathe, "yawn" => MotionKind.Yawn,
+        "scratch" => MotionKind.ScratchHead, "watch" => MotionKind.WatchYou,
+        _ => null,
+    };
+
+    /// <summary>A flight that fits where she is (the named one first; else any, as her own flights choose).</summary>
+    private bool Fly(FlightPattern? first)
+    {
+        if (first is { } f && _m.Motion.PlayFlight(f)) return true;
+        foreach (var p in Enum.GetValues<FlightPattern>().OrderBy(_ => Random.Shared.Next()))
+            if (_m.Motion.PlayFlight(p)) return true;
+        return false;
+    }
+
     public IReadOnlyList<ToolSpec> Announced() =>
         ToolCatalog.All.Where(t => _tools.ContainsKey(t.Name) || ToolCatalog.MindLocal.Contains(t.Name)).ToList();
 

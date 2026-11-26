@@ -37,7 +37,27 @@ public sealed class PromptAndTemplateTests
     [InlineData("settings.set", """{"key":"weatherEnabled","value":true}""", "شغّلت الطقس")]
     [InlineData("reminder.set", """{"at":"21:30","text":"x"}""", "رح ذكّرك الساعة ٢١:٣٠")]
     [InlineData("hush.on", """{}""", "سكتّ لحد ما تقلّي")]
+    [InlineData("move.play", """{"move":"butterfly"}""", "عم الحق الفراشة 🦋")]
+    [InlineData("move.play", """{"move":"moon"}""", "عم العب بالقمر 🌙")]
     public void Templates_Done(string tool, string args, string line) => Assert.Equal(line, ToolTemplates.Done(Call(tool, args)));
+
+    /// <summary>0.15.0: «العبي مع الفراشة» started the Chase game — every life motion is a move.play value, the game
+    /// tool says it is a game WITH him, and the prompt shows the butterfly as an example.</summary>
+    [Fact]
+    public void Tools_EveryLifeMotionIsAMove_AndGamesAreWithHim()
+    {
+        var move = ToolCatalog.Get("move.play")!;
+        var values = move.Args.Single().Values!;
+        foreach (var v in new[] { "butterfly", "moon", "moon-toss", "walk", "fly", "dance", "stretch", "hop", "celebrate", "curious", "peek", "perch", "hop-icons", "hop-windows", "orbit", "follow", "yawn", "wave" })
+            Assert.Contains(v, values);
+        Assert.Contains("فراشة", move.DescriptionAr);
+        Assert.Contains("القمر", move.DescriptionAr);
+        Assert.Contains("معه", ToolCatalog.Get("game.start")!.DescriptionAr);
+        Assert.All(values, v => Assert.NotEqual("عملتها", ToolTemplates.Done(Call("move.play", $$"""{"move":"{{v}}"}"""))));
+        var prefix = PromptBuilder.Prefix("P", ToolCatalog.Core);
+        Assert.Contains("«العبي مع الفراشة»", prefix);
+        Assert.Contains("\"move\":\"butterfly\"", prefix);
+    }
 
     [Theory]
     [InlineData("settings.set", """{"key":"weatherEnabled","value":true}""", "شغّل الطقس؟")]

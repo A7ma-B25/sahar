@@ -59,7 +59,7 @@ public static class ToolTemplates
             "sleep.hide" => $"رح غيب {Num(I("minutes") ?? 60)} دقيقة",
             "game.start" => $"بلّشنا {Games.GetValueOrDefault(S("game") ?? "", "لعبة")}",
             "games.open" => "فتحت الألعاب",
-            "move.play" => S("move") switch { "dance" => "رقصتلك", "stretch" => "تمطّيت", _ => "نطّيت" },
+            "move.play" => Move(S("move")),
             "prayer.open" => "فتحت أوقات الصلاة",
             "music.control" => S("op") switch
             {
@@ -80,6 +80,19 @@ public static class ToolTemplates
             _ => "عملتها",
         };
     }
+
+    /// <summary>0.15.0: one short line per move (her bubble confirms it after the card closed).</summary>
+    private static string Move(string? move) => move switch
+    {
+        "dance" => "رقصتلك", "stretch" => "تمطّيت", "hop" => "نطّيت",
+        "butterfly" => "عم الحق الفراشة 🦋", "moon" => "عم العب بالقمر 🌙", "moon-toss" => "عم ارمي القمر والقطو 🌙",
+        "walk" => "عم اتمشّى عالشريط", "fly" => "عم طير شوي ✨", "wave" => "عم طير متل الموجة 🌊", "wander" => "عم لفّ شوي",
+        "celebrate" => "عم احتفل 🎉", "curious" => "عم اتفرّج", "peek" => "عم طلّ من تحت", "perch" => "قعدت فوق نافذة",
+        "hop-icons" => "عم نطّ عالأيقونات", "hop-windows" => "عم نطّ عالنوافذ", "orbit" => "عم دور حوالين الماوس",
+        "follow" => "عم الحق الماوس", "hide-window" => "تخبّيت ورا نافذة", "breathe" => "عم اتنفّس بهدوء",
+        "yawn" => "تثاوبت 🥱", "scratch" => "عم حكّ راسي", "watch" => "عم اتطلّع فيك",
+        _ => "نطّيت",
+    };
 
     /// <summary>Her Ask question («إي» / «لا»), e.g. «شغّل الطقس؟».</summary>
     public static string Question(ToolCall call)

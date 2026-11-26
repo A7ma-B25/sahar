@@ -61,6 +61,8 @@ public static class PromptBuilder
             b.AppendLine("«حطيلي مؤقت ١٠ دقايق» → " + Example("""[{"tool":"timer.start","args":{"minutes":10},"why":"طلب مؤقت"}]""", "تكرم، عشر دقايق من هلق ⏳", null));
         if (tools.Any(t => t.Name == "music.control"))
             b.AppendLine("«شغليلي غنية» → " + Example("""[{"tool":"music.control","args":{"op":"toggle"},"why":"بدو موسيقى"}]""", "يلا، هي الموسيقى 🎶", "happy"));
+        if (tools.Any(t => t.Name == "move.play"))
+            b.AppendLine("«العبي مع الفراشة» → " + Example("""[{"tool":"move.play","args":{"move":"butterfly"},"why":"فراشة"}]""", "يلا، رح الحقها 🦋", "happy"));
         b.AppendLine("«تعبان كتير اليوم» → " + Example("[]", "يا عمري… شو اللي تعبك اليوم؟ بدك تفضفض ولا نعمل شي يريّحك شوي؟", "calm"));
         return b.ToString().TrimEnd();
     }

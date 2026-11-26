@@ -26,6 +26,21 @@ public static class ToolCatalog
     private static ArgSpec Str(string n, int max, bool req = true) => new(n, ArgType.String, req, MaxLength: max);
     private static ArgSpec En(string n, bool req, params string[] values) => new(n, ArgType.Enum, req, Values: values);
 
+    /// <summary>0.15.0: every life motion she already does alone is a move he can ask for (owner: «العبي مع الفراشة»
+    /// started the Chase game because no move named the butterfly). The engine maps each value to its motion.</summary>
+    public static IReadOnlyList<string> Moves { get; } =
+    [
+        "dance", "stretch", "hop", "butterfly", "moon", "moon-toss", "walk", "fly", "wave", "wander", "celebrate", "curious",
+        "peek", "perch", "hop-icons", "hop-windows", "orbit", "follow", "hide-window", "breathe", "yawn", "scratch", "watch",
+    ];
+
+    private const string MoveDescription =
+        "حركة إلك لحالك وهو بيتفرّج (مو لعبة معه): butterfly=تلحقي فراشة، moon=تلعبي بالقمر، moon-toss=ترمي القمر وتلقطيه، " +
+        "walk=تتمشّي عشريط المهام، fly=تطيري حركة طيران، wave=تطيري متل الموجة، dance=ترقصي، stretch=تتمطّي، hop=تنطّي، " +
+        "wander=تلفّي شوي، celebrate=تحتفلي، curious=تتفرّجي بفضول، peek=تطلّي من تحت الشريط، perch=تقعدي فوق نافذة، " +
+        "hop-icons=تنطّي عالأيقونات، hop-windows=تنطّي عالنوافذ، orbit=تدوري حوالين الماوس، follow=تلحقي الماوس، " +
+        "hide-window=تتخبّي ورا نافذة، breathe=تتنفّسي بهدوء، yawn=تتثاوبي، scratch=تحكّي راسك، watch=تطلّعي فيه";
+
     public static IReadOnlyList<ToolSpec> Core { get; } =
     [
         new("timer.start", "شغّلي مؤقت بالدقايق", [Int("minutes", 1, 600), Str("label", 40, false)], ActionClass.A, Undoable: true),
@@ -37,9 +52,10 @@ public static class ToolCatalog
         new("hush.on", "اسكتي (بلا تعليقات) لمدة أو لحد ما يقلّك", [Int("minutes", 1, 600, false)], ActionClass.A, Undoable: true),
         new("hush.off", "رجعي احكي", [], ActionClass.A),
         new("sleep.hide", "اختفي شوي (افتراضي ٦٠ دقيقة)", [Int("minutes", 5, 240, false)], ActionClass.A, Undoable: true),
-        new("game.start", "بلّشي لعبة", [En("game", true, "chase", "hide", "ball", "stars")], ActionClass.A),
+        new("game.start", "لعبة معه هو (هو بيلعب بالماوس): chase=الحقني (هو بيلحقك بالماوس)، hide=الغميضة، ball=الطابة، stars=لقط النجوم. مو للفراشة ولا للقمر: هدول move.play",
+            [En("game", true, "chase", "hide", "ball", "stars")], ActionClass.A),
         new("games.open", "افتحي قائمة الألعاب", [], ActionClass.A),
-        new("move.play", "اعملي حركة", [En("move", true, "dance", "stretch", "hop")], ActionClass.A),
+        new("move.play", MoveDescription, [En("move", true, [.. Moves])], ActionClass.A),
         new("prayer.next", "شو الصلاة الجاية وبعد قديش", [], ActionClass.Read, ReadOnly: true),
         new("prayer.open", "افتحي أوقات الصلاة", [], ActionClass.A),
         new("music.now", "شو عم يشتغل هلق", [], ActionClass.Read, ReadOnly: true),
