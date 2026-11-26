@@ -79,5 +79,5 @@ public static class UpdateRules
         return age >= TimeSpan.Zero && age <= MoveNoteFor;
     }
 
-    public const string MovedLine = "صرت ساكنة بـ %LocalAppData%\\Programs\\Sahar 🏠 — لاقيني بقائمة ابدأ: «سحر». مجلد الـ zip القديم فيك تمسحو.";
+    public const string MovedLine = "صرت ساكنة بـ %LocalAppData%\\Programs\\Sahar. لاقيني بقائمة ابدأ: «سحر»، والـ zip القديم فيك تمسحو.";
 }

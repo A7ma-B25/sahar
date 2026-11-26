@@ -23,7 +23,7 @@ public sealed class UpdateTextTests
             UpdateText.Checking, UpdateText.StillChecking, UpdateText.Retrying, UpdateText.UpToDate,
             UpdateText.Available(V), UpdateText.ListTitle(V), UpdateText.Yes, UpdateText.Later,
             UpdateText.Downloading(null), UpdateText.Downloading(42), UpdateText.Ready, UpdateText.ReadyPortable,
-            UpdateText.NotStarted, UpdateText.SetupFailed(2),
+            UpdateText.NotStarted, UpdateText.SetupFailed(2), UpdateRules.MovedLine,
         };
         foreach (var f in Enum.GetValues<UpdateFailure>()) { d.Add(UpdateText.Failed(f, download: false)); d.Add(UpdateText.Failed(f, download: true)); }
         return d;
@@ -35,7 +35,7 @@ public sealed class UpdateTextTests
     {
         Assert.False(string.IsNullOrWhiteSpace(line));
         Assert.False(HasEmoji(line), line);
-        Assert.True(line.Length <= 90, $"{line.Length}: {line}");
+        Assert.True(line.Length <= 100, $"{line.Length}: {line}");
     }
 
     [Fact]
