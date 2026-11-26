@@ -64,6 +64,8 @@ public sealed record SaharSettings
     /// <summary>📖 The reciter chosen and the surah played last (shown first).</summary>
     public string QuranReciter { get; set; } = "ar.alafasy";
     public int? QuranLastSurah { get; set; }
+    /// <summary>0.16 (owner ruling 5): where he stopped — surah, reciter, seconds — for «كمّل من وين وقفت».</summary>
+    public Sahar.Core.Quran.QuranResume? QuranResume { get; set; }
     /// <summary>Who she talks to (asked on the first start): her words agree with it, and she uses your name.</summary>
     public string? UserName { get; set; }
     public Gender UserGender { get; set; } = Gender.Unknown;

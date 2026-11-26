@@ -2,15 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pages, visiblePages } from '../../src/Sahar.Settings/web/js/pages/registry.js';
 
-test('registry: visible pages (0.14: her brain is group 2) in four groups + foot', () => {
-  const ids = ['sahar', 'menu', 'brain', 'models', 'you', 'today', 'prayer', 'listen', 'activities', 'general', 'privacy', 'about'];
+test('registry: visible pages (0.14: her brain is group 2; 0.16: «شخصية سحر» after it) in four groups + foot', () => {
+  const ids = ['sahar', 'menu', 'brain', 'persona', 'models', 'you', 'today', 'prayer', 'listen', 'activities', 'general', 'privacy', 'about'];
   const v = visiblePages({ pages: ids });
   assert.deepEqual(v.map((p) => p.id), ids);
-  assert.deepEqual(v.map((p) => p.group), [1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5]);
+  assert.deepEqual(v.map((p) => p.group), [1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5]);
 });
 
-test('registry: all fourteen pages are known; sounds and claude are not available', () => {
-  assert.equal(pages.length, 14);
+test('registry: all fifteen pages are known; sounds and claude are not available', () => {
+  assert.equal(pages.length, 15);
   for (const id of ['sounds', 'claude']) assert.equal(pages.find((p) => p.id === id).available, false);
   assert.ok(!visiblePages({ pages: ['sounds', 'claude', 'sahar'] }).some((p) => p.id === 'sounds' || p.id === 'claude'));
 });

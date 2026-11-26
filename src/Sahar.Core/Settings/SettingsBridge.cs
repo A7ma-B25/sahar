@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Sahar.Core.Menu;
 using Sahar.Core.Prayer;
+using P = Sahar.Core.Mind.Persona;
 
 namespace Sahar.Core.Settings;
 
@@ -54,7 +55,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
     public const string Unreadable = "unreadable";
 
     /// <summary>The pages shown (plan Ruling 1: الأصوات and Claude Code stay hidden until they work).</summary>
-    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"];
+    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "persona", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"];
 
     /// <summary>0.13: the engine's exe (Claude Code's hooks run it) and Claude Code's settings file.</summary>
     public string? EnginePath { get; init; }
@@ -93,6 +94,9 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
                 "claude-link" => Claude(id, "claude-link", j => Activities.ClaudeLink.Install(j, EnginePath!)),
                 "claude-unlink" => Claude(id, "claude-unlink", j => Activities.ClaudeLink.Remove(j, EnginePath!)),
                 "weather-prayer" => await WeatherPrayer(id),
+                "persona-get" => Persona(id, "persona-get", null),
+                "persona-save" => PersonaSave(id, req),
+                "persona-restore" => Persona(id, "persona-restore", p => p.Restore()),
                 _ when type.StartsWith("mind-", StringComparison.Ordinal) => await Mind(id, type, req),
                 _ => Reply(id, "error", w => Fail(w, "bad-type")),
             };
@@ -326,6 +330,39 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
             w.WriteString("name", m.Name);
             w.WriteBoolean("desktop", m.OnDesktop);
         }, made is not null);
+    }
+
+    // ---- «شخصية سحر» (0.16 Task 7): her persona file beside settings.json; the Mind reads it each turn ----
+
+    private P.PersonaFile PersonaFile() =>
+        new(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(settingsPath))!, P.PersonaFile.FileName));
+
+    private string Persona(long? id, string type, Action<P.PersonaFile>? change)
+    {
+        var file = PersonaFile();
+        change?.Invoke(file);
+        return Reply(id, type, w => PersonaBody(w, file), true);
+    }
+
+    private string PersonaSave(long? id, JsonElement req)
+    {
+        if (!req.TryGetProperty("text", out var t) || t.ValueKind != JsonValueKind.String) return Reply(id, "persona-save", w => Fail(w, "bad-request"));
+        var file = PersonaFile();
+        return file.Save(t.GetString()!) switch
+        {
+            P.PersonaSave.Ok => Reply(id, "persona-save", w => PersonaBody(w, file), true),
+            P.PersonaSave.Empty => Reply(id, "persona-save", w => Fail(w, "empty")),
+            P.PersonaSave.TooLong => Reply(id, "persona-save", w => Fail(w, "too-long")),
+            _ => Reply(id, "persona-save", w => Fail(w, Unreadable)),
+        };
+    }
+
+    private static void PersonaBody(Utf8JsonWriter w, P.PersonaFile file)
+    {
+        w.WriteString("text", file.Load());
+        w.WriteString("default", P.PersonaFile.Default);
+        w.WriteBoolean("edited", file.Edited);
+        w.WriteNumber("max", P.PersonaFile.MaxChars);
     }
 
     // ---- writing replies ----

@@ -40,6 +40,7 @@ internal sealed class PanelSpec
     public PickBox? Empty { get; init; }
     public PickBox? None { get; init; }
     public (string Title, string Sub, string StopLabel)? Now { get; init; }
+    public bool NowPaused { get; init; }
     public PickAction? FootAction { get; init; }
     public PickAction? FootLink { get; init; }
     public string FootHint { get; init; } = "Esc لسكّر";
@@ -85,7 +86,7 @@ internal sealed class PanelSpec
         Rows_(j, "rows", Rows);
         Box(j, "empty", Empty);
         Box(j, "none", None);
-        if (Now is { } now) j.O("now").S("title", now.Title).S("sub", now.Sub).S("stopLabel", now.StopLabel).End();
+        if (Now is { } now) j.O("now").S("title", now.Title).S("sub", now.Sub).S("stopLabel", now.StopLabel).S("pauseLabel", NowPaused ? "كمّل" : "وقفة").T("paused", NowPaused).End();
         j.O("foot").S("hint", FootHint);
         Act(j, "action", FootAction);
         Act(j, "link", FootLink);

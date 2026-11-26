@@ -73,7 +73,7 @@ public sealed class SettingsBridgeTests : IDisposable
         var caps = r.GetProperty("caps");
         Assert.True(caps.GetProperty("engine").GetBoolean());
         Assert.False(caps.GetProperty("broken").GetBoolean());
-        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"],
+        Assert.Equal(["sahar", "menu", "brain", "persona", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"],
             caps.GetProperty("pages").EnumerateArray().Select(p => p.GetString()!));
         Assert.Equal(6, caps.GetProperty("reciters").GetArrayLength());
         Assert.Equal("ar.alafasy", caps.GetProperty("reciters")[0].GetProperty("id").GetString());
@@ -345,7 +345,7 @@ public sealed class SettingsBridgeTests : IDisposable
 
     [Fact]
     public void Pages_ActivitiesAfterListening() =>
-        Assert.Equal(["sahar", "menu", "brain", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"], SettingsBridge.Pages);   // 0.14: her brain's four after the menu
+        Assert.Equal(["sahar", "menu", "brain", "persona", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"], SettingsBridge.Pages);   // 0.14: her brain's four after the menu; 0.16: «شخصية سحر» after «عقلي»
 
     [Fact]
     public async Task Claude_LinkStatusUnlink()
@@ -443,5 +443,45 @@ public sealed class SettingsBridgeTests : IDisposable
         var r = JsonDocument.Parse(await bridge.HandleAsync("""{"id":33,"type":"get"}""")).RootElement;
         Assert.False(r.GetProperty("caps").GetProperty("broken").GetBoolean());
         Assert.True(r.GetProperty("caps").GetProperty("busy").GetBoolean());
+    }
+
+    // ---- 0.16 «شخصية سحر» ----
+
+    private string PersonaPath => Path.Combine(_dir, Sahar.Core.Mind.Persona.PersonaFile.FileName);
+
+    [Fact]
+    public async Task Persona_GetSaveRestore()
+    {
+        var get = await Ask("""{"id":1,"type":"persona-get"}""");
+        Assert.True(get.GetProperty("ok").GetBoolean());
+        Assert.Equal(Sahar.Core.Mind.Persona.PersonaFile.Default, get.GetProperty("text").GetString());
+        Assert.Equal(Sahar.Core.Mind.Persona.PersonaFile.Default, get.GetProperty("default").GetString());
+        Assert.False(get.GetProperty("edited").GetBoolean());
+        Assert.Equal(Sahar.Core.Mind.Persona.PersonaFile.MaxChars, get.GetProperty("max").GetInt32());
+
+        var save = await Ask("""{"id":2,"type":"persona-save","text":"إنتِ سَحَر، بتحبي القهوة."}""");
+        Assert.True(save.GetProperty("ok").GetBoolean());
+        Assert.True(save.GetProperty("edited").GetBoolean());
+        Assert.Equal("إنتِ سَحَر، بتحبي القهوة.", save.GetProperty("text").GetString());
+        Assert.Equal("إنتِ سَحَر، بتحبي القهوة.\n", File.ReadAllText(PersonaPath));   // beside settings.json, plain UTF-8
+
+        var back = await Ask("""{"id":3,"type":"persona-restore"}""");
+        Assert.True(back.GetProperty("ok").GetBoolean());
+        Assert.False(back.GetProperty("edited").GetBoolean());
+        Assert.Equal(Sahar.Core.Mind.Persona.PersonaFile.Default, back.GetProperty("text").GetString());
+        Assert.False(File.Exists(PersonaPath));
+    }
+
+    [Fact]
+    public async Task Persona_SaveRefusesEmptyAndTooLong_AndBadRequests()
+    {
+        var empty = await Ask("""{"id":1,"type":"persona-save","text":"   "}""");
+        Assert.False(empty.GetProperty("ok").GetBoolean());
+        Assert.Equal("empty", empty.GetProperty("error").GetString());
+        var huge = await Ask($$"""{"id":2,"type":"persona-save","text":"{{new string('x', Sahar.Core.Mind.Persona.PersonaFile.MaxChars + 1)}}"}""");
+        Assert.Equal("too-long", huge.GetProperty("error").GetString());
+        var none = await Ask("""{"id":3,"type":"persona-save"}""");
+        Assert.Equal("bad-request", none.GetProperty("error").GetString());
+        Assert.False(File.Exists(PersonaPath));
     }
 }

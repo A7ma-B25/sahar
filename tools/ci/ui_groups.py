@@ -7,6 +7,7 @@ Groups are balanced from the stage times of run 42868496323 (seconds): motion 28
 | mind (0.14, new: her brain with a tiny pinned model; its own job)
 | look (0.16, new: every new surface in light and dark, with screenshots; its own job)
 | bubble (0.16, new: her speech bubble in light and dark, ~60 s; its own job).
+0.16: persona («شخصية سحر» page) joins settings; quranbar (the native Quran bar, light and dark) joins activities.
 """
 import json
 import sys
@@ -16,8 +17,8 @@ GROUPS = [
     ("life", ["smoke", "idle", "gallery", "life", "face"]),
     ("menu", ["events", "menu", "prayer", "install"]),
     ("senses", ["perf", "senses", "games", "shell", "diag"]),
-    ("settings", ["settings"]),
-    ("activities", ["activities"]),
+    ("settings", ["settings", "persona"]),
+    ("activities", ["activities", "quranbar"]),
     ("mind", ["mind"]),
     ("look", ["look"]),
     ("bubble", ["bubble"]),

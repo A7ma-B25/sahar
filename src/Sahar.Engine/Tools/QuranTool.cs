@@ -3,9 +3,8 @@ using Sahar.Core.Settings;
 using Sahar.Engine.Diagnostics;
 using Sahar.Engine.Senses;
 using Sahar.Engine.Surfaces;
-using Windows.Media.Core;
-using Windows.Media.Playback;
 using Windows.System;
+using Sahar.Core.Quran;
 using Q = Sahar.Core.Quran.Quran;
 
 namespace Sahar.Engine.Tools;
@@ -14,6 +13,9 @@ namespace Sahar.Engine.Tools;
 /// القرآن (spec §7.1): pick a surah (the last one first) and a reciter; it streams from the islamic.network CDN.
 /// Any playing music is paused first; while it plays she is quiet and still with the quran face. The end of the
 /// surah, a stop or an error (a gentle line, no retry) bring her back.
+/// 0.16 (spec §10; owner rulings 5, 7): pause and go on, ±10 s and seek, the surah before and after, and where he
+/// stopped (<see cref="QuranResume"/>: kept on pause, stop, every 15 s and at her exit; used when he asks to go on).
+/// Logs the surah number, the reciter id and seconds only.
 /// </summary>
 internal sealed class QuranTool : IDisposable
 {
@@ -30,6 +32,8 @@ internal sealed class QuranTool : IDisposable
     private readonly DispatcherQueueTimer _openTimeout;
     private IRecitation? _player;
     private int _generation;
+    private readonly DispatcherQueueTimer _keep;
+    private bool _resumeWanted;
 
     public QuranTool(DispatcherQueue ui, Panel panel, Func<RectF> body, Media media, Action<string> say,
         Func<SaharSettings> get, Action<Func<SaharSettings, SaharSettings>> set, string? baseUrl)
@@ -40,16 +44,40 @@ internal sealed class QuranTool : IDisposable
         _openTimeout.IsRepeating = false;
         _openTimeout.Interval = TimeSpan.FromSeconds(15);
         _openTimeout.Tick += (_, _) => Safe(() => { if (State == "opening") Fail("timed out"); });
+        // Where he is, every 15 s while it plays (ruling 5): a crash or a power cut loses 15 s at most.
+        _keep = ui.CreateTimer();
+        _keep.Interval = QuranBar.KeepEvery;
+        _keep.Tick += (_, _) => Safe(() => { if (State == "playing") Keep(); });
     }
 
+    /// <summary>A recitation is on (opening, playing or paused): she is quiet and wears the quran face.</summary>
     public bool Playing { get; private set; }
     public int Surah { get; private set; }
-    /// <summary>idle, opening, playing, ended, stopped or failed.</summary>
+    public string Reciter { get; private set; } = Q.Reciters[0].Id;
+    /// <summary>idle, opening, playing, paused, ended, stopped or failed.</summary>
     public string State { get; private set; } = "idle";
     public event Action<bool>? PlayingChanged;
+    /// <summary>Anything the bar shows changed (state, surah, a seek).</summary>
+    public event Action? Changed;
 
-    /// <summary>0.16 (Task 8 wires it): where he stopped in a surah, as the resume row shows it («وقفت عند ١٢:٠٤»).</summary>
-    public Func<int, string?>? ResumeMeta { get; set; }
+    public TimeSpan Position => Try(() => _player?.Position) ?? TimeSpan.Zero;
+    public TimeSpan? Duration => Try(() => _player?.Duration);
+    public bool CanSeek => Try(() => _player?.CanSeek) ?? false;
+
+    public RecitationState Recitation => State switch
+    {
+        "opening" => RecitationState.Opening,
+        "playing" => RecitationState.Playing,
+        "paused" => RecitationState.Paused,
+        "ended" => RecitationState.Ended,
+        "stopped" => RecitationState.Stopped,
+        "failed" => RecitationState.Failed,
+        _ => RecitationState.Idle,
+    };
+
+    /// <summary>What the bar draws.</summary>
+    public QuranBarView View => new(Math.Clamp(Surah, 1, 114), Reciter, Recitation, Position, Duration, CanSeek);
+
 
     /// <summary>«شو بدك تسمع؟» (V15Pickers): the resume row first, then the 114 surahs; search by name or number;
     /// the reciter is a drill in the same panel. Nothing typed or picked is logged beyond the surah number.</summary>
@@ -63,14 +91,14 @@ internal sealed class QuranTool : IDisposable
         var reciter = Valid(s.QuranReciter);
         var rows = new List<PickRow>();
         if (s.QuranLastSurah is int last and >= 1 and <= 114)
-            rows.Add(new PickRow("resume", Address.ToYou("كمّل ") + Q.SurahName(last)) { Meta = ResumeMeta?.Invoke(last), Play = true, Sel = true, Pinned = true, Strong = true });
+            rows.Add(new PickRow("resume", Address.ToYou("كمّل ") + Q.SurahName(last)) { Meta = ResumeMeta(last), Play = true, Sel = true, Pinned = true, Strong = true });
         for (int n = 1; n <= 114; n++) rows.Add(new PickRow(n.ToString(System.Globalization.CultureInfo.InvariantCulture), Q.SurahName(n)) { Num = n, NumText = D(n) });
         return new PanelSpec
         {
             Kind = "list", Name = "surah", Title = Address.ToYou("شو بدك تسمع؟"), Sub = "بصوت " + Q.ReciterName(reciter), SubAction = "reciter",
             Search = Address.ToYou("دوّر على سورة أو رقمها"), EnterHint = Address.ToYou("Enter لتشغّلها"), Rows = rows,
             None = new PickBox("ما لقيت سورة بهالاسم", Address.ToYou("جرّب رقمها، مثلاً ٢٥، أو أول حرفين منها."), "book"),
-            Now = Playing ? (Address.ToYou("عم تسمع ") + Q.SurahName(Surah), Q.ReciterName(reciter), "وقّف") : null,
+            Now = Playing ? (Address.ToYou("عم تسمع ") + Q.SurahName(Surah), Q.ReciterName(reciter), "وقّف") : null, NowPaused = State == "paused",
         };
     }
 
@@ -101,6 +129,10 @@ internal sealed class QuranTool : IDisposable
             case "action" when e.Value == "reciter":
                 _panel.Update(ReciterSpec());
                 break;
+            case "action" when e.Value == "now-pause":
+                Toggle();
+                _panel.Update(SurahSpec());
+                break;
             case "action" when e.Value == "now-stop":
                 Stop();
                 _panel.Update(SurahSpec());
@@ -118,14 +150,22 @@ internal sealed class QuranTool : IDisposable
     private static string Valid(string reciter) => Q.Reciters.Any(r => r.Id == reciter) ? reciter : Q.Reciters[0].Id;
 
     /// <param name="make">Test mode: a stand-in player (CI's Windows Server has no MP3 decoder).</param>
-    public void Play(int surah, string reciter, Func<IRecitation>? make = null)
+    /// <param name="resume">Once it opens, seek to where he stopped in this surah with this reciter (ruling 5). Null (any
+    /// pick of the surah, the picker's resume row included): when a place is kept for it — a surah heard to its end
+    /// keeps none, so it starts again. False: from the start.</param>
+    public void Play(int surah, string reciter, Func<IRecitation>? make = null, bool? resume = null)
     {
+        if (State is "playing" or "paused") Keep();
         StopPlayer();
+        _make = make;
         int gen = ++_generation;
         Surah = surah;
+        Reciter = reciter;
+        _resumeWanted = resume ?? QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, null) is not null;
         State = "opening";
         SetPlaying(true);
-        Log.Write($"quran: play surah {surah} ({reciter})");
+        Log.Write($"quran: play surah {surah} ({reciter}){(_resumeWanted ? " to go on" : "")}");
+        Changed?.Invoke();
         _openTimeout.Stop();
         _openTimeout.Start();
         // Music first: pause whatever plays, then start the recitation.
@@ -145,8 +185,22 @@ internal sealed class QuranTool : IDisposable
             _openTimeout.Stop();
             State = "playing";
             _set(s => s with { QuranLastSurah = surah });
+            if (_resumeWanted && QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, player.Duration) is { } at && player.CanSeek)
+            {
+                player.Seek(at);
+                Log.Write($"quran: on from {(int)at.TotalSeconds} s");
+            }
+            _resumeWanted = false;
+            _keep.Start();
+            Changed?.Invoke();
         }));
-        player.Ended += () => _ui.TryEnqueue(() => Safe(() => { if (gen == _generation) Finish("ended"); }));
+        player.Ended += () => _ui.TryEnqueue(() => Safe(() =>
+        {
+            if (gen != _generation) return;
+            // Heard to the end: nothing to go on from in this surah.
+            if (_get().QuranResume is { } r && r.Surah == surah) _set(s => s with { QuranResume = null });
+            Finish("ended");
+        }));
         player.Failed += why => _ui.TryEnqueue(() => Safe(() => { if (gen == _generation) Fail(why); }));
         _player = player;
         player.Start(Q.Url(reciter, surah, _base));
@@ -163,16 +217,92 @@ internal sealed class QuranTool : IDisposable
     {
         if (!Playing) return;
         Log.Write("quran: stopped");
+        if (State is "playing" or "paused") Keep();
         Finish("stopped");
+    }
+
+    // ---- the bar's controls (0.16) ----
+
+    public void Pause()
+    {
+        if (State != "playing" || _player is null) return;
+        _player.Pause();
+        State = "paused";
+        _keep.Stop();
+        Keep();
+        Log.Write("quran: paused");
+        Changed?.Invoke();
+    }
+
+    public void Resume()
+    {
+        if (State != "paused" || _player is null) return;
+        _player.Resume();
+        State = "playing";
+        _keep.Start();
+        Log.Write("quran: on again");
+        Changed?.Invoke();
+    }
+
+    public void Toggle()
+    {
+        if (State == "playing") Pause(); else Resume();
+    }
+
+    /// <summary>±10 s (or any step), clamped to the surah; nothing when the stream cannot seek.</summary>
+    public void Seek(TimeSpan delta) => SeekTo(QuranBar.Seek(Position, delta, Duration));
+
+    public void SeekTo(TimeSpan to)
+    {
+        if (State is not ("playing" or "paused") || _player is null || !CanSeek) return;
+        _player.Seek(QuranBar.Seek(to, TimeSpan.Zero, Duration));
+        Log.Write($"quran: seek to {(int)Position.TotalSeconds} s");
+        Changed?.Invoke();
+    }
+
+    public void Next()
+    {
+        if (State is "playing" or "paused" && QuranBar.CanNext(Surah)) Play(Surah + 1, Reciter, _make);
+    }
+
+    public void Prev()
+    {
+        if (State is "playing" or "paused" && QuranBar.CanPrev(Surah)) Play(Surah - 1, Reciter, _make);
+    }
+
+    /// <summary>«جرّب كمان مرة» after a failure: the same surah, on from where he was.</summary>
+    public void Retry()
+    {
+        if (State == "failed" && Surah is >= 1 and <= 114) Play(Surah, Reciter, _make, resume: true);
+    }
+
+    private Func<IRecitation>? _make;
+
+    /// <summary>SEAM with the look stream's surah picker: its resume row's meta for a surah («وقفت عند ١٢:٠٤»), or null.
+    /// (If feat/0.16-look declares this property too, keep one declaration.)</summary>
+    public Func<int, string?> ResumeMeta { get; set; } = _ => null;
+
+    /// <summary>«وقفت عند ١٢:٠٤» when a place is kept for this surah with the chosen reciter.</summary>
+    public string? ResumeLine(int surah) => QuranBar.ResumeLine(_get().QuranResume, surah, Valid(_get().QuranReciter));
+
+    /// <summary>Where he is now, kept for «كمّل» (nothing in the first seconds).</summary>
+    private void Keep()
+    {
+        if (_player is null || Surah is < 1 or > 114) return;
+        var keep = QuranBar.Keep(Surah, Reciter, Position);
+        if (keep is null || keep == _get().QuranResume) return;
+        _set(s => s with { QuranResume = keep });
     }
 
     private void Finish(string state)
     {
         _openTimeout.Stop();
+        _keep.Stop();
         _generation++;
         StopPlayer();
         State = state;
         SetPlaying(false);
+        Changed?.Invoke();
     }
 
     private void StopPlayer()
@@ -191,7 +321,14 @@ internal sealed class QuranTool : IDisposable
         PlayingChanged?.Invoke(on);
     }
 
-    public string Describe() => $"playing={(Playing ? "true" : "false")} surah={Surah} state={State}";
+    public string Describe() => FormattableString.Invariant(
+        $"playing={(Playing ? "true" : "false")} surah={Surah} state={State} reciter={Reciter} position={Position.TotalSeconds:0.0} duration={Duration?.TotalSeconds ?? -1:0.0} canSeek={(CanSeek ? "true" : "false")} resume={_get().QuranResume?.Surah ?? 0}:{_get().QuranResume?.Seconds ?? 0}");
+
+    private static T? Try<T>(Func<T?> read) where T : struct
+    {
+        try { return read(); }
+        catch (Exception) { return null; }
+    }
 
     private static void Safe(Action a)
     {
@@ -202,73 +339,10 @@ internal sealed class QuranTool : IDisposable
     public void Dispose()
     {
         _openTimeout.Stop();
+        _keep.Stop();
+        // Her exit is the end of the session: where he was is kept (ruling 5).
+        try { if (State is "playing" or "paused") Keep(); }
+        catch (Exception e) { Log.Write($"quran: keep failed ({e.GetType().Name})"); }
         StopPlayer();
-    }
-}
-
-/// <summary>One surah playing: opened, ended or failed (raised on any thread).</summary>
-internal interface IRecitation : IDisposable
-{
-    event Action? Opened;
-    event Action? Ended;
-    event Action<string>? Failed;
-    void Start(Uri url);
-}
-
-/// <summary>Windows' MediaPlayer, kept out of Windows' media controls (her own music sense would see it and dance).</summary>
-internal sealed class MediaRecitation : IRecitation
-{
-    private readonly MediaPlayer _player = new() { AutoPlay = true, Volume = 1.0 };
-
-    public MediaRecitation()
-    {
-        _player.CommandManager.IsEnabled = false;
-        _player.MediaOpened += (_, _) => Opened?.Invoke();
-        _player.MediaEnded += (_, _) => Ended?.Invoke();
-        _player.MediaFailed += (_, e) => Failed?.Invoke(e.Error.ToString());
-    }
-
-    public event Action? Opened;
-    public event Action? Ended;
-    public event Action<string>? Failed;
-
-    public void Start(Uri url) => _player.Source = MediaSource.CreateFromUri(url);
-
-    public void Dispose()
-    {
-        _player.Pause();
-        _player.Source = null;
-        _player.Dispose();
-    }
-}
-
-/// <summary>Test mode: "plays" for a set time, so CI (no MP3 decoder on Windows Server) can check her behaviour.</summary>
-internal sealed class FakeRecitation(DispatcherQueue ui, TimeSpan length) : IRecitation
-{
-    private DispatcherQueueTimer? _open, _end;
-
-    public event Action? Opened;
-    public event Action? Ended;
-    /// <summary>A stand-in never fails; the network failure is tested with the real player.</summary>
-    public event Action<string>? Failed { add { } remove { } }
-
-    public void Start(Uri url)
-    {
-        _open = ui.CreateTimer();
-        _open.IsRepeating = false;
-        _open.Interval = TimeSpan.FromMilliseconds(300);
-        _open.Tick += (_, _) => Opened?.Invoke();
-        _open.Start();
-        _end = ui.CreateTimer();
-        _end.IsRepeating = false;
-        _end.Interval = length;
-        _end.Tick += (_, _) => Ended?.Invoke();
-        _end.Start();
-    }
-
-    public void Dispose()
-    {
-        _open?.Stop();
-        _end?.Stop();
     }
 }

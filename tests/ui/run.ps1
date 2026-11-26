@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'look', 'diag', 'bubble', 'mindeval')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'look', 'diag', 'bubble', 'persona', 'quranbar', 'mindeval')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -4019,7 +4019,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; persona = 'شخصية سحر'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
@@ -4223,7 +4223,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 12) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four
+        if ($n -ne 13) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four; 0.16: «شخصية سحر»
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
@@ -5257,6 +5257,305 @@ function Stage-Bubble {
         if ($log -notmatch 'bubble: say \(1 lines') { throw 'the log has no bubble line' }
     }
     Stop-Engine   # the next stage starts its own
+# ---- 0.16 «شخصية سحر» (owner ruling 8): her persona file, edited from the settings app, and restored ----
+function Stage-Persona {
+    $kept = Settings-Json
+    $personaFile = Join-Path (Split-Path $script:SettingsFile) 'persona.md'
+    Remove-Item $personaFile -ErrorAction SilentlyContinue
+    try {
+        Step 'persona: the page shows her default persona, original, restore off' {
+            Write-Settings '{ "helloDone": true }'
+            Start-SettingsApp | Out-Null
+            [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)
+            SNav 'persona'
+            Start-Sleep -Milliseconds 600
+            $st = SKv 'state'
+            if ((Text64 $st.h1_64) -ne 'شخصية سحر') { throw "h1: $(Text64 $st.h1_64)" }
+            $text = Js "document.getElementById('persona-text').value"
+            if ($text -notmatch 'سَحَر' -or $text -notmatch '\{بدو\|بدها\}') { throw "the default persona is not shown: $($text.Substring(0, [math]::Min(60, $text.Length)))" }
+            if ((SText '#persona-state') -ne 'الأصلية') { throw "state chip: $(SText '#persona-state')" }
+            if (-not (Js "document.getElementById('persona-restore').disabled")) { throw 'restore is on with nothing to restore' }
+            if ((SText '#persona-restore') -ne 'رجّعها متل ما كانت') { throw "restore label: $(SText '#persona-restore')" }
+            $rules = [int](Js "document.querySelectorAll('.m-item').length")
+            if ($rules -ne 4) { throw "fixed rules shown: $rules" }
+            if (Test-Path $personaFile) { throw 'a persona file exists before any edit' }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+                Start-Sleep -Milliseconds 500
+                Capture "app-persona-$theme"
+            }
+            SOk 'emulate' '{"theme":""}'
+        }
+        Step 'persona: his text is saved beside settings.json, and the page says so' {
+            SClear '#persona-text'
+            SType '#persona-text' "إنتِ سَحَر، بتحبي النكت والقهوة 😄`nبتحكي شامي، وبتضحّكي {ياه|ياها}."
+            SClick '#persona-save'
+            Wait-Until { Test-Path $personaFile } 3000 'persona.md written'
+            $saved = Get-Content $personaFile -Raw -Encoding UTF8
+            if ($saved -notmatch 'النكت والقهوة' -or $saved -notmatch '\{ياه\|ياها\}') { throw "file: $saved" }
+            Wait-Until { (SText '#persona-status') -match 'انحفظت' } 2000 'the saved line'
+            if ((SText '#persona-state') -ne 'معدّلة') { throw "state chip: $(SText '#persona-state')" }
+            # A fresh page reads the file back (no cached copy).
+            Stop-SettingsApp
+            Start-SettingsApp | Out-Null
+            SNav 'persona'
+            Start-Sleep -Milliseconds 500
+            if ((Js "document.getElementById('persona-text').value") -notmatch 'النكت والقهوة') { throw 'the page did not read his file back' }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+                Start-Sleep -Milliseconds 500
+                Capture "app-persona-edited-$theme"
+            }
+            SOk 'emulate' '{"theme":""}'
+        }
+        Step 'persona: an empty persona is refused, his file stays' {
+            SClear '#persona-text'
+            SType '#persona-text' '   '
+            SClick '#persona-save'
+            Wait-Until { (SText '#persona-status') -match 'فاضية' } 2000 'the empty line'
+            if ((Get-Content $personaFile -Raw -Encoding UTF8) -notmatch 'النكت والقهوة') { throw 'his file changed on an empty save' }
+        }
+        Step 'persona: «رجّعها متل ما كانت» asks first, then his file goes and the default is back' {
+            SNav 'general'
+            SNav 'persona'
+            Start-Sleep -Milliseconds 400
+            SClick '#persona-restore'
+            Wait-Until { Js "!!document.getElementById('persona-ask')" } 2000 'the «أكيد؟» question'
+            $focus = Text64 (SKv 'state').focus64
+            if ($focus -ne 'persona-restore-no') { throw "focus on the question: $focus" }
+            SOk 'emulate' '{"theme":"light"}'
+            Start-Sleep -Milliseconds 400
+            Capture 'app-persona-restore-ask-light'
+            SOk 'emulate' '{"theme":""}'
+            SClick '#persona-restore-no'
+            Start-Sleep -Milliseconds 300
+            if (-not (Test-Path $personaFile)) { throw '«لا» removed his file' }
+            SClick '#persona-restore'
+            Wait-Until { Js "!!document.getElementById('persona-restore-yes')" } 2000 'the yes button'
+            SClick '#persona-restore-yes'
+            Wait-Until { -not (Test-Path $personaFile) } 3000 'persona.md removed'
+            Wait-Until { (SText '#persona-status') -match 'رجعت' } 2000 'the restored line'
+            if ((SText '#persona-state') -ne 'الأصلية') { throw "state chip: $(SText '#persona-state')" }
+            if ((Js "document.getElementById('persona-text').value") -notmatch '\{بدو\|بدها\}') { throw 'the default is not back in the editor' }
+        }
+        Step 'persona: English is a mirror' {
+            Stop-SettingsApp
+            Write-Settings '{ "helloDone": true, "language": "english" }'
+            Start-SettingsApp | Out-Null
+            SNav 'persona'
+            Start-Sleep -Milliseconds 500
+            if ((Text64 (SKv 'state').h1_64) -ne "Sahar's personality") { throw "h1: $(Text64 (SKv 'state').h1_64)" }
+            if ((SText '#persona-restore') -ne 'Bring back the original') { throw "restore: $(SText '#persona-restore')" }
+            Capture 'app-persona-en'
+        }
+    }
+    finally {
+        Stop-SettingsApp
+        Remove-Item $personaFile -ErrorAction SilentlyContinue
+        if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
+    }
+}
+
+# ---- 0.16 the Quran bar (spec §10; owner rulings 5 and 7): the tag, the bar in light and dark, every control, resume ----
+function QBar([string]$argsJson = '{}') { Kva 'quran-bar' $argsJson }
+function QWait([string]$state, [int]$ms) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    do { $q = Kv 'debug-quran'; if ($q.state -eq $state) { return $q }; Start-Sleep -Milliseconds 150 } while ((Get-Date) -lt $deadline)
+    throw "quran: state $($q.state), want $state"
+}
+function QButton($b, [string]$id) { ($b.buttons -split ';' | Where-Object { $_ -like "${id}:*" }) -replace '^[^:]+:', '' }
+function Near-Colour($p, [string]$hex, [int]$tol, [string]$what) {
+    $want = [System.Drawing.ColorTranslator]::FromHtml($hex)
+    $d = [math]::Abs($p.R - $want.R) + [math]::Abs($p.G - $want.G) + [math]::Abs($p.B - $want.B)
+    Write-Host "    $what pixel $($p.R),$($p.G),$($p.B) vs $hex (diff $d)"
+    if ($d -gt $tol) { throw "${what}: $($p.R),$($p.G),$($p.B) is not $hex" }
+}
+function Shot-Bar([string]$name) {
+    $b = QBar
+    $r = Rect4 $b.bar
+    $st = State
+    $shot = Screenshot "$name-screen.png"
+    $top = [math]::Min([int]$st.y - 10, $r.y - 30)
+    Crop-Rect $shot ($r.x - 40) $top ($r.w + 80) ($r.y + $r.h + 56 - $top) (Join-Path $Out "$name.png")
+    $shot
+}
+
+function Stage-QuranBar {
+    $accent = @{ light = '#5B47C4'; dark = '#B6A9FF' }
+    $sunken = @{ light = '#ECEAF2'; dark = '#1C1A20' }
+    foreach ($theme in @('light', 'dark')) {
+        Step "the Quran tag and the bar: playing, paused, opening, failed ($theme)" {
+            Stop-Engine
+            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '" }')
+            $script:qWin = Start-TestWindow "scene-$theme"
+            Start-Engine @('--quran-base', 'http://127.0.0.1:9/')
+            Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+            Pose-Body ([int]($Work.Width * 0.5)) ([int]($Work.Height * 0.2)) | Out-Null
+            [Mouse]::Move(5, 5)
+            $dpi = [double](Info).dpi
+            # Al-Kahf by the stand-in player, 43:10 long (as the board).
+            Send '{"type":"cmd","name":"quran-play","args":{"surah":"18","reciter":"ar.alafasy","fake":"2590"}}' | Out-Null
+            QWait 'playing' 4000 | Out-Null
+            Start-Sleep -Milliseconds 1200
+            $a = Acts
+            if ($a.front -ne 'Quran' -or $a.tagShown -ne 'true') { throw "the Quran tag: front=$($a.front) shown=$($a.tagShown)" }
+            $t = Rect4 $a.tag
+            $st = State
+            $shot = Screenshot "quran-tag-$theme-screen.png"
+            Crop-Rect $shot ($t.x - 40) ([int]$st.y - 10) ($t.w + 80) ($t.y + $t.h + 34 - ([int]$st.y - 10)) (Join-Path $Out "app-quran-tag-$theme.png")
+            # Open it, as a click on the tag does; the tag hides while the bar shows.
+            $b = QBar '{"op":"open"}'
+            Start-Sleep -Milliseconds 500
+            $b = QBar '{"op":"press","id":"Track","fill":"0.2795"}'   # 12:04 of 43:10
+            Start-Sleep -Milliseconds 300
+            $b = QBar
+            if ($b.open -ne 'true' -or $b.shown -ne 'true' -or $b.state -ne 'Playing') { throw "bar: open=$($b.open) shown=$($b.shown) state=$($b.state)" }
+            if ((Acts).tagShown -ne 'false') { throw 'the tag stayed under the open bar' }
+            $q = Kv 'debug-quran'
+            if ([math]::Abs([double]$q.position - 724) -gt 3) { throw "seek on the track: $($q.position) s, want 724" }
+            $r = Rect4 $b.bar
+            if ([math]::Abs($r.w - 340 * $dpi) -gt 2 -or [math]::Abs($r.h - 154 * $dpi) -gt 2) { throw "bar size $($b.bar) at dpi $dpi" }
+            if ($r.y -lt [int]$st.y) { throw "the bar is above her ($($b.bar))" }
+            if ($r.x -lt $Work.Left -or $r.x + $r.w -gt $Work.Right -or $r.y + $r.h -gt $Work.Bottom) { throw "the bar $($b.bar) leaves the work area" }
+            QBar '{"op":"hover","id":"none"}' | Out-Null
+            Start-Sleep -Milliseconds 300
+            $shot = Shot-Bar "app-quran-bar-playing-$theme"
+            # RTL: the fill grows from the right edge of the track (x 60..280 DIP, y 72).
+            $y = [int]($r.y + 72 * $dpi)
+            Near-Colour (Pixel $shot ([int]($r.x + 255 * $dpi)) $y) $accent[$theme] 60 'filled (right) track'
+            Near-Colour (Pixel $shot ([int]($r.x + 100 * $dpi)) $y) $sunken[$theme] 60 'empty (left) track'
+            Assert-NoCover "quran bar ($theme)"
+            # Paused: «كمّل», «· واقفة», and where he is is kept (ruling 5).
+            QBar '{"op":"press","id":"Toggle"}' | Out-Null
+            $q = QWait 'paused' 2000
+            Start-Sleep -Milliseconds 300
+            Shot-Bar "app-quran-bar-paused-$theme" | Out-Null
+            if ($q.resume -notmatch '^18:72\d$') { throw "resume kept on pause: $($q.resume)" }
+            $s = Setting 'quranResume'
+            if ($s.surah -ne 18 -or $s.reciter -ne 'ar.alafasy' -or [math]::Abs($s.seconds - 724) -gt 3) { throw "settings.json quranResume: $($s | ConvertTo-Json -Compress)" }
+            # Opening: the controls are faint and the times dashes.
+            Send '{"type":"cmd","name":"quran-play","args":{"surah":"18","reciter":"ar.alafasy","fake":"2590","openms":"8000"}}' | Out-Null
+            QWait 'opening' 2000 | Out-Null
+            $b = QBar '{"op":"open"}'
+            Start-Sleep -Milliseconds 500
+            $b = QBar
+            if ($b.state -ne 'Opening' -or (QButton $b 'Toggle') -notlike '*:off') { throw "opening: state=$($b.state) toggle=$(QButton $b 'Toggle')" }
+            Shot-Bar "app-quran-bar-opening-$theme" | Out-Null
+            # Failed (no network): her line, «جرّب كمان مرة» and «سكّر»; the bar stays open for them.
+            Send '{"type":"cmd","name":"quran-play","args":{"surah":"18","reciter":"ar.alafasy"}}' | Out-Null
+            QWait 'failed' 25000 | Out-Null
+            Start-Sleep -Milliseconds 500
+            $b = QBar
+            if ($b.open -ne 'true' -or $b.state -ne 'Failed') { throw "failed: open=$($b.open) state=$($b.state)" }
+            if ((QButton $b 'Retry') -notlike '*:on' -or (QButton $b 'Dismiss') -notlike '*:on') { throw "failed buttons: $($b.buttons)" }
+            if ([math]::Abs((Rect4 $b.bar).h - 142 * $dpi) -gt 2) { throw "failed bar height $($b.bar)" }
+            Shot-Bar "app-quran-bar-failed-$theme" | Out-Null
+            QBar '{"op":"press","id":"Dismiss"}' | Out-Null
+            Start-Sleep -Milliseconds 400
+            if ((QBar).open -ne 'false') { throw '«سكّر» did not close the bar' }
+            Stop-Process -Id $script:qWin.Id -ErrorAction SilentlyContinue
+        }
+    }
+    Step 'the controls: ±10 s clamps, the keys follow the screen, surahs step and stop at the ends' {
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"112","reciter":"ar.alafasy","fake":"120"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        QBar '{"op":"open"}' | Out-Null
+        QBar '{"op":"press","id":"Back10"}' | Out-Null
+        if ([double](Kv 'debug-quran').position -gt 1.5) { throw "back 10 s from the start did not clamp at 0: $((Kv 'debug-quran').position)" }
+        QBar '{"op":"press","id":"Forward10"}' | Out-Null
+        $p = [double](Kv 'debug-quran').position
+        if ($p -lt 9.5 -or $p -gt 12) { throw "forward 10 s: $p" }
+        QBar '{"op":"key","vk":"37"}' | Out-Null   # ← is forward in RTL
+        $p2 = [double](Kv 'debug-quran').position
+        if ($p2 - $p -lt 9.5 -or $p2 - $p -gt 11.5) { throw "← moved $($p2 - $p) s, want +10" }
+        QBar '{"op":"key","vk":"39"}' | Out-Null   # → is back
+        $p3 = [double](Kv 'debug-quran').position
+        if ($p2 - $p3 -lt 8.5 -or $p2 - $p3 -gt 10.5) { throw "→ moved $($p3 - $p2) s, want -10" }
+        QBar '{"op":"press","id":"Track","fill":"0.995"}' | Out-Null
+        QBar '{"op":"press","id":"Forward10"}' | Out-Null   # past the end: clamped, then it ends by itself
+        QWait 'ended' 3000 | Out-Null
+        Start-Sleep -Milliseconds 400
+        if ((QBar).open -ne 'false') { throw 'the bar stayed after the surah ended' }
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"113","reciter":"ar.alafasy","fake":"120"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        QBar '{"op":"open"}' | Out-Null
+        QBar '{"op":"key","vk":"37","ctrl":"true"}' | Out-Null   # Ctrl+← the next surah
+        $q = QWait 'playing' 4000
+        if ($q.surah -ne '114') { throw "Ctrl+← went to $($q.surah), want 114" }
+        $b = QBar
+        if ((QButton $b 'NextSurah') -notlike '*:off' -or (QButton $b 'PrevSurah') -notlike '*:on') { throw "at 114: $($b.buttons)" }
+        QBar '{"op":"press","id":"NextSurah"}' | Out-Null
+        if ((Kv 'debug-quran').surah -ne '114') { throw 'next surah went past 114' }
+        QBar '{"op":"key","vk":"39","ctrl":"true"}' | Out-Null   # Ctrl+→ the surah before
+        $q = QWait 'playing' 4000
+        if ($q.surah -ne '113') { throw "Ctrl+→ went to $($q.surah), want 113" }
+        QBar '{"op":"key","vk":"32"}' | Out-Null   # Space
+        QWait 'paused' 1000 | Out-Null
+        QBar '{"op":"key","vk":"32"}' | Out-Null
+        QWait 'playing' 1000 | Out-Null
+        QBar '{"op":"key","vk":"27"}' | Out-Null   # Esc folds it back into the tag
+        Start-Sleep -Milliseconds 400
+        if ((QBar).open -ne 'false') { throw 'Esc did not fold the bar' }
+        if ((Kv 'debug-quran').state -ne 'playing') { throw 'Esc stopped the recitation' }
+        Wait-Until { (Acts).tagShown -eq 'true' } 2000 'the tag back after the bar folded'
+    }
+    Step 'a stream that cannot seek: ±10 s and the track are off; the bar folds after 6 s idle; × stops' {
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"1","reciter":"ar.alafasy","fake":"60","noseek":"true"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        $b = QBar '{"op":"open"}'
+        foreach ($id in 'Back10', 'Forward10', 'Track', 'PrevSurah') { if ((QButton $b $id) -notlike '*:off') { throw "$id is on: $($b.buttons)" } }
+        if ((QButton $b 'Toggle') -notlike '*:on') { throw 'play/pause is off without seeking' }
+        QBar '{"op":"idle"}' | Out-Null
+        Start-Sleep -Milliseconds 700
+        if ((QBar).open -ne 'false') { throw 'the bar did not fold after 6 s idle' }
+        QBar '{"op":"open"}' | Out-Null
+        QBar '{"op":"press","id":"Close"}' | Out-Null
+        Start-Sleep -Milliseconds 400
+        $q = Kv 'debug-quran'
+        if ($q.playing -ne 'false' -or $q.state -ne 'stopped') { throw "× did not stop: $($q.state)" }
+        if ((QBar).open -ne 'false') { throw '× did not close the bar' }
+        Wait-Until { (Acts).front -ne 'Quran' } 2000 'the Quran tag gone after stop'
+    }
+    Step 'resume (ruling 5): stop keeps the place, «كمّل» starts there, the end forgets it' {
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        QBar '{"op":"open"}' | Out-Null
+        QBar '{"op":"press","id":"Track","fill":"0.5"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran-stop"}}' | Out-Null
+        $q = QWait 'stopped' 2000
+        $s = Setting 'quranResume'
+        if ($s.surah -ne 36 -or $s.reciter -ne 'ar.husary' -or [math]::Abs($s.seconds - 500) -gt 3) { throw "kept on stop: $($s | ConvertTo-Json -Compress)" }
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000","resume":"true"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        Start-Sleep -Milliseconds 300
+        $p = [double](Kv 'debug-quran').position
+        if ([math]::Abs($p - 500) -gt 4) { throw "«كمّل» started at $p s, want 500" }
+        # From the start when asked (resume false), and the place is still there for the next pick.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000","resume":"false"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        if ([double](Kv 'debug-quran').position -gt 3) { throw 'resume false did not start from the beginning' }
+        if ((Setting 'quranResume').seconds -lt 495) { throw "the kept place moved: $((Setting 'quranResume') | ConvertTo-Json -Compress)" }
+        # A plain pick of the surah (the picker's rows, resume not given) goes on from his place too.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ([math]::Abs([double](Kv 'debug-quran').position - 500) -gt 4) { throw "a plain pick did not go on from 500 s: $((Kv 'debug-quran').position)" }
+        # Another reciter does not take his place.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.alafasy","fake":"1000","resume":"true"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        if ([double](Kv 'debug-quran').position -gt 3) { throw 'another reciter resumed his place' }
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"20","resume":"true"}}' | Out-Null
+        QWait 'ended' 30000 | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Setting 'quranResume') -and (Setting 'quranResume').surah -eq 36) { throw 'the place stayed after the surah ended' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        foreach ($word in 'الكهف', 'يس', 'الحصري', 'العفاسي') { if ($log -match [regex]::Escape($word)) { throw "the log names '$word'" } }
+    }
+    Stop-Engine
 }
 
 try {
@@ -5284,6 +5583,8 @@ try {
             'diag' { Stage-Diag }
             'mindeval' { Stage-MindEval }
             'bubble' { Stage-Bubble }
+            'persona' { Stage-Persona }
+            'quranbar' { Stage-QuranBar }
         }
     }
 }

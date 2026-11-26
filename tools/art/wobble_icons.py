@@ -9,6 +9,7 @@ corners stay corners). Circles become closed paths so they wobble too.
 
 Usage: python3 -I tools/art/wobble_icons.py               → prints the C# dictionary body for MenuIcons.cs
        python3 -I tools/art/wobble_icons.py --activities  → the same for ActivityIcons.cs (0.13, from ActTag/ActCard)
+       python3 -I tools/art/wobble_icons.py --quran       → the same for QuranIcons.cs (0.16, from V15QuranBar)
 No dependencies.
 """
 import math
@@ -70,6 +71,21 @@ ACT_ICONS = {
     "snow": (["M12 3.8v16.4M4.9 7.9l14.2 8.2M19.1 7.9 4.9 16.1"], []),
     "leaf": (["M12 19.5c-4.2-1.6-6.4-5.6-5.6-10.2 2.2.6 4.4 1.6 5.6 3.6 1.2-2 3.4-3 5.6-3.6.8 4.6-1.4 8.6-5.6 10.2zM12 19.5V22"], []),
     "file": (["M6.2 3.6h8.4l3.4 3.4v13.4H6.2z"], []),
+    "book": (["M12 6.4c-1.8-1.3-4.4-1.8-7.4-1.6v12.8c3-.2 5.6.3 7.4 1.6 1.8-1.3 4.4-1.8 7.4-1.6V4.8c-3-.2-5.6.3-7.4 1.6zM12 6.4v12.8"], []),   # 0.16: the Quran tag (V15Tag)
+}
+
+
+# The Quran bar's clean icons (0.16, copied from V15QuranBar.dc.html; same filter). RTL: "back" points right, "forward"
+# and the play triangle point left (spec §10.3, decided).
+QURAN_ICONS = {
+    "book": (["M12 6.4c-1.8-1.3-4.4-1.8-7.4-1.6v12.8c3-.2 5.6.3 7.4 1.6 1.8-1.3 4.4-1.8 7.4-1.6V4.8c-3-.2-5.6.3-7.4 1.6zM12 6.4v12.8"], []),
+    "close": (["M7 7l10 10M17 7 7 17"], []),
+    "prevSurah": (["M7.4 6.6v10.8l7.8-5.4zM17 6v12"], []),
+    "back10": (["M6.5 7.5l4.5 4.5-4.5 4.5M12.5 7.5l4.5 4.5-4.5 4.5"], []),
+    "playLeft": (["M15.4 6.4v11.2c0 .5-.5.8-.9.5l-8.3-5.6c-.4-.3-.4-.8 0-1.1l8.3-5.5c.4-.3.9 0 .9.5z"], []),
+    "pause": (["M9 6.2v11.6M15 6.2v11.6"], []),
+    "forward10": (["M17.5 7.5 13 12l4.5 4.5M11.5 7.5 7 12l4.5 4.5"], []),
+    "nextSurah": (["M16.6 6.6v10.8L8.8 12zM7 6v12"], []),
 }
 
 
@@ -214,7 +230,8 @@ def bake(subs):
 
 def main():
     lines = []
-    for key, (paths, circles) in (ACT_ICONS if "--activities" in sys.argv else ICONS).items():
+    table = QURAN_ICONS if "--quran" in sys.argv else ACT_ICONS if "--activities" in sys.argv else ICONS
+    for key, (paths, circles) in table.items():
         baked = [bake(segments(p)) for p in paths] + [bake(circle(*c)) for c in circles]
         body = ", ".join(f'"{b}"' for b in baked)
         lines.append(f'        ["{key}"] = new MenuIcon([{body}], []),')

@@ -25,6 +25,8 @@ internal sealed class MenuCatcher : IWindowHandler
     /// <summary>Another app became active: close without taking the focus back from it.</summary>
     public Action? Deactivated { get; set; }
     public Action<MenuKey>? KeyPressed { get; set; }
+    /// <summary>0.16 (the Quran bar): any key first, with Ctrl held; true when it was taken.</summary>
+    public Func<int, bool, bool>? RawKey { get; set; }
     /// <summary>Windows that may take the focus without closing the menu (the chat field's popup and edit).</summary>
     public HashSet<nint> AllowedFocus { get; } = [];
 
@@ -99,6 +101,8 @@ internal sealed class MenuCatcher : IWindowHandler
                 return 0;
             case Native.WM_MOUSEMOVE:
                 Moved?.Invoke(Screen(lParam));
+                return 0;
+            case Native.WM_KEYDOWN when RawKey is { } raw && raw((int)wParam, Native.GetKeyState(0x11) < 0):
                 return 0;
             case Native.WM_KEYDOWN when Key((int)wParam) is { } key:
                 if (KeyPressed is { } k) k(key);
