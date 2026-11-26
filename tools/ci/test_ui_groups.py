@@ -7,8 +7,8 @@ class UiGroupsTests(unittest.TestCase):
     def test_all_is_seven_groups_covering_every_stage_once(self):
         groups = plan("all")
         self.assertEqual(7, len(groups))
-        self.assertIn({"name": "settings", "stages": "settings"}, groups)   # 0.12: the settings app has its own job
-        self.assertIn({"name": "activities", "stages": "activities"}, groups)   # 0.13: so do the activities
+        self.assertIn({"name": "settings", "stages": "settings,persona"}, groups)   # 0.12: the settings app has its own job (0.16: + «شخصية سحر»)
+        self.assertIn({"name": "activities", "stages": "activities,quranbar"}, groups)   # 0.13: so do the activities (0.16: + the Quran bar)
         self.assertIn({"name": "mind", "stages": "mind"}, groups)   # 0.14: and her brain (a tiny model on the CPU)
         stages = [s for g in groups for s in g["stages"].split(",")]
         self.assertEqual(sorted(ALL), sorted(stages))

@@ -5,6 +5,7 @@ Groups are balanced from the stage times of run 42868496323 (seconds): motion 28
 | settings (0.12, new: the settings app and the engine applying settings live, its own job)
 | activities (0.13, new: every tag and card in light and dark, the knock, Claude Code's hooks; its own job)
 | mind (0.14, new: her brain with a tiny pinned model; its own job).
+0.16: persona («شخصية سحر» page) joins settings; quranbar (the native Quran bar, light and dark) joins activities.
 """
 import json
 import sys
@@ -14,8 +15,8 @@ GROUPS = [
     ("life", ["smoke", "idle", "gallery", "life", "face"]),
     ("menu", ["events", "menu", "prayer", "install"]),
     ("senses", ["perf", "senses", "games", "shell"]),
-    ("settings", ["settings"]),
-    ("activities", ["activities"]),
+    ("settings", ["settings", "persona"]),
+    ("activities", ["activities", "quranbar"]),
     ("mind", ["mind"]),
 ]
 ALL = [s for _, stages in GROUPS for s in stages]

@@ -1,0 +1,15 @@
+/* 0.16 «شخصية سحر»: the editor card and the restore question, on the Porcelain tokens only (shared parts in mind.css). */
+.ps-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ps-area {
+  inline-size: 100%; block-size: auto; min-block-size: 260px; padding: 12px 14px; resize: vertical;
+  font-size: 15px; line-height: 1.8; white-space: pre-wrap;
+}
+.ps-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ps-over { color: var(--error); }
+.ps-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ps-actions .ghost[disabled] { color: var(--text-3); cursor: default; background: transparent; }
+.ps-ask { padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); display: flex; flex-direction: column; gap: 8px; }
+.ps-ask .desc { color: var(--accent-ink); }
+.ps-status { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.ps-status:empty { display: none; }
+.ps-status.error { color: var(--error); }

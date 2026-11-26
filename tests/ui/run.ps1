@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval', 'persona', 'quranbar')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -3981,7 +3981,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; persona = 'شخصية سحر'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
@@ -4930,6 +4930,107 @@ function Stage-Install {
     if (Test-Path $backup) { Copy-Item $backup $settingsPath -Force } else { Remove-Item $settingsPath -ErrorAction SilentlyContinue }
 }
 
+# ---- 0.16 «شخصية سحر» (owner ruling 8): her persona file, edited from the settings app, and restored ----
+function Stage-Persona {
+    $kept = Settings-Json
+    $personaFile = Join-Path (Split-Path $script:SettingsFile) 'persona.md'
+    Remove-Item $personaFile -ErrorAction SilentlyContinue
+    try {
+        Step 'persona: the page shows her default persona, original, restore off' {
+            Write-Settings '{ "helloDone": true }'
+            Start-SettingsApp | Out-Null
+            [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)
+            SNav 'persona'
+            Start-Sleep -Milliseconds 600
+            $st = SKv 'state'
+            if ((Text64 $st.h1_64) -ne 'شخصية سحر') { throw "h1: $(Text64 $st.h1_64)" }
+            $text = Js "document.getElementById('persona-text').value"
+            if ($text -notmatch 'سَحَر' -or $text -notmatch '\{بدو\|بدها\}') { throw "the default persona is not shown: $($text.Substring(0, [math]::Min(60, $text.Length)))" }
+            if ((SText '#persona-state') -ne 'الأصلية') { throw "state chip: $(SText '#persona-state')" }
+            if (-not (Js "document.getElementById('persona-restore').disabled")) { throw 'restore is on with nothing to restore' }
+            if ((SText '#persona-restore') -ne 'رجّعها متل ما كانت') { throw "restore label: $(SText '#persona-restore')" }
+            $rules = [int](Js "document.querySelectorAll('.m-item').length")
+            if ($rules -ne 4) { throw "fixed rules shown: $rules" }
+            if (Test-Path $personaFile) { throw 'a persona file exists before any edit' }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+                Start-Sleep -Milliseconds 500
+                Capture "app-persona-$theme"
+            }
+            SOk 'emulate' '{"theme":""}'
+        }
+        Step 'persona: his text is saved beside settings.json, and the page says so' {
+            SClear '#persona-text'
+            SType '#persona-text' "إنتِ سَحَر، بتحبي النكت والقهوة 😄`nبتحكي شامي، وبتضحّكي {ياه|ياها}."
+            SClick '#persona-save'
+            Wait-Until { Test-Path $personaFile } 3000 'persona.md written'
+            $saved = Get-Content $personaFile -Raw -Encoding UTF8
+            if ($saved -notmatch 'النكت والقهوة' -or $saved -notmatch '\{ياه\|ياها\}') { throw "file: $saved" }
+            Wait-Until { (SText '#persona-status') -match 'انحفظت' } 2000 'the saved line'
+            if ((SText '#persona-state') -ne 'معدّلة') { throw "state chip: $(SText '#persona-state')" }
+            # A fresh page reads the file back (no cached copy).
+            Stop-SettingsApp
+            Start-SettingsApp | Out-Null
+            SNav 'persona'
+            Start-Sleep -Milliseconds 500
+            if ((Js "document.getElementById('persona-text').value") -notmatch 'النكت والقهوة') { throw 'the page did not read his file back' }
+            foreach ($theme in 'light', 'dark') {
+                SOk 'emulate' ('{"theme":"' + $theme + '"}')
+                Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+                Start-Sleep -Milliseconds 500
+                Capture "app-persona-edited-$theme"
+            }
+            SOk 'emulate' '{"theme":""}'
+        }
+        Step 'persona: an empty persona is refused, his file stays' {
+            SClear '#persona-text'
+            SType '#persona-text' '   '
+            SClick '#persona-save'
+            Wait-Until { (SText '#persona-status') -match 'فاضية' } 2000 'the empty line'
+            if ((Get-Content $personaFile -Raw -Encoding UTF8) -notmatch 'النكت والقهوة') { throw 'his file changed on an empty save' }
+        }
+        Step 'persona: «رجّعها متل ما كانت» asks first, then his file goes and the default is back' {
+            SNav 'general'
+            SNav 'persona'
+            Start-Sleep -Milliseconds 400
+            SClick '#persona-restore'
+            Wait-Until { Js "!!document.getElementById('persona-ask')" } 2000 'the «أكيد؟» question'
+            $focus = Text64 (SKv 'state').focus64
+            if ($focus -ne 'persona-restore-no') { throw "focus on the question: $focus" }
+            SOk 'emulate' '{"theme":"light"}'
+            Start-Sleep -Milliseconds 400
+            Capture 'app-persona-restore-ask-light'
+            SOk 'emulate' '{"theme":""}'
+            SClick '#persona-restore-no'
+            Start-Sleep -Milliseconds 300
+            if (-not (Test-Path $personaFile)) { throw '«لا» removed his file' }
+            SClick '#persona-restore'
+            Wait-Until { Js "!!document.getElementById('persona-restore-yes')" } 2000 'the yes button'
+            SClick '#persona-restore-yes'
+            Wait-Until { -not (Test-Path $personaFile) } 3000 'persona.md removed'
+            Wait-Until { (SText '#persona-status') -match 'رجعت' } 2000 'the restored line'
+            if ((SText '#persona-state') -ne 'الأصلية') { throw "state chip: $(SText '#persona-state')" }
+            if ((Js "document.getElementById('persona-text').value") -notmatch '\{بدو\|بدها\}') { throw 'the default is not back in the editor' }
+        }
+        Step 'persona: English is a mirror' {
+            Stop-SettingsApp
+            Write-Settings '{ "helloDone": true, "language": "english" }'
+            Start-SettingsApp | Out-Null
+            SNav 'persona'
+            Start-Sleep -Milliseconds 500
+            if ((Text64 (SKv 'state').h1_64) -ne "Sahar's personality") { throw "h1: $(Text64 (SKv 'state').h1_64)" }
+            if ((SText '#persona-restore') -ne 'Bring back the original') { throw "restore: $(SText '#persona-restore')" }
+            Capture 'app-persona-en'
+        }
+    }
+    finally {
+        Stop-SettingsApp
+        Remove-Item $personaFile -ErrorAction SilentlyContinue
+        if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
+    }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -4952,6 +5053,8 @@ try {
             'mind' { Stage-Mind }
             'install' { Stage-Install }
             'mindeval' { Stage-MindEval }
+            'persona' { Stage-Persona }
+            'quranbar' { Stage-QuranBar }
         }
     }
 }
