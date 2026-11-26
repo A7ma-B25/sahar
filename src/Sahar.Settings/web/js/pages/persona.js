@@ -12,8 +12,10 @@ import '../strings/persona.js';
 const state = { draft: null, asking: false, status: null, statusKind: '' };
 let flushSave = null;
 
-export function leave() {
+/** Going to another page (not a redraw of this one: app.js calls leave() on every render): the question closes. */
+export function away() {
   state.asking = false;
+  state.status = null;
 }
 
 /** The window is closing: a text he changed and did not save is saved now. */

@@ -510,6 +510,11 @@ internal sealed unsafe class App
             NeedArea = stage.Need,
         };
         using var activities = acts;
+        // 0.16: the Quran on her tag, and the bar it grows into (its tag hides while the bar is open).
+        using var quranBar = new QuranBar(ui, host, _options.Capturable, quran, acts, sahar, () => motion.Body) { Need = stage.Need, Dark = () => menu.Dark() };
+        acts.MenuOpen = () => menu.IsOpen || quranBar.IsOpen;
+        quranBar.OpenChanged += _ => Safe(acts.Refresh);
+        host.DeviceLost += () => Safe(quranBar.DeviceLost);
         var claudeSource = new ClaudeSource(acts, director.Post);
         Task.Run(HookMode.Follow);   // linked hooks follow her when she moved (review #6)
         var weatherSource = new WeatherSource(acts, weather, () => settings, director.Post);
@@ -1057,11 +1062,15 @@ internal sealed unsafe class App
             {
                 int surah = (int)Arg(r, "surah");
                 if (surah is < 1 or > 114) return new PipeReply(false, "surah 1–114");
-                Func<IRecitation>? fake = r.Args?.ContainsKey("fake") == true ? () => new FakeRecitation(ui, TimeSpan.FromSeconds(Arg(r, "fake"))) : null;
-                quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter, fake);
+                bool seekable = r.Args?.GetValueOrDefault("noseek") != "true";
+                Func<IRecitation>? fake = r.Args?.ContainsKey("fake") == true ? () => new FakeRecitation(ui, TimeSpan.FromSeconds(Arg(r, "fake")), seekable,
+                    r.Args?.ContainsKey("openms") == true ? TimeSpan.FromMilliseconds(Arg(r, "openms")) : null) : null;
+                quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter, fake,
+                    resume: r.Args?.GetValueOrDefault("resume") == "true");
                 return new PipeReply(true, quran.Describe());
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));
+            pipe.Register("quran-bar", r => new PipeReply(true, quranBar.Command(r.Args)));   // 0.16: open / close / press / key / hover / idle
             pipe.Register("shake", r =>
             {
                 // A drag shaken with N swings (fed to the same detector as a real drag), then released.
