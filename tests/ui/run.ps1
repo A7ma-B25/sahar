@@ -36,6 +36,15 @@ function Wait-Pipe([int]$seconds) {
 function Start-Engine([string[]]$Extra = @()) {
     $script:engine = Start-Process -FilePath $Exe -ArgumentList (@('--test-mode', '--capturable') + $Extra) -PassThru
     Wait-Pipe 5
+    # 0.16: her surface host warms up a moment after she starts (WebView2 starting can move the keyboard focus on a
+    # fresh runner): the stage goes on once it is ready, so no keystroke of a test lands in between.
+    $deadline = (Get-Date).AddSeconds(90)
+    do {
+        $r = Send '{"type":"cmd","name":"surface-debug"}'
+        if ($r.ok -and $r.error -match 'connected=true') { break }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    Start-Sleep -Milliseconds 300
 }
 
 function Stop-Engine {
