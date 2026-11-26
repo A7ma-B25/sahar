@@ -161,8 +161,9 @@ internal sealed partial class MindEngine
         var why = Clip(text, 60);
         switch (c.Kind)
         {
-            case ChatKind.Timer when Timer.Running && c.Minutes is { } m:
-                Append("timer.start", Call("timer.start", $$"""{"minutes":{{m}}}"""), ActSource.User, why, ActionOutcome.Done,
+            case ChatKind.Timer when Timer.Running && ChatReply.TimerLength(c) is { } t:
+                Append("timer.start", Call("timer.start", t.TotalSeconds % 60 == 0 ? $$"""{"minutes":{{(int)t.TotalMinutes}}}""" : $$"""{"seconds":{{(int)t.TotalSeconds}}}"""),
+                    ActSource.User, why, ActionOutcome.Done,
                     TimerTokenNow());
                 break;
             case ChatKind.Note when c.Text is not null && Notes.Store.Latest(1) is [var n]:

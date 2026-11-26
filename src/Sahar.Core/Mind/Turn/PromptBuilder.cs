@@ -58,7 +58,10 @@ public static class PromptBuilder
         b.AppendLine().AppendLine("أمثلة (الشكل بس، مو الكلام نفسه):");
         b.AppendLine("«شلونك؟» → " + Example("[]", "منيحة الحمدلله! وإنت شو أخبارك؟", "happy"));
         if (tools.Any(t => t.Name == "timer.start"))
+        {
             b.AppendLine("«حطيلي مؤقت ١٠ دقايق» → " + Example("""[{"tool":"timer.start","args":{"minutes":10},"why":"طلب مؤقت"}]""", "تكرم، عشر دقايق من هلق ⏳", null));
+            b.AppendLine("«شغلي المؤقت 5 ثواني» → " + Example("""[{"tool":"timer.start","args":{"seconds":5},"why":"ثواني مو دقايق"}]""", "تكرم، خمس ثواني من هلق ⏳", null));
+        }
         if (tools.Any(t => t.Name == "music.control"))
             b.AppendLine("«شغليلي غنية» → " + Example("""[{"tool":"music.control","args":{"op":"toggle"},"why":"بدو موسيقى"}]""", "يلا، هي الموسيقى 🎶", "happy"));
         if (tools.Any(t => t.Name == "move.play"))

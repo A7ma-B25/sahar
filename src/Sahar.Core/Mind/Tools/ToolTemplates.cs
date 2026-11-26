@@ -47,7 +47,7 @@ public static class ToolTemplates
         int? I(string k) => a.ValueKind == JsonValueKind.Object && a.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
         return call.Tool switch
         {
-            "timer.start" => $"شغّلت مؤقت {Num(I("minutes") ?? 0)} دقيقة",
+            "timer.start" => $"شغّلت مؤقت {Sahar.Core.Tools.TimerInput.Words(ToolRegistry.TimerLength(a) ?? TimeSpan.Zero)}",
             "timer.cancel" => "وقّفت المؤقت",
             "reminder.set" when I("inMinutes") is { } m => $"رح ذكّرك بعد {Num(m)} دقيقة",
             "reminder.set" => $"رح ذكّرك الساعة {Digits.ToArabicIndic(S("at") ?? "")}",

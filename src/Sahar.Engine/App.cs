@@ -670,7 +670,7 @@ internal sealed unsafe class App
             {
                 case Sahar.Core.Chat.ChatKind.Greeting: greetings++; break;
                 case Sahar.Core.Chat.ChatKind.Timer:
-                    if (!c.OutOfRange && c.Minutes is { } minutes) timerTool.Start(TimeSpan.FromMinutes(minutes));
+                    if (!c.OutOfRange && Sahar.Core.Chat.ChatReply.TimerLength(c) is { } length) timerTool.Start(length);
                     break;
                 case Sahar.Core.Chat.ChatKind.Note when c.Text is { } note: notes.Save(note); break;
                 case Sahar.Core.Chat.ChatKind.Note: menu.Close(); notes.Open(); return;   // «ملاحظة» alone: the note bubble (Ruling 9)

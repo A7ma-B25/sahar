@@ -45,7 +45,7 @@ internal sealed class TimerTool
     public void Start(TimeSpan length)
     {
         _timer.Start(length, DateTimeOffset.Now);
-        Log.Write(FormattableString.Invariant($"timer: {length.TotalMinutes:0.#} min"));
+        Log.Write(length < TimeSpan.FromMinutes(1) ? FormattableString.Invariant($"timer: {length.TotalSeconds:0} s") : FormattableString.Invariant($"timer: {length.TotalMinutes:0.#} min"));
         Schedule();
         DrawRing();
     }

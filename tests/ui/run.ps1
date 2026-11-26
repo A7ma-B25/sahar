@@ -1782,6 +1782,18 @@ function Stage-Menu {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 1000 'card open again' | Out-Null
     }
+    Step '0.15.0: «مؤقت ٥ ثواني» is five SECONDS on the fast path, and it ends' {
+        Chat-Type (-join ([char[]](0x0645, 0x0624, 0x0642, 0x062A, 0x0020, 0x0665, 0x0020, 0x062B, 0x0648, 0x0627, 0x0646, 0x064A)))   # مؤقت ٥ ثواني
+        $t = Kv 'debug-timer'
+        if ($t.running -ne 'true' -or [int]$t.remaining -gt 5) { throw "5 s timer: running=$($t.running) remaining=$($t.remaining)" }
+        if ((Text64 (Menu).line64) -ne 'تمام! شغّلت مؤقت ٥ ثواني.') { throw "reply: $(Text64 (Menu).line64)" }
+        Start-Sleep -Milliseconds 6500
+        if ((Kv 'debug-timer').running -ne 'false') { throw 'the 5 s timer did not end' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -notmatch 'timer: 5 s') { throw 'the log does not say a 5 s timer' }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 1000 'card open again' | Out-Null
+    }
     Step 'an unknown line gets her learning reply, then her question again' {
         Chat-Type (-join ([char[]](0x0634, 0x0648, 0x0020, 0x0627, 0x0633, 0x0645, 0x0643)))   # شو اسمك
         $m = Menu

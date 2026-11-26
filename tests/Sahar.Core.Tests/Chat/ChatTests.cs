@@ -122,7 +122,7 @@ public class ChatTests
     public void Replies()
     {
         Assert.Equal("تمام! شغّلت مؤقت ٥ دقيقة.", Reply("مؤقت 5"));
-        Assert.Equal("بقدر شغّل مؤقت من دقيقة لـ ٦٠٠ دقيقة.", Reply("مؤقت 601"));
+        Assert.Equal("بقدر شغّل مؤقت من ثانية لـ ٦٠٠ دقيقة.", Reply("مؤقت 601"));
         Assert.Equal("حفظتها.", Reply("ملاحظة خبز"));
         Assert.Equal("اكتبلي ياها هون.", Reply("ملاحظة"));
         Assert.Equal("ماشي، رح اسكت…", Reply("اسكتي"));

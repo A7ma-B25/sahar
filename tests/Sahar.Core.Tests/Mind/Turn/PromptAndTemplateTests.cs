@@ -15,7 +15,9 @@ public sealed class PromptAndTemplateTests
     {
         var prefix = PromptBuilder.Prefix("P", ToolCatalog.Core);
         Assert.Equal(prefix, PromptBuilder.Prefix("P", ToolCatalog.Core));
-        Assert.Contains("timer.start(minutes 1–600, label? ≤40)", prefix);
+        Assert.Contains("timer.start(minutes? 0–600, seconds? 0–3600, label? ≤40)", prefix);
+        Assert.Contains("«شغلي المؤقت 5 ثواني»", prefix);   // 0.15.0: seconds are taught by example
+        Assert.Contains("\"seconds\":5", prefix);
         var history = Enumerable.Range(0, 6).Select(i => (new string('س', 1000) + i, "ر" + i)).ToList();
         var msgs = PromptBuilder.Build(prefix, history, new string('x', 10_000), new Situation("10:00", "mon", App: "VS Code"), "chat", "مرحبا");
         Assert.Equal(prefix, msgs[0].Content);
@@ -31,6 +33,8 @@ public sealed class PromptAndTemplateTests
 
     [Theory]
     [InlineData("timer.start", """{"minutes":25}""", "شغّلت مؤقت ٢٥ دقيقة")]
+    [InlineData("timer.start", """{"seconds":5}""", "شغّلت مؤقت ٥ ثواني")]
+    [InlineData("timer.start", """{"minutes":1,"seconds":30}""", "شغّلت مؤقت ١ دقيقة و٣٠ ثانية")]
     [InlineData("music.control", """{"op":"pause"}""", "وقّفت الموسيقى")]
     [InlineData("note.save", """{"text":"x"}""", "حفظت ملاحظة")]
     [InlineData("settings.set", """{"key":"size","value":"large"}""", "كبّرت حجمي")]

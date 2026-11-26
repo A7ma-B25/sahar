@@ -1,3 +1,4 @@
+{"id": "timer-ar-sec-01", "text": "حطيلي مؤقت ٣٠ ثانية بس", "expect": {"tool": "timer.start", "args": {"seconds": 30}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-01", "text": "شغليلي مؤقت ربع ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-02", "text": "بدي ركّز نص ساعة", "expect": {"tool": "timer.start", "args": {"minutes": 30}}, "say": {"dialect": true, "maxChars": 220}}
 {"id": "timer-ar-03", "text": "شغليلي شي ربع ساعة لركّز", "expect": {"tool": "timer.start", "args": {"minutes": 15}}, "say": {"dialect": true, "maxChars": 220}}

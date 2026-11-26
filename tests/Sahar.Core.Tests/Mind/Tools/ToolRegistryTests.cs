@@ -16,6 +16,10 @@ public sealed class ToolRegistryTests
         { "timer.start", """{"minutes":15}""", true },
         { "timer.start", """{"minutes":15,"label":"ركّز"}""", true },
         { "timer.start", """{"minutes":0}""", false },
+        { "timer.start", """{"seconds":5}""", true },
+        { "timer.start", """{"minutes":1,"seconds":30}""", true },
+        { "timer.start", """{"minutes":0,"seconds":0}""", false },
+        { "timer.start", """{"seconds":3601}""", false },
         { "timer.start", """{"minutes":601}""", false },
         { "timer.start", """{"minutes":"15"}""", false },
         { "timer.start", """{"minutes":2.5}""", false },
@@ -189,7 +193,7 @@ public sealed class ToolRegistryTests
         Assert.Equal(["timer.start", "prayer.next", "settings.set"], names);
         var timer = actions.GetProperty("items").GetProperty("anyOf")[0].GetProperty("properties").GetProperty("args");
         Assert.Equal(600, timer.GetProperty("properties").GetProperty("minutes").GetProperty("maximum").GetInt32());
-        Assert.Equal(["minutes"], timer.GetProperty("required").EnumerateArray().Select(e => e.GetString()));
+        Assert.Empty(timer.GetProperty("required").EnumerateArray());   // 0.15.0: minutes and/or seconds (Core checks one is there)
         var keys = actions.GetProperty("items").GetProperty("anyOf")[2].GetProperty("properties").GetProperty("args")
             .GetProperty("properties").GetProperty("key").GetProperty("enum").EnumerateArray().Select(e => e.GetString()).ToList();
         Assert.Contains("size", keys);

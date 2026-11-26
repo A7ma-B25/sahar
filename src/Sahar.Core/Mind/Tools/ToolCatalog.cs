@@ -43,7 +43,8 @@ public static class ToolCatalog
 
     public static IReadOnlyList<ToolSpec> Core { get; } =
     [
-        new("timer.start", "شغّلي مؤقت بالدقايق", [Int("minutes", 1, 600), Str("label", 40, false)], ActionClass.A, Undoable: true),
+        new("timer.start", "شغّلي مؤقت: بالدقايق (minutes) أو بالثواني (seconds) أو الاتنين؛ الساعة = ٦٠ دقيقة",
+            [Int("minutes", 0, 600, false), Int("seconds", 0, 3600, false), Str("label", 40, false)], ActionClass.A, Undoable: true),
         new("timer.cancel", "وقّفي المؤقت", [], ActionClass.A),
         new("reminder.set", "ذكّريه بشي: بعد كم دقيقة أو بساعة محددة", [Int("inMinutes", 1, 1440, false), new("at", ArgType.Time, false), Str("text", 80)],
             ActionClass.A, Undoable: true),

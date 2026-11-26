@@ -76,9 +76,9 @@ internal sealed class EngineTools
         _gateOpen = gateOpen;
         Add("timer.start", c =>
         {
-            int minutes = Int(c, "minutes") ?? 25;
+            var length = ToolRegistry.TimerLength(c.Args) ?? TimeSpan.FromMinutes(25);   // 0.15.0: seconds too
             var before = End();
-            _m.Timer.Start(TimeSpan.FromMinutes(minutes));
+            _m.Timer.Start(length);
             _herTimer = TimerToken();
             return Ok(c, _herTimer + "|" + before.ToString(CultureInfo.InvariantCulture));
         }, UndoTimerStart, t => TimerMatches(t.Split('|')[0]));
