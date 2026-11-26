@@ -33,9 +33,10 @@ function Wait-Pipe([int]$seconds) {
     throw "pipe 'sahar' did not appear within $seconds s"
 }
 
-function Start-Engine([string[]]$Extra = @()) {
+function Start-Engine([string[]]$Extra = @(), [switch]$Now) {
     $script:engine = Start-Process -FilePath $Exe -ArgumentList (@('--test-mode', '--capturable') + $Extra) -PassThru
     Wait-Pipe 5
+    if ($Now) { return }   # a step that watches her first seconds (the hello at boot)
     # 0.16: her surface host warms up a moment after she starts (WebView2 starting can move the keyboard focus on a
     # fresh runner): the stage goes on once it is ready, so no keystroke of a test lands in between.
     $deadline = (Get-Date).AddSeconds(90)
@@ -563,7 +564,7 @@ function Stage-Motion {
     }
     Step 'the PC just started: she flies in and says hello' {
         Stop-Engine
-        Start-Engine @('--simulate-boot')
+        Start-Engine @('--simulate-boot') -Now
         Wait-State { param($st) $st.motion -eq 'StartupEntry' } 3000 'hello at start' | Out-Null
         Wait-State { param($st) $st.motion -eq 'Hover' } 6000 'hovering after hello' | Out-Null
     }
@@ -3867,7 +3868,11 @@ function Js([string]$code) {
     if ($json -eq 'null' -or -not $json) { return $null }
     $json | ConvertFrom-Json
 }
-function Settings-Procs { @(Get-Process -Name 'Sahar.Settings' -ErrorAction SilentlyContinue) }
+# 0.16: her surface host is Sahar.Settings.exe --surfaces too; only the settings app's own process counts here.
+function Settings-Procs {
+    $surfaceHost = @(Get-CimInstance Win32_Process -Filter "Name = 'Sahar.Settings.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match '--surfaces' } | ForEach-Object { [int]$_.ProcessId })
+    @(Get-Process -Name 'Sahar.Settings' -ErrorAction SilentlyContinue | Where-Object { $surfaceHost -notcontains $_.Id })
+}
 function Our-WebViews {
     @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match 'Sahar\\Settings\.WebView2' })
@@ -5143,8 +5148,8 @@ function Stage-Install {
         $after = [DateTimeOffset]::Parse($u.askAfter, [Globalization.CultureInfo]::InvariantCulture)
         $hours = ($after - [DateTimeOffset]::Now).TotalHours
         if ($hours -lt 23.9 -or $hours -gt 24.1) { throw "askAfter is $hours h away, not a day" }
-        $said = Text64 (Kv 'debug-comment').text64
-        Write-Host "    she said: $said"
+        $said = Text64 (Kv 'debug-list').title64   # 0.16: the question is her ask bubble (V15Lists «في نسخة جديدة»)
+        Write-Host "    she asks: $said"
         if ($said -notmatch '99\.0\.0' -or $said -notmatch 'نسخة جديدة') { throw "her bubble says '$said'" }
         if ((Kv 'debug-list').open -ne 'true') { throw 'no yes / later choice shown' }
         if ((Get-Content $settingsPath -Raw) -notmatch '"updateAskAfter"') { throw 'askAfter not saved' }

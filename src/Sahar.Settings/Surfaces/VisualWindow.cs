@@ -103,7 +103,18 @@ internal sealed class VisualWindow
         _ctl?.MoveFocus(CoreWebView2MoveFocusReason.Programmatic);
     }
 
-    public void Hide() => SN.ShowWindow(Hwnd, SN.SW_HIDE);
+    /// <summary>The page wakes for a show (the window is still hidden while it renders and measures).</summary>
+    public void Wake() { if (_ctl is not null && !_ctl.IsVisible) _ctl.IsVisible = true; }
+
+    /// <summary>The page rests while nothing is shown.</summary>
+    public void Rest() { if (_ctl is not null) _ctl.IsVisible = false; }
+
+    /// <summary>Hidden, and the page rests (no frames, no timers) until the next show: a warm host costs nothing.</summary>
+    public void Hide()
+    {
+        SN.ShowWindow(Hwnd, SN.SW_HIDE);
+        if (_ctl is not null) _ctl.IsVisible = false;
+    }
 
     public bool Visible => SN.IsWindowVisible(Hwnd);
 

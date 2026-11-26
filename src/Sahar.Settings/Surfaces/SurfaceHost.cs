@@ -202,6 +202,7 @@ internal sealed class SurfaceHost
         s.Placing = true;
         s.Open = true;
         s.Win.SetCaptureExcluded(!m.Capturable);
+        s.Win.Wake();
         if (!s.Ready) { s.Queued = m; return; }
         PostRaw(s, "show", m, includeModel: true);
     }
@@ -249,6 +250,7 @@ internal sealed class SurfaceHost
             case "ready":
                 s.Ready = true;
                 if (s.Queued is { } q) { s.Queued = null; PostRaw(s, "show", q, includeModel: true); }
+                else if (!s.Open) s.Win.Rest();   // warm and quiet until asked
                 break;
             case "measured" when s.Showing is { } m && m.Seq == seq:
                 Placed(s, m, r.GetProperty("w").GetSingle(), r.GetProperty("h").GetSingle(),
