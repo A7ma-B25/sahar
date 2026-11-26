@@ -120,7 +120,9 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         // 0.15.0 T9: what llama-server holds in video memory, from Windows' own counter (0.14.x logged vram=0MB on his
         // RTX 4050: b12207's default verbosity hides the "buffer size" lines, and the device's free memory before and
         // after often does not move); those two stay as fallbacks, in that order.
-        int pdh = _gpu ? GpuPdh.ProcessMB(p.Id) : 0, buffers = Volatile.Read(ref _bufferMB), delta = 0;
+        int pid = p.Id;
+        // Review I3: Windows' counter is asked off this thread and waited for 2 s at most (stuck or failing → 0, fallback).
+        int pdh = _gpu ? await Sahar.Core.Mind.Runtime.Probe.WithinAsync(() => GpuPdh.ProcessMB(pid), TimeSpan.FromSeconds(2)) : 0, buffers = Volatile.Read(ref _bufferMB), delta = 0;
         if (pdh == 0 && buffers == 0 && device is not null) delta = Devices.UsedMB(before, await ListDevicesAsync(exe, dir, plan.Backend, ct), device.Id);
         var (vram, source) = GpuMemory.Best(pdh, buffers, delta);
         _vramMB = vram;
@@ -178,7 +180,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             if (_server is not { HasExited: false } s) return (_vramMB, 0);
             s.Refresh();
             int ram = (int)(s.WorkingSet64 / (1024 * 1024));
-            if (_gpu && GpuPdh.ProcessMB(s.Id) is > 0 and var now) _vramMB = now;
+            int id = s.Id;
+            if (_gpu && Sahar.Core.Mind.Runtime.Probe.Within(() => GpuPdh.ProcessMB(id), TimeSpan.FromSeconds(1)) is > 0 and var now) _vramMB = now;   // review I3
             return (_vramMB, ram);
         }
         catch (Exception) { return (_vramMB, 0); }
