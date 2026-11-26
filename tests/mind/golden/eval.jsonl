@@ -26,3 +26,4 @@
 {"id":"e26","kind":"command","text":"العبي مع الفراشة","tool":"move.play","topic":["فراشة","الفراشة","🦋","الحق","يلا"],"key":true}
 {"id":"e27","kind":"command","text":"شغلي المؤقت 5 ثواني","tool":"timer.start","topic":["ثواني","ثانية","٥","5"],"key":true}
 {"id":"e28","kind":"command","text":"بدي مؤقت دقيقة ونص","tool":"timer.start","topic":["دقيقة","ثانية","٣٠","90","٩٠"]}
+{"id":"e29","kind":"chat","text":"احكيلي شي حلو صار معك اليوم","close":true,"tool":null,"topic":["اليوم","حلو","صار","شفت","معك","إنت","انت"],"key":true}

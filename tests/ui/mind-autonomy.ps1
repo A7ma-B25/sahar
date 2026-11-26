@@ -151,6 +151,21 @@ function Stage-MindAutonomy {
         Start-Sleep -Milliseconds 800
     }
 
+    Step 'mind (autonomy): 0.15.0 — the game closed the card, yet her reply goes on in her bubble, short' {
+        if ((Menu).open -ne 'false') { throw 'the game left the card open' }
+        if ((Mind-Sent) -match "cancel:$($script:c2)") { throw "the closed card cancelled her reply: $(Mind-Sent)" }
+        Mind-Line ('{"v":1,"t":"partial","id":"' + $script:c2 + '","text":"يلا"}')
+        Start-Sleep -Milliseconds 300
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'يلا') { throw "streamed into her bubble: $($c.showing) $(Text64 $c.text64)" }
+        Mind-Line ('{"v":1,"t":"say","id":"' + $script:c2 + '","text":"يلا! رح نلعب لقط النجوم هلق وما رح خليك تربح أبداً، جهّز حالك لأني سريعة كتير اليوم","final":true}')
+        Start-Sleep -Milliseconds 300
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'بلّشنا لقط النجوم') { throw "her bubble after the card closed: $($c.showing) $(Text64 $c.text64)" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -notmatch 'mind: said \(\d+ chars, bubble, card closed, confirmation\)') { throw 'the log does not say where her reply went' }
+    }
+
     Step 'mind (autonomy): a B call asks in the header; «لا» changes nothing' {
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 2000 'card open' | Out-Null
