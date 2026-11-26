@@ -37,6 +37,20 @@ public sealed class UpdateTextTests
         Assert.True(line.Length <= 100, $"{line.Length}: {line}");
     }
 
+    /// <summary>Review (d): the owner wants emoji in her speech — the update lines keep 0.14.1's (🔎 💜 ⏳ ✨).</summary>
+    [Fact]
+    public void UpdateLines_KeepTheirEmoji()
+    {
+        Assert.EndsWith("🔎", UpdateText.Checking);
+        Assert.EndsWith("💜", UpdateText.UpToDate);
+        Assert.Contains("⏳", UpdateText.Downloading(null));
+        Assert.Contains("⏳", UpdateText.Downloading(42));
+        Assert.EndsWith("💜", UpdateText.Ready);
+        Assert.Contains("✨", UpdateText.ReadyPortable);
+        Assert.EndsWith("✨", UpdateText.ListTitle(V));
+        Assert.EndsWith("💜", UpdateText.SetupFailed(2));
+    }
+
     [Fact]
     public void TheMovedLine_KeepsItsHome() => Assert.True(HasEmoji(UpdateRules.MovedLine) && UpdateRules.MovedLine.Contains("🏠", StringComparison.Ordinal), UpdateRules.MovedLine);
 
@@ -109,6 +123,10 @@ public sealed class UpdateTextTests
     public void Tip_IsTheTrayName_ThenTheLine_WithinWindowsLimit()
     {
         Assert.Equal(UpdateText.TrayName, UpdateText.Tip(null));
+        // review (e): the update's line leaves the tooltip after an hour
+        var t0 = new DateTimeOffset(2026, 11, 26, 20, 0, 0, TimeSpan.FromHours(3));
+        Assert.Equal(UpdateText.Tip(UpdateText.UpToDate), UpdateText.Tip(UpdateText.UpToDate, t0, t0.AddMinutes(59)));
+        Assert.Equal(UpdateText.TrayName, UpdateText.Tip(UpdateText.UpToDate, t0, t0 + UpdateText.TipFor));
         Assert.Equal(UpdateText.TrayName + "\n" + UpdateText.UpToDate, UpdateText.Tip(UpdateText.UpToDate));
         var longTip = UpdateText.Tip(new string('ا', 300));
         Assert.True(longTip.Length <= 127, longTip.Length.ToString());

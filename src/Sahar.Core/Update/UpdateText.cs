@@ -43,34 +43,34 @@ public static class UpdateFailures
 }
 
 /// <summary>
-/// 0.15.0 T6: her words for every step of an update, short Syrian Arabic, no emoji, written to a man (Arabic's
+/// 0.15.0 T6: her words for every step of an update, short Syrian Arabic with her emoji (the owner wants them), written to a man (Arabic's
 /// default; <see cref="Settings.Address"/> turns them to a woman). The tray's tooltip carries the same line, so a
 /// click on «دوّر على تحديث» always shows something, even while she is hidden.
 /// </summary>
 public static class UpdateText
 {
     public const string TrayName = "سَحَر · Sahar";
-    public const string Checking = "لحظة، عم دوّر على تحديث…";
+    public const string Checking = "لحظة، عم دوّر على تحديث… 🔎";
     public const string StillChecking = "لسا عم دوّر، لحظة…";
     public const string Retrying = "النت تقيل شوي، عم حاول كمان مرة…";
-    public const string UpToDate = "أنا آخر نسخة";
+    public const string UpToDate = "أنا آخر نسخة 💜";
     public const string Yes = "إي، ثبّتها هلق";
     public const string Later = "بعدين";
     /// <summary>Downloaded and checked: the silent setup closes her and starts her again.</summary>
-    public const string Ready = "نزّلتها وتأكّدت منها. عم ثبّت، ورح ارجع بعد شوي";
+    public const string Ready = "نزّلتها وتأكّدت منها. عم ثبّت، ورح ارجع بعد شوي 💜";
     /// <summary>A portable her: the wizard, and where she lives afterwards.</summary>
-    public const string ReadyPortable = "رح يطلعلك المثبّت. بعدو بسكن بقائمة ابدأ: «سحر»";
+    public const string ReadyPortable = "رح يطلعلك المثبّت ✨ بعدو بسكن بقائمة ابدأ: «سحر»";
     public const string NotStarted = "ما قدرت شغّل المثبّت هلق، بجرّب بكرا";
     public const string VpnHint = "جرّب تطفي الـVPN أو تشغّله";
 
     public static string Available(SemVersion v) => $"في نسخة جديدة مني {v}، بدك ثبّتها؟";
 
-    public static string ListTitle(SemVersion v) => $"سَحَر {v}";
+    public static string ListTitle(SemVersion v) => $"سَحَر {v} ✨";
 
     public static string Downloading(int? percent) =>
-        percent is { } p ? $"عم نزّل النسخة الجديدة… {Digits.ToArabicIndic(p.ToString(CultureInfo.InvariantCulture))}٪" : "عم نزّل النسخة الجديدة…";
+        percent is { } p ? $"عم نزّل النسخة الجديدة… {Digits.ToArabicIndic(p.ToString(CultureInfo.InvariantCulture))}٪ ⏳" : "عم نزّل النسخة الجديدة… ⏳";
 
-    public static string SetupFailed(int code) => $"ما زبط التحديث (رمز {code.ToString(CultureInfo.InvariantCulture)})، ضليت متل ما كنت";
+    public static string SetupFailed(int code) => $"ما زبط التحديث (رمز {code.ToString(CultureInfo.InvariantCulture)})، ضليت متل ما كنت 💜";
 
     /// <summary>The plain reason for a failed check (<paramref name="download"/> false) or download.</summary>
     public static string Failed(UpdateFailure f, bool download) => f switch
@@ -84,6 +84,12 @@ public static class UpdateText
     };
 
     /// <summary>The tray tooltip: her name, then the update's last line; Windows keeps 127 characters.</summary>
+    /// <summary>Review (e): how long the update's line stays under her name in the tray's tooltip.</summary>
+    public static readonly TimeSpan TipFor = TimeSpan.FromHours(1);
+
+    /// <summary>The tooltip for a line set at <paramref name="since"/>: her name only once <see cref="TipFor"/> passed.</summary>
+    public static string Tip(string? line, DateTimeOffset since, DateTimeOffset now) => now - since >= TipFor ? TrayName : Tip(line);
+
     public static string Tip(string? line)
     {
         if (string.IsNullOrEmpty(line)) return TrayName;

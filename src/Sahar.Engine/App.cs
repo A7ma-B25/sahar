@@ -704,9 +704,14 @@ internal sealed unsafe class App
         if (_options.TestMode && _options.UpdateKeyFile is { } keyFile)
             try { updateKey = File.ReadAllText(keyFile).Trim(); } catch (Exception e) { Log.Write($"update: test key not read ({e.GetType().Name})"); }
         string? updateHost = _options.TestMode ? _options.UpdateHost : null;
+        // Review (e): the update's line leaves the tray's tooltip after an hour (UpdateText.TipFor).
+        var tipClear = ui.CreateTimer();
+        tipClear.IsRepeating = false;
+        tipClear.Interval = Sahar.Core.Update.UpdateText.TipFor;
+        tipClear.Tick += (_, _) => Safe(() => tray.Status(null));
         using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), listBubble, () => motion.Body,
             line => speech.Say(line),
-            (line, notify) => { tray.Status(line); if (notify && _state.Hidden) tray.Notify(line); },   // 0.15.0 T6
+            (line, notify) => { tray.Status(line); tipClear.Stop(); tipClear.Start(); if (notify && _state.Hidden) tray.Notify(line); },   // 0.15.0 T6
             () => settings, Save,
             busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
                 listBubble.IsOpen || bubble.IsOpen || Sulking(),
