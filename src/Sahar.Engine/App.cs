@@ -352,7 +352,7 @@ internal sealed unsafe class App
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
-        panel.Opening += mode => Safe(() => { if (mode == "above") speech.Dismiss(); });   // 0.16: an ask bubble never sits under her speech
+        panel.Opening += _ => Safe(speech.Dismiss);   // 0.16: no panel (ask, card, tray menu, «الدرج») ever sits under or over her speech bubble
         // Rain coming (opt-in): the tray item asks for your city.
         // Owner ruling 4 (0.13): with no city of its own the weather uses the prayer place.
         var weatherPlace = settings.WeatherEnabled ? Sahar.Core.Activities.WeatherCity.Resolve(settings) : null;
@@ -695,6 +695,7 @@ internal sealed unsafe class App
         }
         menu.ChatSent += text => Safe(() => ChatLine(text, window: false));
         chat.Send = text => Safe(() => ChatLine(text, window: true));
+        Sahar.Engine.Surfaces.Cards.InChat = (q, a) => chat.Ask(q, a);   // a yes/no while the chat is open goes into it
         // A long bubble's «كمّل بالمحادثة»: the chat opens on that line (her words go into it).
         speech.ContinueChat += text => Safe(() => { chat.Open(); chat.Said(text); });
         menu.ChatContinue += text => Safe(() =>

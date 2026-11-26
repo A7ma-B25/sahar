@@ -293,14 +293,17 @@ internal sealed class SurfaceHost
                 card = PanelPlacement.Anchor(m.X, m.Y, work, size, dpi);
                 break;
             case "window":
-                var p = PanelPlacement.Place(body, work, size, dpi);
+                var p = PanelPlacement.Place(body, work, size, dpi, PanelPlacement.ChatGapDip);
                 card = p.Rect;
                 nint mon = SN.MonitorFromPoint(new SN.POINT { X = (int)(work.X + work.Width / 2), Y = (int)(work.Y + work.Height / 2) }, 2);
                 if (_chatPlace.TryGetValue(mon, out var at))
                     card = new RectF(Math.Clamp(at.X, work.X, MathF.Max(work.X, work.Right - size.Width)), Math.Clamp(at.Y, work.Y, MathF.Max(work.Y, work.Bottom - size.Height)), size.Width, size.Height);
                 break;
             default:
-                var b = PanelPlacement.Place(body, work, size, dpi);
+                var chat = _s["chat"];
+                RectF? avoid = s.Name == "panel" && chat.Open
+                    ? new RectF(chat.Card.X - 8 * dpi, chat.Card.Y - 8 * dpi, chat.Card.W + 16 * dpi, chat.Card.H + 16 * dpi) : null;
+                var b = PanelPlacement.Place(body, work, size, dpi, avoid: avoid);
                 card = b.Rect;
                 left = b.OnHerLeft;
                 claspY = (b.ClaspY - b.Rect.Y) / dpi;

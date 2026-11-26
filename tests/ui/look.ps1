@@ -189,6 +189,17 @@ function Stage-Look {
             if ($null -eq $st.herX -or $null -eq $st.meX -or [double]$st.herX -le [double]$st.meX) { throw "sides: her x=$($st.herX), his x=$($st.meX)" }
             if (-not $st.atBottom) { throw 'the thread is not at its latest line' }
             Look-Shot "chat-$theme" 'chat' | Out-Null
+            # Nothing of hers sits over the open chat: her speech bubble, «الدرج», an ask (it goes into the thread).
+            $chatRect = (Surface).chat
+            function Meets($a, $x, $y, $w, $h) { -not ($x -ge $a.x + $a.w -or $x + $w -le $a.x -or $y -ge $a.y + $a.h -or $y + $h -le $a.y) }
+            Send ('{"type":"cmd","name":"say","args":{"text64":"' + (T64 'سطر تجربة فوق الحكي، طويل شوي لحتى يكون عريض') + '"}}') | Out-Null
+            Wait-Until { (Kv 'debug-speech').showing -eq 'true' } 3000 'her bubble did not show'
+            $r = (Kv 'debug-speech').rect -split ','
+            if (Meets $chatRect ([int]$r[0]) ([int]$r[1]) ([int]$r[2]) ([int]$r[3])) { throw "her bubble ($($r -join ',')) is over the chat ($($chatRect.x),$($chatRect.y),$($chatRect.w),$($chatRect.h))" }
+            Send '{"type":"cmd","name":"drawer-open"}' | Out-Null
+            $p = (Wait-Surface 'panel').panel
+            if (Meets $chatRect $p.x $p.y $p.w $p.h) { throw "«الدرج» ($($p.x),$($p.y),$($p.w),$($p.h)) is over the chat" }
+            Close-Panel
             Send '{"type":"cmd","name":"panel-click","args":{"surface":"chat","id":"all"}}' | Out-Null
             Start-Sleep -Milliseconds 400
             if ((Panel-State 'chat').view -ne 'list') { throw 'no conversation list' }

@@ -133,8 +133,12 @@ internal static class Cards
     }
 
     /// <summary>A yes/no question in a bubble above her (V15Lists «عقلها بيسأل»): 1 / Enter = yes, 2 / Esc / closing = no.</summary>
+    /// <summary>The chat window is open: a yes/no goes into it inline (never a bubble over it); false when it is closed.</summary>
+    public static Func<string, Action<bool>, bool>? InChat { get; set; }
+
     public static void Ask(Panel panel, string name, string question, string yes, string no, Action<bool> answer, string? yesIcon = null)
     {
+        if (InChat?.Invoke(question, answer) == true) return;
         bool done = false;
         panel.Show(new PanelSpec
         {

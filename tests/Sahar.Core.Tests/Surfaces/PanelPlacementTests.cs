@@ -70,4 +70,23 @@ public class PanelPlacementTests
         var left = PanelPlacement.Anchor(20, 1060, Work, new SizeF(300, 420), 1.5f);
         Assert.Equal(0, left.X);
     }
+
+    [Fact]
+    public void ChatWindow_KeepsClearOfHerBubbles()
+    {
+        var body = new RectF(1500, 700, 80, 80);
+        var p = PanelPlacement.Place(body, Work, new SizeF(448, 672), 1f, PanelPlacement.ChatGapDip);
+        var bubble = PanelPlacement.Above(body, Work, new SizeF(264 + 48, 120), 1f);   // the widest ask bubble with its margin
+        Assert.False(p.Rect.Intersects(bubble));
+    }
+
+    [Fact]
+    public void Panel_GoesToHerOtherSide_RatherThanOverTheChat()
+    {
+        var body = new RectF(1000, 700, 80, 80);
+        var chat = PanelPlacement.Place(body, Work, new SizeF(448, 672), 1f, PanelPlacement.ChatGapDip).Rect;
+        var p = PanelPlacement.Place(body, Work, new SizeF(368, 460), 1f, avoid: chat);
+        Assert.False(p.Rect.Intersects(chat));
+        Assert.True(Work.Contains(p.Rect));
+    }
 }
