@@ -2813,16 +2813,22 @@ function Wait-Game([scriptblock]$cond, [int]$ms, [string]$what) {
     throw "$what not seen within $ms ms (state $($g.state), spot $($g.spot), whisper $($g.whisper))"
 }
 
-if (-not ('SeekWin' -as [type])) {
+if (-not ('SeekWin2' -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class SeekWin {
+public static class SeekWin2 {
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
-    /// Moves a window by dx,dy without activating it or changing its z-order.
-    public static void Nudge(IntPtr h, int dx, int dy) { RECT r; GetWindowRect(h, out r); SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010); }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
+    /// Moves the window with this title by dx,dy without activating it or changing its z-order; its new left, or -99999.
+    public static int Nudge(string title, int dx, int dy) {
+        var h = FindWindow(null, title); RECT r;
+        if (h == IntPtr.Zero || !GetWindowRect(h, out r)) return -99999;
+        SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010);
+        GetWindowRect(h, out r); return r.L;
+    }
 }
 "@
 }
@@ -2976,7 +2982,9 @@ function Stage-Games {
             Start-Sleep -Milliseconds 200
             Screenshot 'game-hide-warm.png' | Out-Null
             # The window moves (without taking the focus): she slides to the nearest edge.
-            [SeekWin]::Nudge($win.MainWindowHandle, 300, 0)
+            # By its title (the process's main window may be its console), and checked: it really moved.
+            $left = [SeekWin2]::Nudge('Sahar test seek', 300, 0)
+            if ($left -lt 300) { throw "the test window did not move (left $left)" }
             $g = Wait-Game { param($g) $g.spot -eq 'Edge' -and $g.state -eq 'hidden-1' } 3000 'a slide to an edge'
             if ($g.clip -ne 'off') { throw "still clipped at an edge" }
             $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
