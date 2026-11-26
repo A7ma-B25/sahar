@@ -32,3 +32,6 @@ public readonly record struct RectF(float X, float Y, float Width, float Height)
 }
 
 public readonly record struct SizeI(int Width, int Height);
+
+/// <summary>A size in pixels or DIP (the caller says which).</summary>
+public readonly record struct SizeF(float Width, float Height);
