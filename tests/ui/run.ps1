@@ -4294,13 +4294,16 @@ function Stage-Diag {
         Capture 'app-privacy-capture'
     }
     Step 'a window opened while allowed shows too' {
+        # The note's bubble is a new window: made now, it shows like the others (and the tray hides it below).
         $before = [int](Capture-State).wanting
         Send '{"type":"cmd","name":"menu-open"}' | Out-Null
         Wait-Menu 'true' 3000 'the menu card' | Out-Null
+        Press 'note'
+        Wait-Until { (Kv 'debug-bubble').open -eq 'true' } 3000 'the note bubble did not open'
         $c = Capture-State
-        Write-Host "    with the card open: hidden=$($c.hidden) wanting=$($c.wanting) (before $before)"
-        if ($c.hidden -ne '0') { throw "the card's windows are hidden ($($c.hidden))" }
-        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Write-Host "    with the note bubble open: hidden=$($c.hidden) wanting=$($c.wanting) (before $before)"
+        if ([int]$c.wanting -le $before) { throw 'the bubble is not in the registry' }
+        if ($c.hidden -ne '0') { throw "windows opened while allowed are hidden ($($c.hidden))" }
     }
     Step 'the tray item hides her again, and says so' {
         Send '{"type":"cmd","name":"tray-pick","args":{"item":"capture"}}' | Out-Null
