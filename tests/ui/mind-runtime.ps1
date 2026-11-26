@@ -29,7 +29,13 @@ function Stage-MindRuntime {
         # for llama-server's pid. This runner has no GPU for her model, so the PDH read is checked against
         # PowerShell's own Get-Counter on the desktop compositor (it holds video memory on any adapter).
         Step 'mind: the VRAM probe reads the GPU Process Memory counter as Get-Counter does' {
+            # The process holding the most video memory now (dwm, else this shell), so the bytes are read, not just a 0.
             $target = (Get-Process dwm -ErrorAction SilentlyContinue | Select-Object -First 1).Id
+            try {
+                $top = (Get-Counter '\GPU Process Memory(*)\Dedicated Usage' -ErrorAction Stop).CounterSamples |
+                    Where-Object { $_.InstanceName -match '^pid_(\d+)_' } | Sort-Object CookedValue -Descending | Select-Object -First 1
+                if ($top -and $top.CookedValue -gt 0 -and $top.InstanceName -match '^pid_(\d+)_') { $target = [int]$Matches[1] }
+            } catch { }
             if (-not $target) { $target = $PID }
             $want = $null
             try {

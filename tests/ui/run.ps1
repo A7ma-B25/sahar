@@ -4754,35 +4754,37 @@ function Stage-Install {
 
     # 0.15.0 T6: his log said "update: check failed (timeout)" and «تحديث» showed nothing.
     Step 'no network: the tray item answers at once, a second click says she is still on it, two retries, then why (the VPN hint)' {
-        $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-        $l.Start(); $closed = $l.LocalEndpoint.Port; $l.Stop()   # nothing listens there: every request is refused
-        $before = Log-Lines
-        $script:engine = Start-Process -FilePath $InstalledExe -ArgumentList '--test-mode', '--capturable', '--update-host', "http://127.0.0.1:$closed", '--update-key', $keyFile -PassThru
-        Wait-Pipe 10
-        Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
-        $said = Text64 (Kv 'debug-comment').text64
-        Write-Host "    she said: $said"
-        # At once: "checking" (or already "trying again", if the refusal was quicker than this read).
-        if ($said -notmatch 'عم دوّر|عم حاول') { throw "the tray item showed nothing at once: '$said'" }
-        $tip = Text64 (Kv 'debug-tray-icon').tip64
-        if ($tip -notmatch 'عم دوّر|عم حاول') { throw "the tray tooltip did not change: '$tip'" }
-        Wait-Update { param($u) $u.status -eq 'checking' -and [int]$u.tries -ge 1 } 30 'no retry after the first failure' | Out-Null
-        Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
-        Write-Host "    a second click: $(Text64 (Kv 'debug-comment').text64)"
-        $u = Wait-Update { param($u) $u.status -eq 'failed' } 90 'the failed check was never reported'
-        if ($u.failure -notin 'Network', 'Timeout' -or $u.tries -ne '3') { throw "failure $($u.failure) after $($u.tries) tries" }
-        $since = Log-Since $before
-        foreach ($want in 'update: checking \(you asked\)', 'update: check retry 1 in 3 s', 'update: check retry 2 in 10 s', 'update: asked while checking', 'update: check gave up \((Network|Timeout), 3 tries\)') {
-            if ($since -notmatch $want) { throw "no '$want' in the log:`n$since" }
+        try {
+            $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+            $l.Start(); $closed = $l.LocalEndpoint.Port; $l.Stop()   # nothing listens there: every request is refused
+            $before = Log-Lines
+            $script:engine = Start-Process -FilePath $InstalledExe -ArgumentList '--test-mode', '--capturable', '--update-host', "http://127.0.0.1:$closed", '--update-key', $keyFile -PassThru
+            Wait-Pipe 10
+            Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
+            $said = Text64 (Kv 'debug-comment').text64
+            Write-Host "    she said: $said"
+            # At once: "checking" (or already "trying again", if the refusal was quicker than this read).
+            if ($said -notmatch 'عم دوّر|عم حاول') { throw "the tray item showed nothing at once: '$said'" }
+            $tip = Text64 (Kv 'debug-tray-icon').tip64
+            if ($tip -notmatch 'عم دوّر|عم حاول') { throw "the tray tooltip did not change: '$tip'" }
+            Wait-Update { param($u) $u.status -eq 'checking' -and [int]$u.tries -ge 1 } 30 'no retry after the first failure' | Out-Null
+            Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
+            Write-Host "    a second click: $(Text64 (Kv 'debug-comment').text64)"
+            $u = Wait-Update { param($u) $u.status -eq 'failed' } 90 'the failed check was never reported'
+            if ($u.failure -notin 'Network', 'Timeout' -or $u.tries -ne '3') { throw "failure $($u.failure) after $($u.tries) tries" }
+            $since = Log-Since $before
+            foreach ($want in 'update: checking \(you asked\)', 'update: check retry 1 in 3 s', 'update: check retry 2 in 10 s', 'update: asked while checking', 'update: check gave up \((Network|Timeout), 3 tries\)') {
+                if ($since -notmatch $want) { throw "no '$want' in the log:`n$since" }
+            }
+            $updateLines = ($since -split "`n" | Where-Object { $_ -match 'update: ' }) -join "`n"
+            if ($updateLines -cmatch 'https?://|127\.0\.0\.1|[A-Za-z]:\\') { throw "an address or a path reached the update lines:`n$updateLines" }
+            $said = Text64 (Kv 'debug-comment').text64
+            $tip = Text64 (Kv 'debug-tray-icon').tip64
+            Write-Host "    she said: $said | tooltip: $($tip -replace "`n", ' / ')"
+            if ($said -notmatch 'جرّب تطفي الـVPN أو تشغّله') { throw "her bubble gives no reason: '$said'" }
+            if ($tip -notmatch 'VPN') { throw "the tray tooltip gives no reason: '$tip'" }
         }
-        $updateLines = ($since -split "`n" | Where-Object { $_ -match 'update: ' }) -join "`n"
-        if ($updateLines -match 'http|127\.0\.0\.1|\\') { throw "an address or a path reached the update lines:`n$updateLines" }
-        $said = Text64 (Kv 'debug-comment').text64
-        $tip = Text64 (Kv 'debug-tray-icon').tip64
-        Write-Host "    she said: $said | tooltip: $($tip -replace "`n", ' / ')"
-        if ($said -notmatch 'جرّب تطفي الـVPN أو تشغّله') { throw "her bubble gives no reason: '$said'" }
-        if ($tip -notmatch 'VPN') { throw "the tray tooltip gives no reason: '$tip'" }
-        Stop-Engine
+        finally { Stop-Engine }
     }
 
     Step 'a newer signed version: she asks in her bubble, later snoozes a day (no request), the tray asks anyway' {
