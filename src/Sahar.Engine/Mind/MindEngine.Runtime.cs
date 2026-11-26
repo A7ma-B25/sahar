@@ -234,6 +234,18 @@ internal sealed partial class MindEngine
     /// tomorrow (the caller's daily limit); «لا» never asks again (still available on «النماذج»).</summary>
     public void OfferDownloadQuestion()
     {
+        // 0.16: the ask bubble takes the keyboard; with the card open (he is typing in it) it waits for the card to close.
+        if (Menu.IsOpen)
+        {
+            void Later(bool open)
+            {
+                if (open) return;
+                Menu.OpenChanged -= Later;
+                Ui.TryEnqueue(() => Safe(OfferDownloadQuestion));
+            }
+            Menu.OpenChanged += Later;
+            return;
+        }
         var model = ModelCatalog.Find(ModelCatalog.DefaultId)!;
         Surfaces.Cards.Ask(Panel, "mind-download", Address.For(Address.You, RuntimeText.Ask(model.Bytes)), RuntimeText.Yes, RuntimeText.Later, yes =>
         {

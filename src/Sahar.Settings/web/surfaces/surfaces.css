@@ -25,7 +25,7 @@ button:disabled:active{transform:none}
 .sec:hover{background:var(--pressed)}
 :root.kb :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 :focus{outline:none}
-input:focus-visible,textarea:focus-visible{outline:none}
+:root input:focus-visible,:root textarea:focus-visible{outline:none}
 ::selection{background:var(--soft);color:var(--softInk)}
 input,textarea{font:inherit;color:var(--ink);caret-color:var(--accent);background:transparent;border:0;outline:0;resize:none;user-select:text;-webkit-user-select:text}
 input::placeholder,textarea::placeholder{color:var(--t3);opacity:1}

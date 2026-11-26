@@ -119,6 +119,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 function show(msg) {
+  document.documentElement.classList.remove('kb');   // a new card starts without the keyboard ring
   document.documentElement.dataset.theme = msg.dark ? 'dark' : 'light';
   document.documentElement.classList.toggle('still', !!msg.still);
   cur = { seq: msg.seq, model: msg.model, st: {}, margin: msg.margin || { l: 24, t: 20 }, place: null };
