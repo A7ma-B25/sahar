@@ -2968,7 +2968,8 @@ function Stage-Games {
             Start-Sleep -Milliseconds 200
             Screenshot 'game-hide-cold.png' | Out-Null
             # Close by and resting: «دافي… دافي كتير!» (at most one chip every 3 s).
-            $hx = if ($g.side -eq '2') { $vx + $vw + 150 } else { $vx - 150 }
+            # 150 px from what shows, toward the middle of the screen (never clamped at its edge).
+            $hx = if ($vx + $vw / 2 -lt $work.Left + $work.Width / 2) { $vx + $vw + 150 } else { $vx - 150 }
             [Mouse]::Move($hx, $vy + [int]($vh / 2))
             Wait-Game { param($g) $g.whisper -eq 'Hot' } 4500 'a hot whisper' | Out-Null
             Start-Sleep -Milliseconds 200
@@ -3016,7 +3017,7 @@ function Stage-Games {
             Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper (dark)' | Out-Null
             Start-Sleep -Milliseconds 200
             Screenshot 'game-hide-cold-dark.png' | Out-Null
-            $hx = if ($g.side -eq '2') { [int]$g.vx + [int]$g.vw + 300 } else { [int]$g.vx - 300 }
+            $hx = if ([int]$g.vx + [int]$g.vw / 2 -lt $work.Left + $work.Width / 2) { [int]$g.vx + [int]$g.vw + 300 } else { [int]$g.vx - 300 }
             [Mouse]::Move($hx, [int]$g.vy + [int]$g.vh / 2)
             Wait-Game { param($g) $g.whisper -eq 'Warm' } 4500 'a warm whisper' | Out-Null
             Start-Sleep -Milliseconds 200
