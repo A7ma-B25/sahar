@@ -62,6 +62,7 @@ public class SettingsPatchTests
         ("mindLearnExamples", "true"),
         ("mindLearnMusic", "true"),
         ("mindEpisodeDays", "7"),
+        ("allowCapture", "true"),
     ];
 
     public static TheoryData<string, string> Valid

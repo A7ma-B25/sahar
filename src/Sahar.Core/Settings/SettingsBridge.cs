@@ -60,6 +60,10 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
     public string? EnginePath { get; init; }
     public string ClaudeSettingsPath { get; init; } = Activities.ClaudeLinkFile.DefaultPath;
 
+    /// <summary>0.15 T7: the settings app makes «ابعت سجلّي»'s zip itself when she is not running (the zip's file name and
+    /// whether it is on the Desktop, or null).</summary>
+    public Func<(string Name, bool OnDesktop)?>? DiagLocal { get; init; }
+
     private static readonly Prayer.Prayer[] Five =
         [Prayer.Prayer.Fajr, Prayer.Prayer.Dhuhr, Prayer.Prayer.Asr, Prayer.Prayer.Maghrib, Prayer.Prayer.Isha];
 
@@ -83,6 +87,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
                 "shortcut" => await Shortcut(id, req),
                 "clipboard-clear" => Reply(id, "clipboard-clear", w => { }, await engine.ClearClipboardAsync()),
                 "erase" => await Erase(id),
+                "diag" => await Diag(id),
                 "reset" => await Reset(id),
                 "claude-status" => Claude(id, "claude-status", null),
                 "claude-link" => Claude(id, "claude-link", j => Activities.ClaudeLink.Install(j, EnginePath!)),
@@ -302,6 +307,25 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
             w.WriteEndArray();
             w.WriteBoolean("restarted", outcome.Restarted);
         }, true);
+    }
+
+    /// <summary>«ابعت سجلّي» (0.15 T7): she makes the zip and says where; without her the app makes it. The page gets
+    /// the file's name only, never its path.</summary>
+    private async Task<string> Diag(long? id)
+    {
+        (string Name, bool OnDesktop)? made = null;
+        if (engine.Running && await engine.CommandAsync("diag-bundle", null) is { } r)
+        {
+            if (r.GetValueOrDefault("ok") == "true" && r.GetValueOrDefault("name64") is { Length: > 0 } b64)
+                made = (Encoding.UTF8.GetString(Convert.FromBase64String(b64)), r.GetValueOrDefault("desktop") != "false");
+        }
+        else made = DiagLocal?.Invoke();
+        return Reply(id, "diag", w =>
+        {
+            if (made is not { } m) return;
+            w.WriteString("name", m.Name);
+            w.WriteBoolean("desktop", m.OnDesktop);
+        }, made is not null);
     }
 
     // ---- writing replies ----

@@ -19,6 +19,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_SHOWTIP = 0x80;
     private const uint MF_STRING = 0, MF_CHECKED = 0x8, MF_POPUP = 0x10, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2;
     private const int CmdHide = 1, CmdQuit = 2, CmdFolder = 3, CmdShow = 4, CmdWeather = 5, CmdWho = 6, CmdSettings = 7, CmdUpdate = 8, CmdActivity = 10;   // 10 + (int)ActivityLevel
+    private const int CmdSendLog = 20, CmdCapture = 21;   // 0.15 T7, T8
 
     private readonly uint _taskbarCreated;
     private readonly nint _icon;
@@ -67,6 +68,11 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     public event Action? WhoAmI;
     /// <summary>«دوّر على تحديث»: look for a newer version now.</summary>
     public event Action? CheckUpdate;
+    /// <summary>0.15 T7 «ابعت سجلّي»: her logs in a zip on the Desktop.</summary>
+    public event Action? SendLog;
+    /// <summary>0.15 T8 «اسمح بتصويرها»: her windows in screen recordings, or not (the check shows it).</summary>
+    public event Action? CaptureToggled;
+    public bool AllowCapture { get; set; }
     public event Action? PowerChanged;
     public event Action<bool>? SessionLocked;
     /// <summary>Windows is shutting down, logging off or restarting for an update.</summary>
@@ -177,6 +183,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         fixed (char* who = "مين أنا؟ (اسمي) / Who am I?")
         fixed (char* settings = "إعداداتي / Settings")
         fixed (char* update = "دوّر على تحديث / Check for update")
+        fixed (char* sendLog = Sahar.Core.Settings.Address.ToYou("ابعت سجلّي / Send my log"))
+        fixed (char* capture = Sahar.Core.Settings.Address.ToYou("اسمح بتصويرها / Allow screen capture"))
         fixed (char* quit = "إغلاق / Quit")
         {
             if (SettingsAvailable()) Native.AppendMenu(menu, MF_STRING, CmdSettings, settings);
@@ -188,6 +196,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
             Native.AppendMenu(menu, MF_STRING, CmdWho, who);
             Native.AppendMenu(menu, MF_STRING, CmdFolder, folder);
             Native.AppendMenu(menu, MF_STRING, CmdUpdate, update);
+            Native.AppendMenu(menu, MF_STRING, CmdSendLog, sendLog);
+            Native.AppendMenu(menu, MF_STRING | (AllowCapture ? MF_CHECKED : 0), CmdCapture, capture);
             Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
             Native.AppendMenu(menu, MF_STRING, CmdQuit, quit);
         }
@@ -203,6 +213,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         else if (cmd == CmdWho) WhoAmI?.Invoke();
         else if (cmd == CmdSettings) SettingsClicked?.Invoke();
         else if (cmd == CmdUpdate) CheckUpdate?.Invoke();
+        else if (cmd == CmdSendLog) SendLog?.Invoke();
+        else if (cmd == CmdCapture) CaptureToggled?.Invoke();
         else if (cmd == CmdQuit) Quit?.Invoke();
     }
 
@@ -213,6 +225,8 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         {
             case "who": WhoAmI?.Invoke(); return true;
             case "update": CheckUpdate?.Invoke(); return true;
+            case "send-log": SendLog?.Invoke(); return true;
+            case "capture": CaptureToggled?.Invoke(); return true;
             case "settings" when SettingsAvailable(): SettingsClicked?.Invoke(); return true;
             default: return false;
         }

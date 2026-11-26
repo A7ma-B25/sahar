@@ -2,6 +2,7 @@
 // itself (the weather), and «امسح كل شي عني» (Ruling 9: she forgets everything and starts again).
 import { h, title, sub, section, group, switchRow, note, pri, dng, ghost } from '../controls.js';
 import '../strings/mind-memory.js';
+import '../strings/diag-capture.js';
 
 // Which «أكيد؟» is open and what each action last said: kept across a redraw (the window coming back redraws).
 const kept = { open: null, status: {} };
@@ -72,6 +73,12 @@ export function render({ S, tx, set, ask, reload }) {
     }
   }, 'weatherEnabled');
   weather.id = 'sw-weather-net';
+  // 0.15 T8 «اسمح بتصويرها»: off, Windows leaves her windows out of recordings and screenshots; she follows it live.
+  const capture = switchRow(tx('swCapture'), tx('swCaptureHint'), !!S.value.allowCapture, async (on, btn) => {
+    const r = await set('allowCapture', on);
+    if (!r.ok) btn.set(!on);
+  }, 'allowCapture');
+  capture.id = 'sw-capture';
   return [
     title(tx('pagePrivacy')),
     sub(tx('privacySub')),
@@ -79,6 +86,8 @@ export function render({ S, tx, set, ask, reload }) {
     group(clip),
     section(tx('groupNet')),
     group(weather, note(tx('netNote'))),
+    section(tx('groupCapture')),
+    group(capture),
     section(tx('groupAll')),
     group(erase),
   ];

@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'diag', 'mindeval')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -4241,6 +4241,153 @@ function Stage-Settings {
     if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
 }
 
+# ---- 0.15 T7 «ابعت سجلّي» and T8 «اسمح بتصويرها» ----
+
+$script:Desktop = [Environment]::GetFolderPath('DesktopDirectory')
+function Diag-Zips { @(Get-ChildItem -Path $script:Desktop -Filter 'sahar-log-*.zip' -ErrorAction SilentlyContinue) }
+function Zip-Texts([string]$path) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+    try {
+        $h = [ordered]@{}
+        foreach ($e in $zip.Entries) { $r = [IO.StreamReader]::new($e.Open(), [Text.Encoding]::UTF8); try { $h[$e.FullName] = $r.ReadToEnd() } finally { $r.Dispose() } }
+        $h
+    }
+    finally { $zip.Dispose() }
+}
+function Capture-State { Kv 'debug-capture' }
+# How much of her body's square differs between two screenshots (0..1): she is drawn in one and not the other.
+function Body-Diff([string]$a, [string]$b, $st) {
+    $x0 = [int]$st.x; $y0 = [int]$st.y; $w = [int]$st.width; $h = [int]$st.height
+    $ba = [System.Drawing.Bitmap]::new($a); $bb = [System.Drawing.Bitmap]::new($b)
+    try {
+        $n = 0; $d = 0
+        for ($y = $y0; $y -lt $y0 + $h; $y += 3) {
+            for ($x = $x0; $x -lt $x0 + $w; $x += 3) {
+                $p = $ba.GetPixel($x, $y); $q = $bb.GetPixel($x, $y); $n++
+                if ([math]::Abs($p.R - $q.R) + [math]::Abs($p.G - $q.G) + [math]::Abs($p.B - $q.B) -gt 60) { $d++ }
+            }
+        }
+        $d / [math]::Max(1, $n)
+    }
+    finally { $ba.Dispose(); $bb.Dispose() }
+}
+
+function Stage-Diag {
+    $kept = Settings-Json
+    Diag-Zips | Remove-Item -ErrorAction SilentlyContinue
+    Write-Settings '{ "helloDone": true, "userName": "Lina", "weatherCity": "Aleppo", "prayerCity": "Aleppo", "prayerLatitude": 36.2, "prayerLongitude": 37.16 }'
+    Step 'her windows are left out of screen capture by default' {
+        # Without --capturable: as on his PC.
+        $script:engine = Start-Process -FilePath $Exe -ArgumentList '--test-mode' -PassThru
+        Wait-Pipe 5
+        $st = Pose-Body 700 400
+        Start-Sleep -Milliseconds 800
+        $c = Capture-State
+        Write-Host "    capture: $($c.allowed) windows=$($c.windows) hidden=$($c.hidden) wanting=$($c.wanting) registered=$($c.registered)"
+        if ($c.allowed -ne 'false') { throw 'capture allowed by default' }
+        if ([int]$c.hidden -lt 3) { throw "only $($c.hidden) of her windows are hidden from capture (overlay, spare, input at least)" }
+        if ($c.hidden -ne $c.wanting) { throw "$($c.hidden) of $($c.wanting) windows hidden" }
+        $script:hiddenShot = Screenshot 'capture-hidden.png'
+        $script:bodyAt = $st
+    }
+    Step '«اسمح بتصويرها» on the privacy page: every window shows, live' {
+        Start-SettingsApp | Out-Null
+        SNav 'privacy'
+        if ((Js "document.getElementById('sw-capture')?.getAttribute('aria-checked')") -ne 'false') { throw 'the switch is not there, or not off' }
+        SClick '#sw-capture'
+        Wait-Settings '"allowCapture"\s*:\s*true' 5000 'allowCapture saved'
+        Wait-Until { $c = Capture-State; $c.allowed -eq 'true' -and $c.hidden -eq '0' } 5000 'her windows did not all come back to capture'
+        Start-Sleep -Milliseconds 500
+        $shot = Screenshot 'capture-allowed.png'
+        $d = Body-Diff $script:hiddenShot $shot $script:bodyAt
+        Write-Host ("    her body's square differs in {0:P0} of its pixels" -f $d)
+        if ($d -lt 0.15) { throw ("allowed: she is not in the screenshot (only {0:P0} of her square changed)" -f $d) }
+        Capture 'app-privacy-capture'
+    }
+    Step 'a window opened while allowed shows too' {
+        # The note's bubble is a new window: made now, it shows like the others (and the tray hides it below).
+        $before = [int](Capture-State).wanting
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 3000 'the menu card' | Out-Null
+        Press 'note'
+        Wait-Until { (Kv 'debug-bubble').open -eq 'true' } 3000 'the note bubble did not open'
+        $c = Capture-State
+        Write-Host "    with the note bubble open: hidden=$($c.hidden) wanting=$($c.wanting) (before $before)"
+        if ([int]$c.wanting -le $before) { throw 'the bubble is not in the registry' }
+        if ($c.hidden -ne '0') { throw "windows opened while allowed are hidden ($($c.hidden))" }
+    }
+    Step 'the tray item hides her again, and says so' {
+        Send '{"type":"cmd","name":"tray-pick","args":{"item":"capture"}}' | Out-Null
+        $c = Capture-State
+        Write-Host "    capture: $($c.allowed) hidden=$($c.hidden) wanting=$($c.wanting)"
+        # Every window, the ones opened while he allowed it too (the card's chat field).
+        if ($c.allowed -ne 'false' -or [int]$c.hidden -lt 3 -or $c.hidden -ne $c.wanting) { throw "the tray did not hide her (allowed=$($c.allowed) hidden=$($c.hidden) of $($c.wanting))" }
+        if ((Text64 $c.said64) -ne 'تمام، ما عاد بطلع بالتصوير.') { throw "her line: $(Text64 $c.said64)" }
+        Wait-Settings '"allowCapture"\s*:\s*false' 3000 'allowCapture off saved'
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'capture: hidden from the tray') { throw 'engine.log does not say the tray hid her' }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 3000 'the menu card' | Out-Null
+        $c = Capture-State
+        if ($c.hidden -ne $c.wanting) { throw "with the card open: $($c.hidden) of $($c.wanting) hidden" }
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        # The window coming back asks the host again: the page shows what the tray did.
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("window.sahar.reload().then(() => true)")) + '"}')
+        SNav 'privacy'
+        if ((Js "document.getElementById('sw-capture').getAttribute('aria-checked')") -ne 'false') { throw 'the page still shows capture allowed' }
+    }
+    Step '«ابعت سجلّي» from the tray: a zip on the Desktop, nothing about him in it' {
+        # Lines that must never leave: his name, the Windows account, a path, a quoted title.
+        $user = $env:USERNAME
+        Add-Content -Path (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Encoding utf8 -Value "2026-11-20 10:00:00.000 test: Lina $user at C:\Users\$user\Documents\secret.txt title ""Inbox - Lina"""
+        Send '{"type":"cmd","name":"tray-pick","args":{"item":"send-log"}}' | Out-Null
+        $zips = Diag-Zips
+        if ($zips.Count -ne 1) { throw "$($zips.Count) zips on the Desktop" }
+        $said = Text64 (Capture-State).said64
+        if ($said -ne "حطّيتلك سجلّي عالديسكتوب: $($zips[0].Name)") { throw "her line: $said" }
+        $t = Zip-Texts $zips[0].FullName
+        Write-Host "    entries: $($t.Keys -join ', ')"
+        foreach ($n in 'about.txt', 'engine.log', 'settings.json') { if (-not $t.Contains($n)) { throw "no $n in the zip" } }
+        $all = ($t.Values -join "`n")
+        foreach ($bad in 'Lina', 'Aleppo', 'secret.txt', 'Inbox', 'C:\Users') { if ($all.Contains($bad)) { throw "the zip holds '$bad'" } }
+        if ($t['settings.json'] -match '36\.2|37\.16') { throw 'settings.json holds his place' }
+        if ($user.Length -ge 2 -and $all -match [regex]::Escape($user)) { throw 'the zip holds the Windows account name' }
+        if ($t['settings.json'] -notmatch '"userName": "<set>"') { throw "settings.json: $($t['settings.json'])" }
+        if ($t['about.txt'] -notmatch 'sahar: \d+\.\d+' -or $t['about.txt'] -notmatch 'made by: engine' -or $t['about.txt'] -notmatch 'her brain') { throw "about.txt: $($t['about.txt'])" }
+        if ($t['engine.log'] -notmatch 'test: <name> <name> at <path> title "…"') { throw 'the planted line was not scrubbed as expected' }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -notmatch 'diag: bundle on the desktop' -or $log -notmatch 'diag: explorer not opened \(test mode\)') { throw 'engine.log does not say what it did' }
+        Copy-Item $zips[0].FullName (Join-Path $Out 'diag-sample.zip')
+    }
+    Step '«ابعت سجلّي» on «عن سحر»: she makes it, and without her the app does' {
+        SNav 'about'
+        if (-not (Js "!!document.getElementById('send-log')")) { throw 'no «ابعت سجلّي» button' }
+        SClick '#send-log'
+        Wait-Until { (SText '#send-log-status') -match 'حطّيتلك سجلّي عالديسكتوب: sahar-log-[\d-]+\.zip' } 8000 "the page does not say where ($(SText '#send-log-status'))"
+        if ((Diag-Zips).Count -ne 2) { throw "$((Diag-Zips).Count) zips after the page's" }
+        Capture 'app-about-sendlog'
+        Stop-Engine
+        Wait-Until { -not (Test-Path '\\.\pipe\sahar') } 5000 'she did not quit'
+        SClick '#send-log'
+        Wait-Until { (Diag-Zips).Count -eq 3 } 8000 'the app did not make the zip without her'
+        $newest = Diag-Zips | Sort-Object LastWriteTime | Select-Object -Last 1
+        $t = Zip-Texts $newest.FullName
+        if ($t['about.txt'] -notmatch 'made by: settings') { throw "about.txt: $($t['about.txt'])" }
+        if (($t.Values -join "`n").Contains('Lina')) { throw 'the app''s zip holds his name' }
+        $slog = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\settings.log') -Raw
+        if ($slog -notmatch 'diag: making the bundle \(she is not running\)') { throw 'settings.log does not say the app made it' }
+        if ($slog -match [regex]::Escape($script:Desktop)) { throw 'settings.log holds the Desktop path' }
+    }
+    Stop-SettingsApp
+    Stop-Engine
+    Get-Process -Name 'Sahar.Engine' -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Kill() } catch { } }
+    Diag-Zips | Remove-Item -ErrorAction SilentlyContinue
+    $slog = Join-Path $env:LOCALAPPDATA 'Sahar\settings.log'
+    if (Test-Path $slog) { Copy-Item $slog (Join-Path $Out 'settings-diag.log') -Force }
+    if ($kept) { Set-Content -Path $script:SettingsFile -Value $kept -Encoding UTF8 -NoNewline } else { Remove-Item $script:SettingsFile -ErrorAction SilentlyContinue }
+}
+
 # ---- 0.13 live activities: her tag, its cards, the knock, Claude Code's hooks (spec 2026-11-13) ----
 
 function Acts { Kv 'debug-activities' }
@@ -4963,6 +5110,7 @@ try {
             'activities' { Stage-Activities }
             'mind' { Stage-Mind }
             'install' { Stage-Install }
+            'diag' { Stage-Diag }
             'mindeval' { Stage-MindEval }
         }
     }

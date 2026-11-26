@@ -47,6 +47,13 @@ public sealed class SettingsBridgeTests : IDisposable
         public Task<bool> ClearClipboardAsync() { Clears++; return Task.FromResult(Running); }
         public EraseOutcome Erase = new([], true);
         public Task<EraseOutcome?> EraseAllAsync() { Erases++; return Task.FromResult<EraseOutcome?>(Running ? Erase : null); }
+        public List<string> Commands = [];
+        public Dictionary<string, string>? CommandReply;
+        public Task<IReadOnlyDictionary<string, string>?> CommandAsync(string name, Dictionary<string, string>? args)
+        {
+            Commands.Add(name);
+            return Task.FromResult<IReadOnlyDictionary<string, string>?>(Running ? CommandReply : null);
+        }
     }
 
     private sealed class FakeLocator : ILocator
@@ -238,6 +245,49 @@ public sealed class SettingsBridgeTests : IDisposable
         Assert.True(r.GetProperty("ok").GetBoolean());
         Assert.Equal("Ctrl+Alt+K", SettingsStore.Load(PathOf).MenuShortcut);
         Assert.Equal("Ctrl+Alt+K", r.GetProperty("value").GetProperty("menuShortcut").GetString());
+    }
+
+    private static string B64(string t) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(t));
+
+    [Fact]
+    public async Task Diag_SheMakesTheZip_AndThePageGetsItsNameOnly()
+    {
+        _engine.CommandReply = new() { ["ok"] = "true", ["name64"] = B64("sahar-log-2026-11-20-1405.zip"), ["desktop"] = "true", ["path64"] = B64(@"C:\Users\x\Desktop\sahar-log-2026-11-20-1405.zip") };
+        var r = await Ask("""{"id":40,"type":"diag"}""");
+        Assert.Equal("diag", r.GetProperty("type").GetString());
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        Assert.Equal("sahar-log-2026-11-20-1405.zip", r.GetProperty("name").GetString());
+        Assert.True(r.GetProperty("desktop").GetBoolean());
+        Assert.False(r.TryGetProperty("path", out _));   // the page never sees a path
+        Assert.Equal(["diag-bundle"], _engine.Commands);
+    }
+
+    [Fact]
+    public async Task Diag_SheCouldNot_IsNotOk()
+    {
+        _engine.CommandReply = new() { ["ok"] = "false" };
+        Assert.False((await Ask("""{"id":41,"type":"diag"}""")).GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Diag_WithoutHer_TheAppMakesItItself()
+    {
+        _engine.Running = false;
+        int local = 0;
+        var bridge = new SettingsBridge(PathOf, _engine, _locator, () => _now, _dir) { DiagLocal = () => { local++; return ("sahar-log-x.zip", false); } };
+        var r = JsonDocument.Parse(await bridge.HandleAsync("""{"id":42,"type":"diag"}""")).RootElement;
+        Assert.True(r.GetProperty("ok").GetBoolean());
+        Assert.Equal("sahar-log-x.zip", r.GetProperty("name").GetString());
+        Assert.False(r.GetProperty("desktop").GetBoolean());
+        Assert.Equal(1, local);
+        Assert.Empty(_engine.Commands);
+    }
+
+    [Fact]
+    public async Task Diag_WithoutHerOrALocalMaker_IsNotOk()
+    {
+        _engine.Running = false;
+        Assert.False((await Ask("""{"id":43,"type":"diag"}""")).GetProperty("ok").GetBoolean());
     }
 
     [Fact]
