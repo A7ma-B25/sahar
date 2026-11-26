@@ -405,8 +405,8 @@ internal sealed class GamePlayer : IDisposable
         Scene.Paws(false);
         Scene.Pips(null, _round, _results);
         _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
-        StartZip(spot.TopLeft, trail: true);
         State = $"hiding-{_round}";
+        StartZip(spot.TopLeft, trail: true);   // under reduced motion she lands (and is "hidden") at once
     }
 
     /// <summary>She shrinks with a squash and zips along a curve to <paramref name="to"/> (reduced motion: she is there).</summary>
@@ -508,8 +508,8 @@ internal sealed class GamePlayer : IDisposable
                 _spot = next;
                 _used.Add(next.Value);
                 _v.FaceGroup.Offset = Vector3.Zero;
-                StartZip(next.Value.TopLeft, trail: false);
                 State = $"moving-{_round}";
+                StartZip(next.Value.TopLeft, trail: false);
                 return;
             }
         }
