@@ -466,11 +466,13 @@ internal sealed class SeekScene : IDisposable
         var size = new Vector2(w + 8, h + tail + 8);
         float cx = Math.Clamp(her.X + her.Width / 2, work.X + size.X / 2, work.Right - size.X / 2);
         float cy = her.Y - D(54) - size.Y / 2;   // above her leaf
-        if (cy - size.Y / 2 < work.Y) cy = her.Bottom + D(16) + size.Y / 2;
+        bool below = cy - size.Y / 2 < work.Y;
+        if (below) cy = her.Bottom + D(28) + size.Y / 2;   // no room above: under her (and her pips), the tail up
         var centre = new Vector2(cx, cy);
         var origin = centre - size / 2;
+        float top = below ? 4 + tail : 4;
         // The buttons sit at the card's start edge (right, RTL): «يلا» first.
-        float by = 4 + pad + lineSize.Y + D(12);
+        float by = top + pad + lineSize.Y + D(12);
         var againLocal = new D2DRect { Right = 4 + w - pad, Left = 4 + w - pad - bw1, Top = by, Bottom = by + btnH };
         var doneLocal = new D2DRect { Right = againLocal.Left - gap, Left = againLocal.Left - gap - bw2, Top = by, Bottom = by + btnH };
         AgainButton = new RectF(origin.X + againLocal.Left, origin.Y + againLocal.Top, bw1, btnH);
@@ -479,14 +481,16 @@ internal sealed class SeekScene : IDisposable
         (Rgba surface, Rgba ink, Rgba accent, Rgba onAccent, Rgba soft, Rgba softInk, Rgba outline) = (Surface, Ink, Accent, OnAccent, Soft, SoftInk, Outline);
         _ask = Add(size, centre, (dc, s) =>
         {
-            var card = new D2DRect { Left = 4, Top = 4, Right = 4 + w, Bottom = 4 + h };
+            var card = new D2DRect { Left = 4, Top = top, Right = 4 + w, Bottom = top + h };
             var shadow = new D2DRect { Left = card.Left, Top = card.Top + 2, Right = card.Right, Bottom = card.Bottom + 2 };
             dc.FillRoundedRect(shadow, radius, dc.SolidBrush(new D2DColor(Rgba.Parse("#000000"), Dark ? 0.35f : 0.10f)));
             var fill = dc.SolidBrush(new D2DColor(surface));
             dc.FillRoundedRect(card, radius, fill);
             dc.DrawRoundedRect(card, radius, dc.SolidBrush(new D2DColor(outline)), 1);
-            dc.FillGeometry(dc.Path(PathData.Parse(FormattableString.Invariant(
-                $"M{tailX - tail} {card.Bottom - 1} L{tailX} {card.Bottom + tail} L{tailX + tail} {card.Bottom - 1} Z"))), fill);
+            var tailPath = below
+                ? FormattableString.Invariant($"M{tailX - tail} {card.Top + 1} L{tailX} {card.Top - tail} L{tailX + tail} {card.Top + 1} Z")
+                : FormattableString.Invariant($"M{tailX - tail} {card.Bottom - 1} L{tailX} {card.Bottom + tail} L{tailX + tail} {card.Bottom - 1} Z");
+            dc.FillGeometry(dc.Path(PathData.Parse(tailPath)), fill);
             dc.TextLayout(line, font, 400, new D2DRect { Left = card.Left + pad, Top = card.Top + pad, Right = card.Right - pad, Bottom = card.Top + pad + lineSize.Y },
                 dc.SolidBrush(new D2DColor(ink)), TextAlign.Start, rtl: true);
             dc.FillRoundedRect(againLocal, D(10), dc.SolidBrush(new D2DColor(accent)));

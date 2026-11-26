@@ -312,6 +312,9 @@ internal sealed class GamePlayer : IDisposable
     private (Eyes Eyes, Mouth Mouth) _faceBefore;
     private string _said = "";
 
+    /// <summary>Takes her speech bubble away (the count is wordless; the result card replaces the last line).</summary>
+    public Action? Hush { get; set; }
+
     /// <summary>Test mode: the kind of spot she prefers when one is free (the ui harness shows each kind).</summary>
     public SpotKind? SeekPrefer { get; set; }
 
@@ -345,6 +348,7 @@ internal sealed class GamePlayer : IDisposable
         State = $"counting-{_round}";
         Scene.Clip(null);
         Scene.CloseAsk();
+        Hush?.Invoke();
         // The cover pose, with no words: paws over her eyes, a blush, «٣ ٢ ١» over her head, the pips under her.
         _v.SetFace(Eyes.Closed, Mouth.Smile, ExpressionPlayer.Fade);
         _v.BlushLayer.Container.Opacity = 1f;
@@ -378,6 +382,7 @@ internal sealed class GamePlayer : IDisposable
                 }
                 break;
             case SeekPhase.Ask:
+                Moving(dt);
                 if (_phaseT >= 20f) return false;   // no answer: the game ends quietly
                 break;
         }
@@ -636,8 +641,14 @@ internal sealed class GamePlayer : IDisposable
         _v.BlushLayer.Container.Opacity = SaharVisual.BlushRest;
         var line = Sahar.Core.Settings.Address.ToYou(HideSeekText.End(Found));
         _said = line;
-        Scene.Ask(line, HerRect, Work);
-        Scene.Pips(new Vector2(HerRect.X + HerRect.Width / 2, HerRect.Bottom + 12 * Dpi), HideSeek.Rounds + 1, _results);
+        Hush?.Invoke();
+        // She floats to the middle of the screen, with room above her for the card.
+        var w = Work;
+        var to = new Vector2(w.X + w.Width / 2 - Size.X / 2, w.Y + w.Height * 0.58f - Size.Y / 2);
+        MoveTo(to, Scene.Reduced ? 0.01f : 0.5f);
+        var her = new RectF(to.X, to.Y, Size.X, Size.Y);
+        Scene.Ask(line, her, w);
+        Scene.Pips(new Vector2(her.X + her.Width / 2, her.Bottom + 12 * Dpi), HideSeek.Rounds + 1, _results);
         Log.Write($"game: hide over, found {Found} of {HideSeek.Rounds}");
     }
 
