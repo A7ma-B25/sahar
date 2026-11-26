@@ -59,6 +59,7 @@ internal sealed class SpeechBubble : IDisposable
     public Func<bool> Clickable { get; set; } = () => true;
     /// <summary>The overlay grows to an area (screen px) and calls back once it holds it (OverlayStage.Need).</summary>
     public Action<string, RectF?, Action?> Need { get; set; } = (_, _, then) => then?.Invoke();
+    /// <summary>How many times he clicked a bubble away (a bubble that timed out is not counted).</summary>
     public int Clicks { get; private set; }
 
     public SpeechBubble(DispatcherQueue ui, SaharVisual v, Func<RectF> body, bool capturable = false)
@@ -110,7 +111,9 @@ internal sealed class SpeechBubble : IDisposable
     /// <summary>A click on her while it shows: away it goes.</summary>
     public void Dismiss()
     {
-        if (Showing) End(timedOut: false);
+        if (!Showing) return;
+        Clicks++;   // review I2: a reply streaming into the bubble stays away once he clicked it
+        End(timedOut: false);
     }
 
     /// <summary>Gone at once and without a word (she hides for a fullscreen app): no Ended.</summary>
@@ -139,6 +142,7 @@ internal sealed class SpeechBubble : IDisposable
 
     /// <summary>After a device loss: its drawing again.</summary>
     public void Redraw() => _now?.Surface.Redraw();
+
 
     private void End(bool timedOut)
     {

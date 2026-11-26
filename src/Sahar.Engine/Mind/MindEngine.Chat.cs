@@ -45,6 +45,9 @@ internal sealed partial class MindEngine
     private readonly Dictionary<string, (ActSource Source, string? Line, string Kind)> _turns = [];
     private string? _chatTurn;   // the chat turn the header follows
     private readonly Dictionary<string, string> _ran = [];   // 0.15.0: what the turn's last action really did (Core template)
+    private readonly HashSet<string> _acting = [];            // review I2: chat turns that sent a call (no bubble streaming)
+    private BubbleStream? _bubble;                            // review I2: the chat turn's words in her bubble (card closed)
+    private int _bubbleClicks;                                // his bubble clicks when this turn first drew there
     private int _turnSeq;
     private DateOnly _offeredOn;
     // initiative
@@ -167,7 +170,7 @@ internal sealed partial class MindEngine
             return false;
         }
         var id = "c" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
-        if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); }
+        if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); Forget(running); }
         var source = draft ? "draft" : "chat";
         if (!SendMind(new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() })) return false;
         _turns[id] = (ActSource.User, Clip(text, 60), source);
@@ -270,7 +273,18 @@ internal sealed partial class MindEngine
             case "partial" when m.Id is not null && m.Id == _chatTurn && m.Text is { } partial:
                 var words = Words(partial);
                 if (ReplyRoute.Where(Menu.IsOpen, MenuCard.FitsHeader(words)) == ReplyPlace.Header) Menu.MindStream(words);
-                else if (!Menu.IsOpen) Speech.Say(Address.For(Address.You, words));   // 0.15.0: the card closed, her words go on
+                else if (!Menu.IsOpen)
+                {
+                    // 0.15.0: the card closed, her words go on in her bubble — short ones only, never for a turn that acts,
+                    // and not after he clicked it away (review I2).
+                    _bubble ??= new BubbleStream();
+                    bool first = !_bubble.Shown;
+                    if (_bubble.Partial(words, _acting.Contains(m.Id), BubbleDismissed()) is { } shown)
+                    {
+                        if (first) _bubbleClicks = Speech.Clicks;
+                        Speech.Say(Address.For(Address.You, shown));
+                    }
+                }
                 break;
             case "call":
                 HandleCall(m);
@@ -288,10 +302,14 @@ internal sealed partial class MindEngine
                 else if (m.Id == _chatTurn)
                 {
                     Menu.MindThinking(false);
-                    if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Menu.SetReply(Address.For(Address.You, ChatReply.Learning));
+                    if (m.Error is "model-missing" or "load-failed" or "oom" or "busy")
+                    {
+                        var learning = Address.For(Address.You, ChatReply.Learning);
+                        if (Menu.IsOpen) Menu.SetReply(learning); else Speech.Say(learning);   // review (a): the card may be closed
+                    }
                     if (m.Error != "timeout") _chatTurn = null;   // a timeout's line follows
                 }
-                if (m.Error != "timeout") _turns.Remove(m.Id);
+                if (m.Error != "timeout") { _turns.Remove(m.Id); Forget(m.Id); }
                 break;
             case "draft" when m.Id is not null && m.Id == _chatTurn:   // stream B shows it («بصوتك» + copy)
                 _turns.Remove(m.Id);
@@ -320,7 +338,7 @@ internal sealed partial class MindEngine
             if (text.Trim().Length == 0) { Log.Write("mind: initiative, nothing to say"); return; }
             var gate = _gate.Check(GateInputs());
             if (!gate.Open) { _lastGate = gate.ClosedBy ?? "closed"; Log.Write($"mind: initiative line dropped ({_lastGate})"); return; }   // the moment passed
-            if (_schedule.Repeats(text)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
+            if (_schedule.Repeats(text, DateTimeOffset.Now)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
             _schedule.Spoke(DateTimeOffset.Now, text, Settings().MindInitiative);
             _lastLine = DateTimeOffset.Now;
             _awaitingAnswerSince = _lastLine;
@@ -330,7 +348,7 @@ internal sealed partial class MindEngine
             return;
         }
         _ran.Remove(id, out var ran);
-        if (id != _chatTurn) { _turns.Remove(id); Log.Write("mind: said dropped (late)"); return; }   // a replaced turn's late words
+        if (id != _chatTurn) { _turns.Remove(id); Forget(id); Log.Write("mind: said dropped (late)"); return; }   // a replaced turn's late words
         _chatTurn = null;
         _turns.Remove(id);
         if (FromWindow(id))
@@ -342,13 +360,26 @@ internal sealed partial class MindEngine
             return;
         }
         Menu.MindThinking(false);
-        if (text.Length == 0) { Log.Write("mind: said dropped (empty)"); return; }
+        if (text.Length == 0) { Forget(id); Log.Write("mind: said dropped (empty)"); return; }
         // 0.15.0: the card closed meanwhile (a game or a move closes it): a long reply becomes the short line of what ran.
         var line = ReplyRoute.Final(text, ran is null ? null : Words(ran), Menu.IsOpen);
         var place = ReplyRoute.Where(Menu.IsOpen, MenuCard.FitsHeader(line));
-        Log.Write($"mind: said ({line.Length} chars, {(place == ReplyPlace.Header ? "card" : Menu.IsOpen ? "bubble" : "bubble, card closed")}{(line != text ? ", confirmation" : "")})");
+        bool dismissed = BubbleDismissed();
+        Forget(id);
+        Log.Write($"mind: said ({line.Length} chars, {(place == ReplyPlace.Header ? "card" : Menu.IsOpen ? "bubble" : "bubble, card closed")}{(line != text ? ", confirmation" : "")}{(place == ReplyPlace.Bubble && dismissed ? ", he clicked it away" : "")})");
         if (place == ReplyPlace.Header) Menu.SetReply(line);
-        else Speech.Say(Address.For(Address.You, line));
+        else if (new BubbleStream().Final(line, dismissed) is { } shown) Speech.Say(Address.For(Address.You, shown));
+    }
+
+    /// <summary>Review I2: he clicked this turn's bubble away since it first drew there.</summary>
+    private bool BubbleDismissed() => _bubble is { Shown: true } && Speech.Clicks != _bubbleClicks;
+
+    /// <summary>A chat turn ended (said, error, replaced): its per-turn state goes (review g).</summary>
+    private void Forget(string id)
+    {
+        _ran.Remove(id);
+        _acting.Remove(id);
+        if (id == _chatTurn || _chatTurn is null) _bubble = null;
     }
 
     // ---- calls: the engine validates and decides (spec §3.7) ----
@@ -358,6 +389,7 @@ internal sealed partial class MindEngine
         var id = m.Id ?? "";
         int n = m.Call ?? 0;
         if (!_turns.TryGetValue(id, out var turn) || turn.Kind == "draft") { Reply(id, n, false, "refused", ToolTemplates.Failed); return; }   // not ours, or a draft: words only
+        if (id == _chatTurn) _acting.Add(id);
         ToolCall call;
         try { call = new ToolCall(m.Tool ?? "", JsonDocument.Parse(m.Data ?? "{}").RootElement.Clone(), m.Why); }
         catch (JsonException) { Reply(id, n, false, "invalid", ToolTemplates.BadOutput); return; }

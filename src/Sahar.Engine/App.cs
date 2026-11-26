@@ -715,8 +715,15 @@ internal sealed unsafe class App
         if (_options.TestMode && _options.UpdateKeyFile is { } keyFile)
             try { updateKey = File.ReadAllText(keyFile).Trim(); } catch (Exception e) { Log.Write($"update: test key not read ({e.GetType().Name})"); }
         string? updateHost = _options.TestMode ? _options.UpdateHost : null;
+        // Review (e): the update's line leaves the tray's tooltip after an hour (UpdateText.TipFor).
+        var tipClear = ui.CreateTimer();
+        tipClear.IsRepeating = false;
+        tipClear.Interval = Sahar.Core.Update.UpdateText.TipFor;
+        tipClear.Tick += (_, _) => Safe(() => tray.Status(null));
         using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), panel, () => motion.Body,
-            line => speech.Say(line), () => settings, Save,
+            line => speech.Say(line),
+            (line, notify) => { tray.Status(line); tipClear.Stop(); tipClear.Start(); if (notify && _state.Hidden) tray.Notify(line); },   // 0.15.0 T6
+            () => settings, Save,
             busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
                 panel.IsOpen || Sulking(),
             automatic: !_options.TestMode, reachable: !_options.TestMode || updateHost is not null,
@@ -1078,7 +1085,8 @@ internal sealed unsafe class App
             {
                 var items = clipboard.History.Items;
                 var first = items.Count > 0 ? items[0].Text ?? "" : "";
-                return new PipeReply(true, $"count={items.Count} first={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(first))}");
+                var all = string.Join('\n', items.Select(i => (i.Text ?? "").ReplaceLineEndings(" ")));
+                return new PipeReply(true, $"count={items.Count} first={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(first))} items64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(all))}");
             });
             pipe.Register("clipboard-pick", r => new PipeReply(clipboardTool.Pick((int)Arg(r, "index"))));
             pipe.Register("debug-cameramic", r =>
@@ -1174,7 +1182,8 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-update", _ => new PipeReply(true, updates.Describe()));
             pipe.Register("debug-capture", _ => new PipeReply(true, $"{Win.DescribeCapture()} said64={B64(speech.Text ?? "")}"));
-            pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")}"));
+            pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")} " +
+                $"tip64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(tray.TipText))}"));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>
             {

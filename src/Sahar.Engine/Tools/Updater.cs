@@ -50,9 +50,9 @@ internal sealed class Updater : IDisposable
     /// <summary>%TEMP%\Sahar-update: each download gets its own random folder inside (the uninstaller removes it).</summary>
     public static string Folder => Path.Combine(Path.GetTempPath(), "Sahar-update");
 
-    /// <summary>The offer in the channel's signed manifest (null: nothing newer); Ok is false when the check failed
-    /// or the manifest is not signed by the key.</summary>
-    public async Task<(UpdateOffer? Offer, bool Ok)> CheckAsync(UpdateChannel channel)
+    /// <summary>The offer in the channel's signed manifest (null: nothing newer); Failure is set when the check failed
+    /// or the manifest is not signed by the key (0.15.0 T6: its kind, so she can say why).</summary>
+    public async Task<(UpdateOffer? Offer, UpdateFailure? Failure)> CheckAsync(UpdateChannel channel)
     {
         try
         {
@@ -63,21 +63,23 @@ internal sealed class Updater : IDisposable
             if (UpdateManifest.Verify(manifest, Encoding.UTF8.GetString(signature), _key, channel) is not { } m)
             {
                 Log.Write("update: check failed (manifest refused: signature or fields)");
-                return (null, false);
+                return (null, UpdateFailure.Signature);
             }
-            if (!SemVersion.TryParse(Sahar.Core.CoreInfo.Version, out var current)) return (null, false);
-            return (UpdateRules.Offer(m, current, root), true);
+            if (!SemVersion.TryParse(Sahar.Core.CoreInfo.Version, out var current)) return (null, UpdateFailure.Other);
+            return (UpdateRules.Offer(m, current, root), null);
         }
         catch (Exception e)
         {
-            Log.Write($"update: check failed ({Kind(e)})");
-            return (null, false);
+            var f = Failure(e);
+            Log.Write($"update: check failed ({Kind(e)}; {f})");
+            return (null, f);
         }
     }
 
     /// <summary>Downloads the setup into a new random folder, hashing as it comes; then re-reads it under a no-write
-    /// lock and checks the signed SHA-256 again. The held, verified setup, or null (nothing partial is left).</summary>
-    public async Task<PreparedSetup?> DownloadAsync(UpdateOffer offer)
+    /// lock and checks the signed SHA-256 again. The held, verified setup, or the failure's kind (nothing partial is
+    /// left). <paramref name="progress"/> (0.15.0 T6): bytes so far and the length the server gave, from a pool thread.</summary>
+    public async Task<(PreparedSetup? Setup, UpdateFailure? Failure)> DownloadAsync(UpdateOffer offer, Action<long, long?>? progress = null)
     {
         ClearOld();
         string dir = Path.Combine(Folder, Path.GetRandomFileName());
@@ -93,7 +95,9 @@ internal sealed class Updater : IDisposable
             await using (var body = await response.Content.ReadAsStreamAsync(cts.Token))
             using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
             {
-                if (response.Content.Headers.ContentLength > MaxSetupBytes) throw new UpdateRefusedException("setup too big");
+                long? length = response.Content.Headers.ContentLength;
+                if (length > MaxSetupBytes) throw new UpdateRefusedException("setup too big");
+                progress?.Invoke(0, length);
                 var buffer = new byte[81920];
                 long total = 0;
                 int n;
@@ -103,6 +107,7 @@ internal sealed class Updater : IDisposable
                     if (total > MaxSetupBytes) throw new UpdateRefusedException("setup too big");
                     hash.AppendData(buffer, 0, n);
                     await file.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                    progress?.Invoke(total, length);
                 }
                 streamed = hash.GetHashAndReset();
             }
@@ -111,14 +116,15 @@ internal sealed class Updater : IDisposable
             held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (!UpdateRules.Matches(held, offer.Sha256)) throw new UpdateRefusedException("checksum mismatch");
             Log.Write($"update: {offer.Version} downloaded and verified");
-            return new PreparedSetup(path, held);
+            return (new PreparedSetup(path, held), null);
         }
         catch (Exception e)
         {
             held?.Dispose();
-            Log.Write($"update: download failed ({Kind(e)}; nothing kept)");
+            var f = Failure(e);
+            Log.Write($"update: download failed ({Kind(e)}; nothing kept; {f})");
             try { Directory.Delete(dir, recursive: true); } catch (Exception) { }
-            return null;
+            return (null, f);
         }
     }
 
@@ -200,8 +206,13 @@ internal sealed class Updater : IDisposable
     {
         UpdateRefusedException r => r.Message,
         OperationCanceledException => "timeout",
+        // A dropped connection mid-body is an IOException around the socket's error: a network failure, not a disk one.
+        IOException { InnerException: System.Net.Sockets.SocketException } => "SocketException",
         _ => e.GetType().Name,
     };
+
+    /// <summary>0.15.0 T6: the kind she tells you about (and whether she tries again).</summary>
+    private static UpdateFailure Failure(Exception e) => UpdateFailures.Classify(Kind(e), e is IOException ? e.HResult : 0);
 
     public void Dispose() => _http.Dispose();
 }

@@ -25,6 +25,37 @@ function Stage-MindRuntime {
             Write-Host "    probe: $($probe.Trim())"
             if ($probe -notmatch 'tier=') { throw 'the probe printed nothing' }
         }
+        # 0.15.0 T9: 0.14.x logged vram=0MB on his RTX 4050; the Mind now reads Windows' "GPU Process Memory" counter
+        # for llama-server's pid. This runner has no GPU for her model, so the PDH read is checked against
+        # PowerShell's own Get-Counter on the desktop compositor (it holds video memory on any adapter).
+        Step 'mind: the VRAM probe reads the GPU Process Memory counter as Get-Counter does' {
+            # The process holding the most video memory now (dwm, else this shell), so the bytes are read, not just a 0.
+            $target = (Get-Process dwm -ErrorAction SilentlyContinue | Select-Object -First 1).Id
+            try {
+                $top = (Get-Counter '\GPU Process Memory(*)\Dedicated Usage' -ErrorAction Stop).CounterSamples |
+                    Where-Object { $_.InstanceName -match '^pid_(\d+)_' } | Sort-Object CookedValue -Descending | Select-Object -First 1
+                if ($top -and $top.CookedValue -gt 0 -and $top.InstanceName -match '^pid_(\d+)_') { $target = [int]$Matches[1] }
+            } catch { }
+            if (-not $target) { $target = $PID }
+            $want = $null
+            try {
+                $samples = @((Get-Counter "\GPU Process Memory(pid_$target*)\Dedicated Usage" -ErrorAction Stop).CounterSamples |
+                    Where-Object { $_.InstanceName -match "^pid_${target}_" })
+                $want = [math]::Round((($samples | Measure-Object CookedValue -Sum).Sum) / 1MB)
+                Write-Host "    Get-Counter: pid $target, $($samples.Count) instance(s), $want MB"
+            } catch { Write-Host "    Get-Counter: no GPU Process Memory counter here ($($_.Exception.Message))" }
+            $out = (& (Join-Path (Split-Path $Exe) 'Sahar.Mind.exe') --gpu-memory $target | Out-String).Trim()
+            Write-Host "    Sahar.Mind --gpu-memory: $out"
+            $m = [regex]::Match($out, '^pid=(\d+) dedicatedMB=(\d+) instances=(\d+) status=0x([0-9a-f]{8})$')
+            if (-not $m.Success) { throw "the probe printed '$out'" }
+            if ($null -ne $want) {
+                if ($m.Groups[4].Value -ne '00000000') { throw "PDH failed (status 0x$($m.Groups[4].Value)) where Get-Counter read it" }
+                $got = [int]$m.Groups[2].Value
+                if ([math]::Abs($got - $want) -gt [math]::Max(4, $want * 0.05)) { throw "the probe says $got MB, Get-Counter $want MB" }
+            }
+            $bad = (& (Join-Path (Split-Path $Exe) 'Sahar.Mind.exe') --gpu-memory 0 | Out-String)
+            if ($LASTEXITCODE -ne 2) { throw "--gpu-memory 0 exit $LASTEXITCODE" }
+        }
         Step 'mind: the engine at rest, then with the model loaded (spec §3.12: the Mind client adds < 2 MB)' {
             Write-Settings '{ "helloDone": true, "mindEnabled": true, "mindUnloadMinutes": 1 }'
             $manifest = @{ models = @(@{ id = 'ci-tiny'; name = 'CI tiny'; origin = 'Local'; role = 'ci'; bytes = $pins.ciModel.bytes; sha256 = $pins.ciModel.sha256;
@@ -66,6 +97,9 @@ function Stage-MindRuntime {
             Write-Host "    bench: load $($b.Groups[1].Value) ms, first token $($b.Groups[2].Value) ms, $($b.Groups[3].Value) tok/s"
             if ([double]$b.Groups[3].Value -le 0) { throw 'no tokens per second: the client read nothing' }
             if ($log0 -match 'runtime: ready') { Write-Host '    (warm logged ready)' }
+            # 0.15.0 T9: the ready line says where its VRAM number came from (the CPU runtime: none).
+            $ready = [regex]::Match($log0, 'runtime: ready[^\r\n]*').Value
+            if ($ready -and $ready -notmatch 'vram=\d+MB \((pdh|buffers|free-delta|none)\)') { throw "the ready line has no VRAM source: $ready" }
         }
         Step 'mind: «النماذج» shows her model; a full «جرّبيني» gives its numbers (and «حكي بس» when it cannot run commands)' {
             Start-SettingsApp | Out-Null

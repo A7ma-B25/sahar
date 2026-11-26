@@ -148,6 +148,14 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                     catch (MindRuntimeException e)
                     {
                         Dropped?.Invoke(e.Detail is { } detail ? e.Code + " " + detail : e.Code);
+                        // Review I1: her action already ran — say what happened (an error now would hide it).
+                        if (early is { } ran)
+                        {
+                            outcomes.Add(await ran);
+                            io.Send(new MindMsg { T = "say", Id = id, Text = Final("", outcomes, false), Final = true });
+                            Report();
+                            return;
+                        }
                         // He asked: a line he can see before the error (the engine shows «I am still learning» itself for a
                         // missing or failed model).
                         if (chat && e.Code is "thinking" or "bad-output") io.Send(new MindMsg { T = "say", Id = id, Text = ToolTemplates.BadOutput, Final = true });
@@ -159,7 +167,14 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
                 ct.ThrowIfCancellationRequested();
                 promptTokens += reply.PromptTokens;
                 outTokens += reply.OutputTokens;
-                if (Decision.Parse(reply.Text) is not { } d) { invalid = true; Dropped?.Invoke("unparsable"); break; }
+                if (Decision.Parse(reply.Text) is not { } d)
+                {
+                    invalid = true;
+                    Dropped?.Invoke("unparsable");
+                    // Review I1: cut off (max_tokens) after her action went out: it is awaited, her line says what ran.
+                    if (early is { } ran) outcomes.Add(await ran);
+                    break;
+                }
                 say = d.Say;
                 mood = d.Mood;
                 risk = d.Risk;

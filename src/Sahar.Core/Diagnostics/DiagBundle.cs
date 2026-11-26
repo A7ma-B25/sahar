@@ -73,7 +73,9 @@ public static partial class DiagBundle
 
     // ---- scrubbing ----
 
-    [GeneratedRegex(@"(?i)\b[a-z]:[\\/][^\s""'<>|*?«»]*|\\\\[^\s""'<>|*?«»]+")]
+    // Review (f): a folder may hold spaces («C:\Users\Ammar Boom\…»): every segment that ends in a separator is part of
+    // the path, the last one ends at a space (over-scrubbing a word after it is the safe side).
+    [GeneratedRegex(@"(?i)(?:\b[a-z]:[\\/]|\\\\)(?:[^\\/\r\n""'<>|*?«»]*[\\/])*[^\s\\/""'<>|*?«»]*")]
     private static partial Regex PathRx();
 
     [GeneratedRegex(@"«[^»\n]*»")]

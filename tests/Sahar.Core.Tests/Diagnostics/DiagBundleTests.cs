@@ -38,6 +38,10 @@ public class DiagBundleTests
     [Theory]
     [InlineData(@"2026-11-20 10:00:00.000 load failed C:\Users\Ammar\AppData\Local\Sahar\x.gguf here", "2026-11-20 10:00:00.000 load failed <path> here")]
     [InlineData(@"open \\server\share\Ammar\file.txt", "open <path>")]
+    [InlineData(@"load failed C:\Users\Ammar Boom\AppData\Local\Sahar\x.gguf here", "load failed <path> here")]   // review (f)
+    [InlineData(@"in C:\Users\Ammar Boom\Desktop\ now", "in <path> now")]
+    [InlineData(@"open \\nas\My Music\Ammar Boom\song.mp3 ok", "open <path> ok")]
+    [InlineData("from C:/Users/Ammar Boom/Desktop/song.mp3", "from <path>")]
     [InlineData("from C:/Users/Ammar/Desktop/song.mp3", "from <path>")]
     [InlineData("hello Ammar, AMMAR and ammar's", "hello <name>, <name> and <name>'s")]
     [InlineData("Ammarboom stays (not the same word)", "Ammarboom stays (not the same word)")]

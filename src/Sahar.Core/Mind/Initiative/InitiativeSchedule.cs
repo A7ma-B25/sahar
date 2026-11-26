@@ -16,10 +16,13 @@ public sealed class InitiativeSchedule(DateTimeOffset started)
     private static readonly HashSet<string> Fillers =
         ["رايك", "هلق", "كتير", "بدك", "يعني", "هيك", "انت", "انتي", "لسا", "كمان", "شوي", "يلا", "شلون", "كيفك", "اليوم", "شي"];
 
-    private DateTimeOffset _nextCheck = started;
+    /// <summary>Review (b): after a start the first check waits the shortest check gap (not "due now" on every restart).</summary>
+    private DateTimeOffset _nextCheck = started + CheckGap(InitiativeLevel.Often);
+    /// <summary>Review (c): a topic counts as "said lately" for half a day.</summary>
+    public static readonly TimeSpan TopicMemory = TimeSpan.FromHours(12);
     private int _nothingInARow;
     private readonly List<DateTimeOffset> _lines = [];
-    private readonly List<HashSet<string>> _topics = [];
+    private readonly List<(DateTimeOffset At, HashSet<string> Words)> _topics = [];
 
     public DateTimeOffset NextCheck => _nextCheck;
 
@@ -55,17 +58,18 @@ public sealed class InitiativeSchedule(DateTimeOffset started)
         _nothingInARow = 0;
         _lines.Add(now);
         _lines.RemoveAll(l => now - l > TimeSpan.FromHours(24));
-        _topics.Add(Topic(line));
+        _topics.Add((now, Topic(line)));
         if (_topics.Count > Remembered) _topics.RemoveAt(0);
         _nextCheck = now + LineGap(level);
     }
 
     /// <summary>The same topic as a line she said lately (most of its words again, in any order, emoji aside).</summary>
-    public bool Repeats(string line)
+    public bool Repeats(string line, DateTimeOffset now)
     {
         var t = Topic(line);
-        foreach (var old in _topics)
+        foreach (var (at, old) in _topics)
         {
+            if (now - at > TopicMemory) continue;
             if (t.Count == 0 || old.Count == 0) { if (t.SetEquals(old)) return true; continue; }
             int common = t.Count(old.Contains);
             if (common >= 0.6 * Math.Min(t.Count, old.Count)) return true;

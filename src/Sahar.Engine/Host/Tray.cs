@@ -101,9 +101,7 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         d.UFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
         d.UCallbackMessage = CallbackMessage;
         d.HIcon = _icon;
-        var tip = new Span<char>(d.SzTip, 128);
-        Tip.AsSpan().CopyTo(tip);
-        tip[Tip.Length] = '\0';
+        Copy(TipText, d.SzTip, 128);
         // After a real Explorer restart the icon is gone and NIM_ADD works; if it still exists, refresh it.
         _added = Native.ShellNotifyIcon(NIM_ADD, &d) != 0 || Native.ShellNotifyIcon(NIM_MODIFY, &d) != 0;
         d.UVersion = 4;
@@ -120,6 +118,43 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
     }
 
     private NOTIFYICONDATAW Data() => new() { CbSize = (uint)sizeof(NOTIFYICONDATAW), HWnd = Hwnd, UID = 1 };
+
+    /// <summary>The tooltip now: her name, and the update's last line under it (0.15.0 T6).</summary>
+    public string TipText { get; private set; } = Tip;
+
+    /// <summary>0.15.0 T6: the update's line under her name in the tooltip ("" or null: her name only). Kept when
+    /// Explorer restarts.</summary>
+    public void Status(string? line)
+    {
+        TipText = Sahar.Core.Update.UpdateText.Tip(line);
+        if (!_added) return;
+        var d = Data();
+        d.UFlags = NIF_TIP | NIF_SHOWTIP;
+        Copy(TipText, d.SzTip, 128);
+        Native.ShellNotifyIcon(NIM_MODIFY, &d);
+    }
+
+    /// <summary>0.15.0 T6: a quiet tray notification (no sound; Windows holds it in quiet hours), for an answer you
+    /// asked for while she is hidden and her bubble cannot be seen.</summary>
+    public void Notify(string text)
+    {
+        if (!_added) return;
+        const uint NIF_INFO = 0x10, NIIF_NOSOUND = 0x10, NIIF_RESPECT_QUIET_TIME = 0x80;
+        var d = Data();
+        d.UFlags = NIF_INFO;
+        d.DwInfoFlags = NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
+        Copy(text, d.SzInfo, 256);
+        Copy(Tip, d.SzInfoTitle, 64);
+        Native.ShellNotifyIcon(NIM_MODIFY, &d);
+        Log.Write("tray: notification shown");
+    }
+
+    private static void Copy(string text, char* to, int size)
+    {
+        int n = Math.Min(text.Length, size - 1);
+        text.AsSpan(0, n).CopyTo(new Span<char>(to, size));
+        to[n] = '\0';
+    }
 
     public nint? OnMessage(nint hwnd, uint msg, nuint wParam, nint lParam)
     {
