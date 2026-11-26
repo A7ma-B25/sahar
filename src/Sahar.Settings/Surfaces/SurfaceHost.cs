@@ -52,6 +52,9 @@ internal sealed class SurfaceHost
         if (!first) { SettingsLog.Write("surfaces: already running"); return 0; }
         try
         {
+            // A background helper: below her and his apps when the machine is busy (its WebView2 processes inherit it).
+            try { System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal; }
+            catch (Exception) { }
             var ui = new UiSyncContext();
             Ui = ui;
             SynchronizationContext.SetSynchronizationContext(ui);
