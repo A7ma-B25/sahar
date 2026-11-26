@@ -35,6 +35,7 @@ internal sealed class ChatHub
     private int _seq;
     private readonly HashSet<int> _copied = [];
     private (string Conv, int Index, Action<bool> Answer)? _ask;
+    private (string Yes, string No) _askLabels = ("إي", "لا");
     private readonly Dictionary<int, Func<string, bool>> _copy = [];
 
     /// <summary>A line he sent from the window: App runs it like the card's chat row, with her answer coming back here.</summary>
@@ -181,9 +182,10 @@ internal sealed class ChatHub
     public static Func<string, bool> Clipboard { get; set; } = _ => false;
 
     /// <summary>An ask while the window is open goes inline (not to the bubble); false when it is closed.</summary>
-    public bool Ask(string question, Action<bool> answer)
+    public bool Ask(string question, Action<bool> answer, string yes = "إي", string no = "لا")
     {
         if (!_open) return false;
+        _askLabels = (yes, no);
         _conv = _store.Append(_conv, new ChatEntry(_now(), ChatWho.Her, ChatLine.Ask, question));
         _ask = (_conv, _store.Load(_conv).Count - 1, answer);
         Push();
@@ -358,7 +360,7 @@ internal sealed class ChatHub
                     .S("note", Address.ToYou("ما ببعتها لحدا، إنت بتلصقها")).T("copied", _copied.Contains(i)).End();
                 break;
             case ChatLine.Ask:
-                j.S("kind", "ask").S("text", m.Text).O("ask").S("yes", "إي").S("no", "لا").T("answered", m.Answer is not null).End();
+                j.S("kind", "ask").S("text", m.Text).O("ask").S("yes", _askLabels.Yes).S("no", _askLabels.No).T("answered", m.Answer is not null).End();
                 if (m.Answer is { } a)
                     j.O("receipt").S("icon", a == "yes" ? "check" : "x").S("text", a switch
                     {
