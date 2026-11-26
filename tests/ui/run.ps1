@@ -4185,7 +4185,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 12) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four
+        if ($n -ne 13) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four; 0.16: «شخصية سحر»
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }
