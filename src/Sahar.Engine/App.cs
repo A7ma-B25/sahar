@@ -433,6 +433,7 @@ internal sealed unsafe class App
         });
         // 🎮 Games (0.9): while one runs, life waits and the game moves her.
         using var games = new GamePlayer(ui, host, sahar, motion, line => speech.Say(line), Express, _options.Capturable);
+        games.Hush = () => speech.Dismiss();   // hide-and-seek: a wordless count; the result card replaces her last line
         lifeDirector.Sulking = () => Sulking() || games.Running;
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
         speech.Clickable = () => !games.Running;   // her bubble too
@@ -1131,6 +1132,7 @@ internal sealed unsafe class App
             pipe.Register("game-start", r =>
             {
                 if (r.Args?.TryGetValue("kind", out var k) != true || !Enum.TryParse<GameKind>(k, true, out var kind)) return new PipeReply(false, "game-start needs kind");
+                games.SeekPrefer = r.Args.TryGetValue("spot", out var sp) && Enum.TryParse<SpotKind>(sp, true, out var spot) ? spot : null;   // test: show each hiding spot
                 games.Start(kind, r.Args.ContainsKey("seconds") ? Arg(r, "seconds") : null);
                 return new PipeReply(true, games.Describe());
             });
