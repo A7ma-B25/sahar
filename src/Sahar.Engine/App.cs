@@ -120,6 +120,7 @@ internal sealed unsafe class App
         RectF Canvas() => new(sahar.Position.X, sahar.Position.Y, sahar.CanvasPx.Width, sahar.CanvasPx.Height);
         sahar.Need = (who, area) => stage.Need(who, area);
         ActivityHub? acts = null;   // 0.13: her tag follows her (set below, once the menu and the senses exist)
+        SpeechBubble? speechRef = null;   // 0.16: her bubble follows her too (set once it exists)
         void MoveTo(Vector2 position)
         {
             sahar.Position = position;
@@ -138,6 +139,7 @@ internal sealed unsafe class App
             // One batch per move: her input window and the overlay (position only while the size stays).
             stage.Follow(Canvas(), sahar.DpiScale, input.MoveTo(sahar.HitRect));
             acts?.OnMoved();
+            speechRef?.OnMoved();
         }
         MoveTo(sahar.Position);   // her monitor, her DPI, and the overlay on her from the first frame
 
@@ -197,6 +199,7 @@ internal sealed unsafe class App
         Director? dismissDirector = null;
         Action<bool>? stopShow = null;
         Func<bool> dismissSpeech = () => false;
+        Action clearSpeech = () => { };
         Func<bool> sulkPoke = () => false;
         Func<bool> showRunning = () => false;
         Action poke = () => { };
@@ -230,7 +233,7 @@ internal sealed unsafe class App
             _state.Hidden = hidden;
             acts?.FullscreenAway(hidden && director?.Where == FullscreenWhere.Hers);
             acts?.Refresh();
-            if (hidden) { menu.Close(); stopShow?.Invoke(false); }
+            if (hidden) { menu.Close(); stopShow?.Invoke(false); clearSpeech(); }   // her bubble's click window must not stay over a fullscreen app
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
@@ -338,7 +341,10 @@ internal sealed unsafe class App
         lifeDirector.DndOn = () => dndTool.On;
         lifeDirector.CameraMicOn = () => cameraMic.InUse;
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
-        using var speech = new SpeechBubble(ui, sahar, () => motion.Body);
+        using var speech = new SpeechBubble(ui, sahar, () => motion.Body, _options.Capturable) { Dark = () => menu.Dark(), Need = stage.Need };
+        speechRef = speech;
+        clearSpeech = speech.Clear;
+        host.DeviceLost += () => Safe(speech.Redraw);
         var apps = new AppWatch(ui,
             allowed: () => settings.AwarenessEnabled && CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
             away: () => idle.Away,
@@ -429,6 +435,8 @@ internal sealed unsafe class App
         using var games = new GamePlayer(ui, host, sahar, motion, line => speech.Say(line), Express, _options.Capturable);
         lifeDirector.Sulking = () => Sulking() || games.Running;
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
+        speech.Clickable = () => !games.Running;   // her bubble too
+        games.RunningChanged += _ => Safe(speech.InputChanged);
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
         bool chatHop = false;   // her answer to a chat line is a hop, with the card open (spec §5)
@@ -687,6 +695,8 @@ internal sealed unsafe class App
         }
         menu.ChatSent += text => Safe(() => ChatLine(text, window: false));
         chat.Send = text => Safe(() => ChatLine(text, window: true));
+        // A long bubble's «كمّل بالمحادثة»: the chat opens on that line (her words go into it).
+        speech.ContinueChat += text => Safe(() => { chat.Open(); chat.Said(text); });
         menu.ChatContinue += text => Safe(() =>
         {
             chat.Open();
@@ -1080,6 +1090,7 @@ internal sealed unsafe class App
                 return new PipeReply(true);
             });
             pipe.Register("comment-now", _ => new PipeReply(apps.Consider(), apps.Describe()));
+            pipe.Register("debug-speech", _ => new PipeReply(true, speech.Describe()));   // 0.16: the bubble's kind, place and theme, never its words
             pipe.Register("debug-comment", _ => new PipeReply(true,
                 $"showing={(speech.Showing ? "true" : "false")} text64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(speech.Text ?? ""))} " + apps.Describe()));
             pipe.Register("debug-keys", _ => new PipeReply(true, $"printScreen={printScreenSeen}"));

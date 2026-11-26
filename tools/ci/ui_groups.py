@@ -5,7 +5,8 @@ Groups are balanced from the stage times of run 42868496323 (seconds): motion 28
 | settings (0.12, new: the settings app and the engine applying settings live, its own job)
 | activities (0.13, new: every tag and card in light and dark, the knock, Claude Code's hooks; its own job)
 | mind (0.14, new: her brain with a tiny pinned model; its own job)
-| look (0.16, new: every new surface in light and dark, with screenshots; its own job).
+| look (0.16, new: every new surface in light and dark, with screenshots; its own job)
+| bubble (0.16, new: her speech bubble in light and dark, ~60 s; its own job).
 """
 import json
 import sys
@@ -19,6 +20,7 @@ GROUPS = [
     ("activities", ["activities"]),
     ("mind", ["mind"]),
     ("look", ["look"]),
+    ("bubble", ["bubble"]),
 ]
 ALL = [s for _, stages in GROUPS for s in stages]
 # 0.14.1: stages run.ps1 knows but "ui-test all" never runs (mind-eval.yml runs the real 5 GB model by hand).
