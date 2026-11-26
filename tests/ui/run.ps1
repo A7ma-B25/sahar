@@ -3031,6 +3031,10 @@ function Stage-Games {
             Assert-NoCover 'hide-and-seek'
             # Warmer or colder: nothing in the first 5 s; then the resting pointer, far away, gets «برد…» beside it.
             if ((Game).whisper -ne 'none') { throw 'a whisper in the first 5 s' }
+            # The pointer rests in the screen corner farthest from where she peeks (a step before may have left it near).
+            $fx = if ($vx + $vw / 2 -lt $work.Left + $work.Width / 2) { $work.Left + $work.Width - 8 } else { $work.Left + 8 }
+            $fy = if ($vy + $vh / 2 -lt $work.Top + $work.Height / 2) { $work.Top + $work.Height - 8 } else { $work.Top + 8 }
+            [Mouse]::Move([int]$fx, [int]$fy)
             $g2 = Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper'
             if ([double]$g2.hidden -lt 5) { throw "a whisper after only $($g2.hidden) s" }
             Start-Sleep -Milliseconds 200
