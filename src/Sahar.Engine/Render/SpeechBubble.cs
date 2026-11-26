@@ -83,8 +83,13 @@ internal sealed class SpeechBubble : IDisposable
     /// <summary>A click on her while it shows: away it goes.</summary>
     public void Dismiss()
     {
-        if (Showing) End(timedOut: false);
+        if (!Showing) return;
+        Clicks++;   // review I2: a reply streaming into the bubble stays away once he clicked it
+        End(timedOut: false);
     }
+
+    /// <summary>How many times he clicked a bubble away (a bubble that timed out is not counted).</summary>
+    public int Clicks { get; private set; }
 
     private void End(bool timedOut)
     {

@@ -27,3 +27,39 @@ public sealed class ReplyRouteTests
         Assert.Equal(longSay, ReplyRoute.Final(longSay, null, cardOpen: false));                // nothing ran: her words
     }
 }
+
+/// <summary>Review I2: with the card closed her bubble streams her words only while they are short, never for a turn that
+/// acts (it gets its one short confirmation, no visible swap), and a bubble he clicked away stays away for that turn.</summary>
+public sealed class BubbleStreamTests
+{
+    [Fact]
+    public void Streams_WhileShort_ThenStops_AndTheFinalExtendsIt()
+    {
+        var b = new BubbleStream();
+        Assert.Equal("يلا", b.Partial("يلا", acts: false, dismissed: false));
+        Assert.Equal("يلا نحكي", b.Partial("يلا نحكي", acts: false, dismissed: false));
+        Assert.Null(b.Partial(new string('ك', ReplyRoute.BubbleChars + 1), acts: false, dismissed: false));
+        Assert.Null(b.Partial("يلا نحكي شي", acts: false, dismissed: false));   // stopped for good
+        Assert.Equal("يلا نحكي شي حلو", b.Final("يلا نحكي شي حلو", dismissed: false));
+        Assert.True(b.Shown);
+    }
+
+    [Fact]
+    public void ATurnThatActs_NeverStreams_OnlyItsShortLine()
+    {
+        var b = new BubbleStream();
+        Assert.Null(b.Partial("يلا", acts: true, dismissed: false));
+        Assert.False(b.Shown);
+        Assert.Equal("بلّشنا لقط النجوم", b.Final("بلّشنا لقط النجوم", dismissed: false));
+    }
+
+    [Fact]
+    public void ADismiss_IsHonouredForTheTurn()
+    {
+        var b = new BubbleStream();
+        Assert.Equal("يلا", b.Partial("يلا", acts: false, dismissed: false));
+        Assert.Null(b.Partial("يلا نحكي", acts: false, dismissed: true));   // he clicked it away
+        Assert.Null(b.Partial("يلا نحكي شي", acts: false, dismissed: false));
+        Assert.Null(b.Final("يلا نحكي شي", dismissed: true));
+    }
+}

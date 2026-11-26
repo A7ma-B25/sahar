@@ -154,16 +154,39 @@ function Stage-MindAutonomy {
     Step 'mind (autonomy): 0.15.0 — the game closed the card, yet her reply goes on in her bubble, short' {
         if ((Menu).open -ne 'false') { throw 'the game left the card open' }
         if ((Mind-Sent) -match "cancel:$($script:c2)") { throw "the closed card cancelled her reply: $(Mind-Sent)" }
+        # review I2: a turn that acted never streams into the bubble (no long text swapped for the short line)
         Mind-Line ('{"v":1,"t":"partial","id":"' + $script:c2 + '","text":"يلا"}')
         Start-Sleep -Milliseconds 300
         $c = Kv 'debug-comment'
-        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'يلا') { throw "streamed into her bubble: $($c.showing) $(Text64 $c.text64)" }
+        if ($c.showing -eq 'true' -and (Text64 $c.text64) -eq 'يلا') { throw 'an acting turn streamed into her bubble' }
         Mind-Line ('{"v":1,"t":"say","id":"' + $script:c2 + '","text":"يلا! رح نلعب لقط النجوم هلق وما رح خليك تربح أبداً، جهّز حالك لأني سريعة كتير اليوم","final":true}')
         Start-Sleep -Milliseconds 300
         $c = Kv 'debug-comment'
         if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'بلّشنا لقط النجوم') { throw "her bubble after the card closed: $($c.showing) $(Text64 $c.text64)" }
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
         if ($log -notmatch 'mind: said \(\d+ chars, bubble, card closed, confirmation\)') { throw 'the log does not say where her reply went' }
+    }
+
+    Step 'mind (autonomy): review I2 — words only, card closed: short words stream; once he clicks it away the turn stays away' {
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Chat-Line 'احكيلي شي'
+        $c3 = Last-Turn
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Wait-Menu 'false' 2000 'card closed' | Out-Null
+        Mind-Line ('{"v":1,"t":"partial","id":"' + $c3 + '","text":"مرة"}')
+        Start-Sleep -Milliseconds 300
+        $c = Kv 'debug-comment'
+        if ($c.showing -ne 'true' -or (Text64 $c.text64) -ne 'مرة') { throw "streamed: $($c.showing) $(Text64 $c.text64)" }
+        $b = Body-Centre
+        [Mouse]::Click($b[0], $b[1], $false)   # a click on her: the bubble goes
+        Start-Sleep -Milliseconds 400
+        Mind-Line ('{"v":1,"t":"partial","id":"' + $c3 + '","text":"مرة كان"}')
+        Mind-Line ('{"v":1,"t":"say","id":"' + $c3 + '","text":"مرة كان في قطة","final":true}')
+        Start-Sleep -Milliseconds 300
+        if ((Kv 'debug-comment').showing -eq 'true') { throw "the bubble came back after he clicked it away: $(Text64 (Kv 'debug-comment').text64)" }
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -notmatch 'he clicked it away') { throw 'the log does not say the bubble was dismissed' }
     }
 
     Step 'mind (autonomy): a B call asks in the header; «لا» changes nothing' {
