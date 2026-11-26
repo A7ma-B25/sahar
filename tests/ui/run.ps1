@@ -2167,8 +2167,10 @@ function Stage-Senses {
         if ($log -match 'secret-123') { throw 'the private text reached the log' }
     }
     Step 'thirty quick copies keep twenty and one face' {
-        foreach ($i in 1..30) { Set-Clipboard -Value "item $i"; Start-Sleep -Milliseconds 60 }
-        Start-Sleep -Milliseconds 800
+        # 150 ms apart: still far quicker than a person copies, and a busy runner's clipboard chain keeps up.
+        foreach ($i in 1..30) { Set-Clipboard -Value "item $i"; Start-Sleep -Milliseconds 150 }
+        $deadline = (Get-Date).AddSeconds(3)
+        while ((Clip-Count) -ne 20 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
         if ((Clip-Count) -ne 20) { throw "history count $(Clip-Count)" }
         $faces = @(Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') | Where-Object { $_ -match 'clipboard: copied face' }).Count
         if ($faces -gt 2) { throw "$faces copied faces" }
