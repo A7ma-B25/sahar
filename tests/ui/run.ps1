@@ -5257,6 +5257,8 @@ function Stage-Bubble {
         if ($log -notmatch 'bubble: say \(1 lines') { throw 'the log has no bubble line' }
     }
     Stop-Engine   # the next stage starts its own
+}
+
 # ---- 0.16 «شخصية سحر» (owner ruling 8): her persona file, edited from the settings app, and restored ----
 function Stage-Persona {
     $kept = Settings-Json
@@ -5366,7 +5368,7 @@ function QWait([string]$state, [int]$ms) {
     throw "quran: state $($q.state), want $state"
 }
 function QButton($b, [string]$id) { ($b.buttons -split ';' | Where-Object { $_ -like "${id}:*" }) -replace '^[^:]+:', '' }
-function Near-Colour($p, [string]$hex, [int]$tol, [string]$what) {
+function Near-ColourBar($p, [string]$hex, [int]$tol, [string]$what) {
     $want = [System.Drawing.ColorTranslator]::FromHtml($hex)
     $d = [math]::Abs($p.R - $want.R) + [math]::Abs($p.G - $want.G) + [math]::Abs($p.B - $want.B)
     Write-Host "    $what pixel $($p.R),$($p.G),$($p.B) vs $hex (diff $d)"
@@ -5424,8 +5426,8 @@ function Stage-QuranBar {
             $shot = Shot-Bar "app-quran-bar-playing-$theme"
             # RTL: the fill grows from the right edge of the track (x 60..280 DIP, y 72).
             $y = [int]($r.y + 72 * $dpi)
-            Near-Colour (Pixel $shot ([int]($r.x + 255 * $dpi)) $y) $accent[$theme] 60 'filled (right) track'
-            Near-Colour (Pixel $shot ([int]($r.x + 100 * $dpi)) $y) $sunken[$theme] 60 'empty (left) track'
+            Near-ColourBar (Pixel $shot ([int]($r.x + 255 * $dpi)) $y) $accent[$theme] 60 'filled (right) track'
+            Near-ColourBar (Pixel $shot ([int]($r.x + 100 * $dpi)) $y) $sunken[$theme] 60 'empty (left) track'
             Assert-NoCover "quran bar ($theme)"
             # Paused: «كمّل», «· واقفة», and where he is is kept (ruling 5).
             QBar '{"op":"press","id":"Toggle"}' | Out-Null
