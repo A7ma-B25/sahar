@@ -676,7 +676,7 @@ internal sealed class GamePlayer : IDisposable
     {
         var s = Shown;
         string spot = _spot is { } sp
-            ? FormattableString.Invariant($" spot={sp.Kind} side={sp.Side} vx={s.Visible.X:0} vy={s.Visible.Y:0} vw={s.Visible.Width:0} vh={s.Visible.Height:0}")
+            ? FormattableString.Invariant($" spot={sp.Kind} side={sp.Side} vx={s.Visible.X:0} vy={s.Visible.Y:0} vw={s.Visible.Width:0} vh={s.Visible.Height:0} bx={sp.Behind.X:0} by={sp.Behind.Y:0} bw={sp.Behind.Width:0} bh={sp.Behind.Height:0}")
             : " spot=none";
         string ask = _scene?.AskShown == true
             ? FormattableString.Invariant($" againX={Scene.AgainButton.X + Scene.AgainButton.Width / 2:0} againY={Scene.AgainButton.Y + Scene.AgainButton.Height / 2:0} doneX={Scene.DoneButton.X + Scene.DoneButton.Width / 2:0} doneY={Scene.DoneButton.Y + Scene.DoneButton.Height / 2:0}")

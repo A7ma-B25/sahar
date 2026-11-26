@@ -2829,6 +2829,11 @@ public static class SeekWin2 {
         SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010);
         GetWindowRect(h, out r); return r.L;
     }
+    /// The window's left and right (GetWindowRect: a few px of invisible border on each side), or null.
+    public static int[] Span(string title) {
+        var h = FindWindow(null, title); RECT r;
+        return h != IntPtr.Zero && GetWindowRect(h, out r) ? new[] { r.L, r.R } : null;
+    }
 }
 "@
 }
@@ -2951,9 +2956,18 @@ function Stage-Games {
         try {
             $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
             [Mouse]::Move($work.Right - 20, $work.Top + 20)
-            Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
-            $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden behind the window'
-            if ($g.spot -ne 'Window' -or $g.clip -ne 'on') { throw "spot $($g.spot) clip $($g.clip)" }
+            # Window spots are picked at random among every window (the runner's terminals too): play until she is
+            # behind the test window, the one this step moves.
+            $span = [SeekWin2]::Span('Sahar test seek')
+            for ($try = 1; ; $try++) {
+                Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
+                $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden behind the window'
+                if ($g.spot -ne 'Window' -or $g.clip -ne 'on') { throw "spot $($g.spot) clip $($g.clip)" }
+                if ([Math]::Abs([int]$g.bx - $span[0]) -le 12 -and [Math]::Abs([int]$g.bx + [int]$g.bw - $span[1]) -le 12) { break }
+                Write-Host "    try ${try}: behind another window ($($g.bx)+$($g.bw), the test window is $($span -join '..'))"
+                if ($try -ge 8) { throw 'she never hid behind the test window in 8 games' }
+                Send '{"type":"cmd","name":"game-stop"}' | Out-Null
+            }
             Start-Sleep -Milliseconds 300
             $shot = Screenshot 'game-hide-window.png'
             # Clipped: just inside the window's edge, where her hidden half is, the window still shows (#0F0E12);
