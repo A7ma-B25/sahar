@@ -52,6 +52,8 @@ internal sealed partial class MindEngine
     private int _dismissed, _linesToday;
     private DateOnly _linesDay;
     private string _lastGate = "none";
+    // 0.15.0: when she may even ask her brain (spaced checks, ≥ 20 min between lines, a cap per hour, no repeated topic).
+    private readonly InitiativeSchedule _schedule = new(DateTimeOffset.Now);
     private readonly List<DateTimeOffset> _selfAsks = [];
     private DateTimeOffset _cameraSince = DateTimeOffset.MinValue;
     // the header fact, once a day
@@ -288,6 +290,8 @@ internal sealed partial class MindEngine
             if (text.Trim().Length == 0) { Log.Write("mind: initiative, nothing to say"); return; }
             var gate = _gate.Check(GateInputs());
             if (!gate.Open) { _lastGate = gate.ClosedBy ?? "closed"; Log.Write($"mind: initiative line dropped ({_lastGate})"); return; }   // the moment passed
+            if (_schedule.Repeats(text)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
+            _schedule.Spoke(DateTimeOffset.Now, text, Settings().MindInitiative);
             _lastLine = DateTimeOffset.Now;
             _awaitingAnswerSince = _lastLine;
             _linesToday++;
@@ -457,6 +461,8 @@ internal sealed partial class MindEngine
     private string Initiative(bool force)
     {
         if (!force && !MindReady()) return _lastGate = "no-mind";   // nothing to ask without her brain
+        var level = Settings().MindInitiative;
+        if (!force && !_schedule.MayCheck(DateTimeOffset.Now, level)) return _lastGate = "schedule";   // 0.15.0: not every minute
         var v = _gate.Check(GateInputs());
         _lastGate = v.Open ? "open" : v.ClosedBy ?? "closed";
         if (!v.Open && !force) return _lastGate;
@@ -464,7 +470,8 @@ internal sealed partial class MindEngine
         var id = "i" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
         if (!SendMind(new MindMsg { T = "turn", Id = id, Source = "initiative", Situation = Moment() })) return _lastGate = "no-mind";
         _turns[id] = (ActSource.Self, null, "initiative");
-        Log.Write("mind: turn initiative");
+        _schedule.Asked(DateTimeOffset.Now, level);
+        Log.Write($"mind: turn initiative (next check {_schedule.NextCheck:HH:mm})");
         return _lastGate;
     }
 
