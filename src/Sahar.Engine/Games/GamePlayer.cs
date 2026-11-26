@@ -354,7 +354,10 @@ internal sealed class GamePlayer : IDisposable
         _v.BlushLayer.Container.Opacity = 1f;
         Scene.Paws(true);
         var h = HerRect;
-        Scene.Countdown(new Vector2(h.X + h.Width / 2, h.Y - h.Height * 0.45f - 22 * Dpi));
+        var head = new Vector2(h.X + h.Width / 2, h.Y - h.Height * 0.45f - 22 * Dpi);
+        if (head.Y < Work.Y + 22 * Dpi)   // no room over her head (she is at the top): beside it, on the screen's side
+            head = new Vector2(h.Right + 28 * Dpi < Work.Right ? h.Right + 28 * Dpi : h.X - 28 * Dpi, h.Y + 12 * Dpi);
+        Scene.Countdown(head);
         Scene.Pips(new Vector2(h.X + h.Width / 2, h.Bottom + 12 * Dpi), _round, _results);
     }
 
