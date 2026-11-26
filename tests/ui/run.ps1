@@ -2957,9 +2957,10 @@ function Stage-Games {
             $in = if ($g.side -eq '2') { $edge - 14 } else { $edge + 14 }
             $behind = Pixel $shot $in ($vy + [int]($vh / 2))
             if ($behind.R + $behind.G + $behind.B -gt 150) { throw "she is drawn over the window at $in,$($vy + [int]($vh / 2)): $behind" }
-            $out = if ($g.side -eq '2') { $edge + [int]($vw / 2) } else { $edge - [int]($vw / 2) }
-            $her = Pixel $shot $out ($vy + [int]($vh / 2))
-            if ($her.R + $her.G + $her.B -lt 360) { throw "nothing of her shows past the edge at ${out}: $her" }
+            # (not $out: PowerShell names are case-blind, and $Out is where screenshots go)
+            $past = if ($g.side -eq '2') { $edge + [int]($vw / 2) } else { $edge - [int]($vw / 2) }
+            $her = Pixel $shot $past ($vy + [int]($vh / 2))
+            if ($her.R + $her.G + $her.B -lt 360) { throw "nothing of her shows past the edge at ${past}: $her" }
             Assert-NoCover 'hide-and-seek'
             # Warmer or colder: nothing in the first 5 s; then the resting pointer, far away, gets «برد…» beside it.
             if ((Game).whisper -ne 'none') { throw 'a whisper in the first 5 s' }
