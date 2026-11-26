@@ -5,6 +5,8 @@ public enum ActivityKind
 {
     ClaudeAsk, WeatherAlert, Screenshot, CopyDone, ClaudeDone, Back, BatteryLow, Charging, Volume, Copy, Timer, ClaudeWorking,
     Music, CameraMic, Shelf, MusicPaused, WeatherToday, ScreenTime,
+    /// <summary>0.16: a recitation (playing, paused or opening): «الكهف ١٢:٠٤»; a click grows it into the Quran bar.</summary>
+    Quran,
 }
 
 /// <summary>Weather alerts (spec 0.13 §2 Weather): each a moment, once per spell.</summary>
@@ -22,7 +24,7 @@ public static class ActivityRank
     {
         ActivityKind.ClaudeAsk => 1,
         _ when IsMoment(k) => 2,
-        ActivityKind.Copy or ActivityKind.Timer => 3,
+        ActivityKind.Copy or ActivityKind.Timer or ActivityKind.Quran => 3,
         ActivityKind.ClaudeWorking => 4,
         ActivityKind.Music => 5,
         ActivityKind.CameraMic => 6,
