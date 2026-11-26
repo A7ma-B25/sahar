@@ -68,4 +68,26 @@ public class CaptureTests
         r.Add(1, true);
         Assert.Equal(1, r.Count);
     }
+
+    [Fact]
+    public void HerLine_IsShort_AndAboutHerself()
+    {
+        Assert.Equal("تمام، هلق بطلع بالتصوير.", CaptureRegistry.Said(true));
+        Assert.Equal("تمام، ما عاد بطلع بالتصوير.", CaptureRegistry.Said(false));
+        // Her words about herself never change for a woman (no word of Address's table in them).
+        Assert.Equal(CaptureRegistry.Said(true), Address.For(Gender.Female, CaptureRegistry.Said(true)));
+        Assert.Equal(CaptureRegistry.Said(false), Address.For(Gender.Female, CaptureRegistry.Said(false)));
+    }
+
+    [Fact]
+    public void Registry_NamesTheWindowsThatWantToBeHidden()
+    {
+        var r = new CaptureRegistry();
+        r.Add(1, true);
+        r.Add(2, false);
+        r.Add(3, true);
+        Assert.Equal([1, 3], r.Wanting.Select(h => (int)h).Order());
+        r.SetAllowed(true);
+        Assert.Equal([1, 3], r.Wanting.Select(h => (int)h).Order());   // what they want, not what he allows
+    }
 }

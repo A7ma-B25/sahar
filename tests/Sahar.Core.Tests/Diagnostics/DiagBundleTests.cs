@@ -218,4 +218,29 @@ public class DiagBundleTests
         }
         finally { Directory.Delete(dir, true); }
     }
+
+    [Fact]
+    public void Versions_SayWhatRunsHer_NeverWhoHeIs()
+    {
+        var v = DiagBundle.Versions("engine");
+        var keys = v.Select(x => x.Key).ToList();
+        Assert.Equal(["sahar", "made by", "windows", "dotnet", "arch", "cpus", "ram", "llama.cpp"], keys);
+        Assert.Equal("engine", v.Single(x => x.Key == "made by").Value);
+        Assert.Equal(CoreInfo.Version, v.Single(x => x.Key == "sahar").Value);
+        Assert.DoesNotContain(v, x => x.Value.Contains(Environment.UserName, StringComparison.OrdinalIgnoreCase) && Environment.UserName.Length > 2);
+    }
+
+    [Fact]
+    public void PrivateNames_AreTheAccountsAndTheMachines() =>
+        Assert.Contains(Environment.UserName, DiagBundle.PrivateNames());
+
+    [Fact]
+    public void HerLine_SaysWhereTheFileIs_Shortly_WithoutEmoji()
+    {
+        Assert.Equal("حطّيتلك سجلّي عالديسكتوب: sahar-log-2026-11-20-1405.zip", DiagBundle.Said("sahar-log-2026-11-20-1405.zip", onDesktop: true));
+        Assert.Equal("حطّيتلك سجلّي بمجلّدي: sahar-log-2026-11-20-1405.zip", DiagBundle.Said("sahar-log-2026-11-20-1405.zip", onDesktop: false));
+        Assert.Equal("ما زبط السجل، جرّب كمان مرة.", DiagBundle.Said(null, onDesktop: true));
+        foreach (var line in new[] { DiagBundle.Said("x.zip", true), DiagBundle.Said(null, true) })
+            Assert.DoesNotContain(line, c => char.IsSurrogate(c) || c is >= '\u2600' and <= '\u27BF');
+    }
 }

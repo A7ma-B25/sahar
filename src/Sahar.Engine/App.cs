@@ -54,6 +54,7 @@ internal sealed unsafe class App
         catch (Exception e) { Log.Write($"settings: not loaded ({e.GetType().Name})"); }
         Address.You = settings.UserGender;   // her words agree with who she talks to
         Address.Name = settings.UserName;
+        Win.AllowCapture(settings.AllowCapture);   // 0.15 T8: the overlay is open already; every later window follows
         // Two programs write settings.json (0.12): every save is load → change → save under the store's lock, never a
         // whole copy kept in memory, so a change the settings app made meanwhile is kept. A refused save keeps what she
         // has in memory and logs once per kind; never the path (it holds the user name).
@@ -825,6 +826,7 @@ internal sealed unsafe class App
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
                     case "activities": acts.SettingsChanged(); Expressions(); break;
                     case "mind": mind?.RaiseSettings(next); break;
+                    case "capture": Win.AllowCapture(next.AllowCapture); tray.AllowCapture = next.AllowCapture; break;
                 }
             }
             return (changed, hk);
@@ -861,6 +863,27 @@ internal sealed unsafe class App
             return new PipeReply(true, result == "ok" ? "ok=true" : $"ok=false reason64={B64(reason ?? Shortcuts.Taken)}");
         });
         pipe.Register("clipboard-clear", _ => { clipboardTool.Clear(); return new PipeReply(true, "ok=true"); });
+        // 0.15 T7 «ابعت سجلّي» (the tray, and the settings app's «عن سحر»): the zip on his Desktop; she says where.
+        DiagExport.Made? SendLog()
+        {
+            var made = DiagExport.Make(_options.TestMode);
+            speech.Say(Address.ToYou(Sahar.Core.Diagnostics.DiagBundle.Said(made is null ? null : Path.GetFileName(made.Path), made?.OnDesktop ?? true)));
+            return made;
+        }
+        tray.SendLog += () => Safe(() => SendLog());
+        pipe.Register("diag-bundle", _ => SendLog() is { } made
+            ? new PipeReply(true, $"ok=true name64={B64(Path.GetFileName(made.Path))} desktop={(made.OnDesktop ? "true" : "false")}" + (_options.TestMode ? $" path64={B64(made.Path)}" : ""))
+            : new PipeReply(true, "ok=false"));
+        // 0.15 T8 «اسمح بتصويرها» from the tray (the settings page saves it and reloads: case "capture" above).
+        tray.AllowCapture = settings.AllowCapture;
+        tray.CaptureToggled += () => Safe(() =>
+        {
+            Save(s => s with { AllowCapture = !s.AllowCapture });
+            Win.AllowCapture(settings.AllowCapture);
+            tray.AllowCapture = settings.AllowCapture;
+            Log.Write($"capture: {(settings.AllowCapture ? "allowed" : "hidden")} from the tray");
+            speech.Say(CaptureRegistry.Said(settings.AllowCapture));
+        });
         // Claude Code's hooks (0.13, production): one line per hook from «Sahar.Engine.exe hook»; notify only.
         pipe.Register("claude-hook", r =>
         {
@@ -1108,6 +1131,7 @@ internal sealed unsafe class App
                 return new PipeReply(true, updates.Describe());
             });
             pipe.Register("debug-update", _ => new PipeReply(true, updates.Describe()));
+            pipe.Register("debug-capture", _ => new PipeReply(true, $"{Win.DescribeCapture()} said64={B64(speech.Text ?? "")}"));
             pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")}"));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>

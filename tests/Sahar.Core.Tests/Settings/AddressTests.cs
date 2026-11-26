@@ -82,4 +82,9 @@ public class AddressTests
         Assert.Contains(("اكتب", "اكتبي"), Address.Pairs);
         foreach (var (male, female) in Address.Pairs) Assert.Equal(female, Address.For(Gender.Female, male));
     }
+
+    [Theory]
+    [InlineData("ابعت سجلّي / Send my log", "ابعتي سجلّي / Send my log")]   // 0.15 T7
+    [InlineData("اسمح بتصويرها / Allow screen capture", "اسمحي بتصويرها / Allow screen capture")]   // 0.15 T8
+    public void TheNewTrayItems_SpeakToHer(string male, string female) => Assert.Equal(female, Address.For(Gender.Female, male));
 }

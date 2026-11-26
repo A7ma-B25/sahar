@@ -41,6 +41,12 @@ public static partial class DiagBundle
         "userName", "weatherCity", "weatherLatitude", "weatherLongitude", "prayerCity", "prayerLatitude", "prayerLongitude",
     };
 
+    /// <summary>Her short line once the zip is made (the file's name, never its path), or that it did not work; the
+    /// engine says it through <c>Address.ToYou</c>.</summary>
+    public static string Said(string? fileName, bool onDesktop) => fileName is null
+        ? "ما زبط السجل، جرّب كمان مرة."
+        : $"حطّيتلك سجلّي {(onDesktop ? "عالديسكتوب" : "بمجلّدي")}: {fileName}";
+
     public static string FileName(DateTimeOffset now) => string.Create(CultureInfo.InvariantCulture, $"sahar-log-{now:yyyy-MM-dd-HHmm}.zip");
 
     public static IReadOnlyList<DiagEntry> Entries(DiagSources s)
@@ -244,6 +250,40 @@ public static partial class DiagBundle
         long median = v.Count % 2 == 1 ? v[v.Count / 2] : (v[v.Count / 2 - 1] + v[v.Count / 2]) / 2;
         long p90 = v[Math.Clamp((int)Math.Ceiling(0.9 * v.Count) - 1, 0, v.Count - 1)];
         return $"median {median}{unit}, p90 {p90}{unit}, max {v[^1]}{unit}";
+    }
+
+    // ---- what runs her, and who never leaves ----
+
+    /// <summary>What runs her (about.txt's first lines): her version, which program made the zip, Windows, .NET, the
+    /// processor and memory, the llama.cpp build she ships. Never a name, a path or a place.</summary>
+    public static IReadOnlyList<KeyValuePair<string, string>> Versions(string madeBy)
+    {
+        string llama;
+        try { llama = Mind.Runtime.RuntimePins.Load().Build; }
+        catch (Exception e) when (e is InvalidOperationException or JsonException) { llama = "unknown"; }
+        long ram = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        return
+        [
+            new("sahar", CoreInfo.Version),
+            new("made by", madeBy),
+            new("windows", Environment.OSVersion.Version.ToString()),
+            new("dotnet", System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription),
+            new("arch", System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString()),
+            new("cpus", Environment.ProcessorCount.ToString(CultureInfo.InvariantCulture)),
+            new("ram", ram > 0 ? string.Create(CultureInfo.InvariantCulture, $"{ram / (1024.0 * 1024 * 1024):0.#} GB") : "unknown"),
+            new("llama.cpp", llama),
+        ];
+    }
+
+    /// <summary>The names that never leave, besides his own from the settings: the Windows account, its domain and
+    /// the machine's name.</summary>
+    public static IReadOnlyList<string> PrivateNames()
+    {
+        var list = new List<string>();
+        foreach (var get in new Func<string>[] { () => Environment.UserName, () => Environment.UserDomainName, () => Environment.MachineName })
+            try { if (get() is { Length: > 0 } n) list.Add(n); }
+            catch (Exception e) when (e is InvalidOperationException or PlatformNotSupportedException) { }
+        return list;
     }
 
     // ---- the zip, and the files ----

@@ -13,7 +13,13 @@ public sealed class CaptureRegistry
     /// <summary>He allows her windows in recordings and screenshots.</summary>
     public bool Allowed { get; private set; }
 
+    /// <summary>Her short line when he changes it from the tray.</summary>
+    public static string Said(bool allowed) => allowed ? "تمام، هلق بطلع بالتصوير." : "تمام، ما عاد بطلع بالتصوير.";
+
     public int Count => _wanted.Count;
+
+    /// <summary>The windows that want to be left out of capture (whatever he allows).</summary>
+    public IReadOnlyList<nint> Wanting => [.. _wanted.Where(w => w.Value).Select(w => w.Key)];
 
     /// <summary>The windows left out of capture right now.</summary>
     public int ExcludedCount => _wanted.Count(w => Excluded(w.Value));

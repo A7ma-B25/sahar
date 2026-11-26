@@ -287,6 +287,9 @@ internal static unsafe partial class Native
     public static partial int SetWindowDisplayAffinity(nint hwnd, uint affinity);
 
     [LibraryImport("user32.dll")]
+    public static partial int GetWindowDisplayAffinity(nint hwnd, uint* affinity);
+
+    [LibraryImport("user32.dll")]
     public static partial int GetSystemMetrics(int index);
 
     [LibraryImport("user32.dll", EntryPoint = "LoadCursorW")]
