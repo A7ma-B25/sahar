@@ -93,7 +93,8 @@ internal static unsafe class BubblePainter
     /// <summary>A wrapped right-to-left paragraph in Rubik 15 at the bubble's line height (caller releases).</summary>
     public static nint Paragraph(string text, float width)
     {
-        nint layout = DWrite.Layout(text, Bubble.TextSize, 400, width, 10000, TextAlign.Start, rtl: true, DWrite.DigitCell, wrap: true);
+        // Running words: proportional digits («٥:٢٠» reads as one time; the card's fixed digit cells are for counters).
+        nint layout = DWrite.Layout(text, Bubble.TextSize, 400, width, 10000, TextAlign.Start, rtl: true, digitCell: 0, wrap: true);
         // IDWriteTextFormat (the layout is one) ::SetParagraphAlignment(NEAR), ::SetLineSpacing(UNIFORM, height, baseline):
         // every line the same height, emoji lines too (Segoe UI Emoji is taller than Rubik).
         ((delegate* unmanaged[Stdcall]<nint, int, int>)Com.Slot(layout, 4))(layout, 0);

@@ -5053,7 +5053,7 @@ function Stage-Bubble {
         if ($sp.below -ne 'true') { throw "below=$($sp.below) at the top ($($sp.rect))" }
         if ($r.y -lt $st.y + $st.height) { throw "the bubble $($sp.rect) covers her (body bottom $($st.y + $st.height))" }
         $shot = Screenshot 'bubble-below.png'
-        Crop-Rect $shot ($r.x - 24) ($st.y - 24) ($r.w + 48) ($r.y + $r.h - $st.y + 48) (Join-Path $Out 'app-bubble-below-light.png')
+        Crop-Rect $shot ($r.x - 24) ($st.y - 24) ($r.w + 48) ($r.y + $r.h - $st.y + 48) (Join-Path $Out 'app-bubble-below.png')
     }
     Step 'say stays 8 s plus 60 ms a character, then goes by itself' {
         Pose-Body ([int]($Work.Width * 0.55)) ([int]($Work.Height * 0.45)) | Out-Null
@@ -5076,6 +5076,7 @@ function Stage-Bubble {
         if ($log -match 'SENTINELBUBBLE') { throw 'engine.log holds her words' }
         if ($log -notmatch 'bubble: say \(1 lines') { throw 'the log has no bubble line' }
     }
+    Stop-Engine   # the next stage starts its own
 }
 
 try {
