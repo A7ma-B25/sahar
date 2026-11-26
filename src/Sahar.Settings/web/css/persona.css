@@ -2,7 +2,7 @@
 .ps-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ps-area {
   inline-size: 100%; block-size: auto; min-block-size: 260px; padding: 12px 14px; resize: vertical;
-  font-size: 15px; line-height: 1.8; white-space: pre-wrap;
+  font-family: inherit; font-size: 15px; line-height: 1.8; white-space: pre-wrap;
 }
 .ps-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .ps-over { color: var(--error); }
