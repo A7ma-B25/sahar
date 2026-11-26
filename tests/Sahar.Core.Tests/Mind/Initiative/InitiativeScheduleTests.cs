@@ -21,7 +21,7 @@ public sealed class InitiativeScheduleTests
             if (!s.MayCheck(now, level)) continue;
             checks++;
             s.Asked(now, level);
-            if (answer(checks) is { } line && !s.Repeats(line)) { s.Spoke(now, line, level); lines.Add(now); }
+            if (answer(checks) is { } line && !s.Repeats(line, now)) { s.Spoke(now, line, level); lines.Add(now); }
         }
         return (checks, lines);
     }
@@ -66,6 +66,23 @@ public sealed class InitiativeScheduleTests
     {
         var s = new InitiativeSchedule(T0);
         s.Spoke(T0, first, InitiativeLevel.Often);
-        Assert.Equal(repeat, s.Repeats(second));
+        Assert.Equal(repeat, s.Repeats(second, T0.AddMinutes(30)));
+    }
+
+    [Fact]
+    public void AfterARestart_TheFirstCheckWaits()   // review (b): not "due now" each time the engine starts
+    {
+        var s = new InitiativeSchedule(T0);
+        Assert.False(s.MayCheck(T0, InitiativeLevel.Often));
+        Assert.True(s.MayCheck(T0 + InitiativeSchedule.CheckGap(InitiativeLevel.Often), InitiativeLevel.Often));
+    }
+
+    [Fact]
+    public void Topics_ExpireAfterHalfADay()   // review (c)
+    {
+        var s = new InitiativeSchedule(T0);
+        s.Spoke(T0, "اشربت مي اليوم؟", InitiativeLevel.Often);
+        Assert.True(s.Repeats("اشربت مي اليوم؟", T0.AddHours(11)));
+        Assert.False(s.Repeats("اشربت مي اليوم؟", T0.AddHours(13)));
     }
 }

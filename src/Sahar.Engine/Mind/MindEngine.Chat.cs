@@ -308,7 +308,7 @@ internal sealed partial class MindEngine
             if (text.Trim().Length == 0) { Log.Write("mind: initiative, nothing to say"); return; }
             var gate = _gate.Check(GateInputs());
             if (!gate.Open) { _lastGate = gate.ClosedBy ?? "closed"; Log.Write($"mind: initiative line dropped ({_lastGate})"); return; }   // the moment passed
-            if (_schedule.Repeats(text)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
+            if (_schedule.Repeats(text, DateTimeOffset.Now)) { Log.Write("mind: initiative line dropped (repeat)"); return; }   // a topic she raised lately
             _schedule.Spoke(DateTimeOffset.Now, text, Settings().MindInitiative);
             _lastLine = DateTimeOffset.Now;
             _awaitingAnswerSince = _lastLine;
