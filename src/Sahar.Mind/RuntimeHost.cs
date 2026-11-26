@@ -23,6 +23,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
     private OpenAiClient? _client;
     private RuntimeReady? _ready;
     private int _vramMB;
+    private int _bufferMB;   // llama.cpp's "buffer size" lines (hidden at b12207's default verbosity)
+    private bool _gpu;
     private volatile bool _oom;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -87,6 +89,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         foreach (var a in ServerArgs.For(plan, path, port, key, ServerArgs.Threads(Environment.ProcessorCount, 0), device?.Id)) psi.ArgumentList.Add(a);
         if (plan.Backend == Backend.Cuda) psi.Environment["PATH"] = CudaPath();
         _vramMB = 0;
+        _bufferMB = 0;
+        _gpu = plan.Backend != Backend.Cpu && plan.Offload != Offload.None;
         _oom = false;
         var sw = Stopwatch.StartNew();
         var p = Process.Start(psi) ?? throw new MindRuntimeException("load-failed");
@@ -113,11 +117,15 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         int ram = 0;
         try { p.Refresh(); ram = (int)(p.WorkingSet64 / (1024 * 1024)); } catch (Exception) { }
         long loadMs = sw.ElapsedMilliseconds;
-        // b12207's default verbosity hides the "buffer size" lines (0.14.0 logged vram=0MB on his GPU): the device's own
-        // free memory before and after the load says what her model took there.
-        if (device is not null && _vramMB == 0) _vramMB = Devices.UsedMB(before, await ListDevicesAsync(exe, dir, plan.Backend, ct), device.Id);
+        // 0.15.0 T9: what llama-server holds in video memory, from Windows' own counter (0.14.x logged vram=0MB on his
+        // RTX 4050: b12207's default verbosity hides the "buffer size" lines, and the device's free memory before and
+        // after often does not move); those two stay as fallbacks, in that order.
+        int pdh = _gpu ? GpuPdh.ProcessMB(p.Id) : 0, buffers = Volatile.Read(ref _bufferMB), delta = 0;
+        if (pdh == 0 && buffers == 0 && device is not null) delta = Devices.UsedMB(before, await ListDevicesAsync(exe, dir, plan.Backend, ct), device.Id);
+        var (vram, source) = GpuMemory.Best(pdh, buffers, delta);
+        _vramMB = vram;
         _ready = new RuntimeReady(model.Name, model.Quant, plan.Tier, plan.Backend, (int)loadMs, _vramMB, ram);
-        MindLog.Write(FormattableString.Invariant($"runtime: ready model={model.Name} {model.Quant} backend={plan.Backend} device={device?.Name ?? (plan.Backend == Backend.Cpu ? "cpu" : "default")} tier={plan.Tier} load={loadMs}ms vram={_vramMB}MB ram={ram}MB"));
+        MindLog.Write(FormattableString.Invariant($"runtime: ready model={model.Name} {model.Quant} backend={plan.Backend} device={device?.Name ?? (plan.Backend == Backend.Cpu ? "cpu" : "default")} tier={plan.Tier} load={loadMs}ms vram={_vramMB}MB ({source}) ram={ram}MB"));
         return _ready;
     }
 
@@ -157,13 +165,22 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
     {
         if (line is null) return;
         foreach (Match m in GpuBuffer().Matches(line))
-            Interlocked.Add(ref _vramMB, (int)Math.Round(double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture)));
+            Interlocked.Add(ref _bufferMB, (int)Math.Round(double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture)));
         if (line.Contains("out of memory", StringComparison.OrdinalIgnoreCase) || line.Contains("failed to allocate", StringComparison.OrdinalIgnoreCase)) _oom = true;
     }
 
+    /// <summary>Now (the bench asks after its rows): Windows' counter again when she runs on a GPU, else the number
+    /// from the load.</summary>
     public (int VramMB, int RamMB) Memory()
     {
-        try { _server?.Refresh(); return (_vramMB, _server is { HasExited: false } s ? (int)(s.WorkingSet64 / (1024 * 1024)) : 0); }
+        try
+        {
+            if (_server is not { HasExited: false } s) return (_vramMB, 0);
+            s.Refresh();
+            int ram = (int)(s.WorkingSet64 / (1024 * 1024));
+            if (_gpu && GpuPdh.ProcessMB(s.Id) is > 0 and var now) _vramMB = now;
+            return (_vramMB, ram);
+        }
         catch (Exception) { return (_vramMB, 0); }
     }
 

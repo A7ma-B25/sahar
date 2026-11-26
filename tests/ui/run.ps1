@@ -4911,6 +4911,41 @@ function Stage-Install {
         Stop-Engine
     }
 
+    # 0.15.0 T6: his log said "update: check failed (timeout)" and «تحديث» showed nothing.
+    Step 'no network: the tray item answers at once, a second click says she is still on it, two retries, then why (the VPN hint)' {
+        try {
+            $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+            $l.Start(); $closed = $l.LocalEndpoint.Port; $l.Stop()   # nothing listens there: every request is refused
+            $before = Log-Lines
+            $script:engine = Start-Process -FilePath $InstalledExe -ArgumentList '--test-mode', '--capturable', '--update-host', "http://127.0.0.1:$closed", '--update-key', $keyFile -PassThru
+            Wait-Pipe 10
+            Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
+            $said = Text64 (Kv 'debug-comment').text64
+            Write-Host "    she said: $said"
+            # At once: "checking" (or already "trying again", if the refusal was quicker than this read).
+            if ($said -notmatch 'عم دوّر|عم حاول') { throw "the tray item showed nothing at once: '$said'" }
+            $tip = Text64 (Kv 'debug-tray-icon').tip64
+            if ($tip -notmatch 'عم دوّر|عم حاول') { throw "the tray tooltip did not change: '$tip'" }
+            Wait-Update { param($u) $u.status -eq 'checking' -and [int]$u.tries -ge 1 } 30 'no retry after the first failure' | Out-Null
+            Send '{"type":"cmd","name":"tray-pick","args":{"item":"update"}}' | Out-Null
+            Write-Host "    a second click: $(Text64 (Kv 'debug-comment').text64)"
+            $u = Wait-Update { param($u) $u.status -eq 'failed' } 90 'the failed check was never reported'
+            if ($u.failure -notin 'Network', 'Timeout' -or $u.tries -ne '3') { throw "failure $($u.failure) after $($u.tries) tries" }
+            $since = Log-Since $before
+            foreach ($want in 'update: checking \(you asked\)', 'update: check retry 1 in 3 s', 'update: check retry 2 in 10 s', 'update: asked while checking', 'update: check gave up \((Network|Timeout), 3 tries\)') {
+                if ($since -notmatch $want) { throw "no '$want' in the log:`n$since" }
+            }
+            $updateLines = ($since -split "`n" | Where-Object { $_ -match 'update: ' }) -join "`n"
+            if ($updateLines -cmatch 'https?://|127\.0\.0\.1|[A-Za-z]:\\') { throw "an address or a path reached the update lines:`n$updateLines" }
+            $said = Text64 (Kv 'debug-comment').text64
+            $tip = Text64 (Kv 'debug-tray-icon').tip64
+            Write-Host "    she said: $said | tooltip: $($tip -replace "`n", ' / ')"
+            if ($said -notmatch 'جرّب تطفي الـVPN أو تشغّله') { throw "her bubble gives no reason: '$said'" }
+            if ($tip -notmatch 'VPN') { throw "the tray tooltip gives no reason: '$tip'" }
+        }
+        finally { Stop-Engine }
+    }
+
     Step 'a newer signed version: she asks in her bubble, later snoozes a day (no request), the tray asks anyway' {
         Engine-Test
         if ((Kv 'debug-tray-icon').resource -ne 'true') { throw 'the tray shows the drawn fallback, not the app icon' }
@@ -4925,6 +4960,7 @@ function Stage-Install {
         Write-Host "    she said: $said"
         if ($said -notmatch '99\.0\.0' -or $said -notmatch 'نسخة جديدة') { throw "her bubble says '$said'" }
         if ((Kv 'debug-list').open -ne 'true') { throw 'no yes / later choice shown' }
+        if ((Text64 (Kv 'debug-tray-icon').tip64) -notmatch '99\.0\.0') { throw 'the tray tooltip does not name the new version' }
         if ((Get-Content $settingsPath -Raw) -notmatch '"updateAskAfter"') { throw 'askAfter not saved' }
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"later"}}' | Out-Null
         if ((Kv 'debug-list').open -ne 'false') { throw 'the choice stayed open after later' }
@@ -4950,8 +4986,12 @@ function Stage-Install {
         Ask-Again
         $before = Log-Lines
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
-        Wait-Update { param($u) $u.status -eq 'failed' } 60 'the bad download did not fail' | Out-Null
+        $u = Wait-Update { param($u) $u.status -eq 'failed' } 60 'the bad download did not fail'
         if ((Log-Since $before) -notmatch 'update: download failed \(checksum mismatch') { throw 'no checksum mismatch in the log' }
+        if ($u.failure -ne 'Checksum' -or $u.tries -ne '1') { throw "a bad checksum: failure $($u.failure) after $($u.tries) tries (never retried)" }
+        $said = Text64 (Kv 'debug-comment').text64
+        Write-Host "    she said: $said"
+        if ($said -notmatch 'خربان') { throw "her bubble gives no reason: '$said'" }
         if ($script:engine.HasExited) { throw 'she quit on a bad checksum' }
         if (@(Get-ChildItem $UpdateTemp -Recurse -File -ErrorAction SilentlyContinue).Count) { throw "the unverified download was kept: $((Get-ChildItem $UpdateTemp -Recurse -File).FullName -join ', ')" }
     }
@@ -4959,9 +4999,12 @@ function Stage-Install {
     Step 'a setup that fails while she is here: she says so and stays' {
         Serve-Setup "$env:SystemRoot\System32\where.exe"   # signed, verified, and exits 2 on the setup's flags
         Ask-Again
+        $before = Log-Lines
         Send '{"type":"cmd","name":"update-answer","args":{"answer":"yes"}}' | Out-Null
         $u = Wait-Update { param($u) $u.status -eq 'failed' -and $u.setupExit -ne 'none' } 60 'the failed setup was not noticed'
         if ($u.setupExit -eq '0') { throw 'setup exit 0' }
+        if ($u.percent -ne '100') { throw "the download said $($u.percent)%, not 100" }
+        if ((Log-Since $before) -notmatch 'update: download 100%') { throw 'no "update: download 100%" in the log' }
         if ($script:engine.HasExited) { throw 'she vanished with a failed setup' }
         $said = Text64 (Kv 'debug-comment').text64
         Write-Host "    she said: $said"
@@ -4977,7 +5020,8 @@ function Stage-Install {
         Wait-Gone $old 60 'the updating Sahar'
         $script:installed = Wait-Sahar 'after the update' -notPid $old -seconds 120
         $since = Log-Since $before
-        foreach ($want in 'update: 99.0.0 downloaded and verified', 'update: installing 99.0.0 (silent)') {
+        foreach ($want in 'update: downloading 99.0.0', 'update: download 25%', 'update: download 50%', 'update: download 75%', 'update: download 100%',
+                'update: 99.0.0 downloaded and verified', 'update: installing 99.0.0 (silent)') {
             if ($since -notmatch [regex]::Escape($want)) { throw "no '$want' in the log:`n$since" }
         }
         if ($since -notmatch '(?m) exit 0\s*$') { throw "the updating run did not end with exit 0:`n$since" }

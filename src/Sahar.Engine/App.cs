@@ -705,7 +705,9 @@ internal sealed unsafe class App
             try { updateKey = File.ReadAllText(keyFile).Trim(); } catch (Exception e) { Log.Write($"update: test key not read ({e.GetType().Name})"); }
         string? updateHost = _options.TestMode ? _options.UpdateHost : null;
         using var updates = new UpdateTool(ui, new Updater(updateHost, updateKey), listBubble, () => motion.Body,
-            line => speech.Say(line), () => settings, Save,
+            line => speech.Say(line),
+            (line, notify) => { tray.Status(line); if (notify && _state.Hidden) tray.Notify(line); },   // 0.15.0 T6
+            () => settings, Save,
             busy: () => _state.Hidden || menu.IsOpen || games.Running || show.Running || director.Quiet || idle.Away || lifeDirector.Typing ||
                 listBubble.IsOpen || bubble.IsOpen || Sulking(),
             automatic: !_options.TestMode, reachable: !_options.TestMode || updateHost is not null,
@@ -1132,7 +1134,8 @@ internal sealed unsafe class App
             });
             pipe.Register("debug-update", _ => new PipeReply(true, updates.Describe()));
             pipe.Register("debug-capture", _ => new PipeReply(true, $"{Win.DescribeCapture()} said64={B64(speech.Text ?? "")}"));
-            pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")}"));
+            pipe.Register("debug-tray-icon", _ => new PipeReply(true, $"resource={(tray.IconFromResource ? "true" : "false")} " +
+                $"tip64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(tray.TipText))}"));
             pipe.Register("debug-prayer", _ => new PipeReply(true, prayer.Describe()));
             pipe.Register("prayer-at", r =>
             {
