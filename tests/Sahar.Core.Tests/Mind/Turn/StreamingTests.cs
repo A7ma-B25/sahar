@@ -60,6 +60,36 @@ public sealed class StreamingTests
         Assert.Equal(ToolTemplates.AskedNo, _io.Final.Text);
     }
 
+    private void Partly(string text, Exception? then = null) => _llm.Script.Enqueue((_, partial, _) =>
+    {
+        for (int i = 0; i < text.Length; i += 7) partial?.Invoke(text.Substring(i, Math.Min(7, text.Length - i)));
+        if (then is not null) throw then;
+        return Task.FromResult(text);
+    });
+
+    private const string Butterfly = """{"actions":[{"tool":"move.play","args":{"move":"butterfly"},"why":"x"}],"next":"done","say":"يلا رح الحق""";
+
+    /// <summary>Review I1: the action already ran; a decision cut off by max_tokens must not end in «ما فهمت».</summary>
+    [Fact]
+    public async Task EarlySent_ThenTruncatedJson_SaysWhatRan()
+    {
+        Partly(Butterfly);
+        await Runner().RunAsync(Chat("العبي مع الفراشة"), Hello(), _io, default);
+        Assert.Single(_io.Of("call"));
+        Assert.Equal("تمام", _io.Final.Text);   // the engine's confirmation, not BadOutput
+    }
+
+    /// <summary>Review I1: llama-server died mid-stream after the action went out.</summary>
+    [Fact]
+    public async Task EarlySent_ThenRuntimeError_SaysWhatRan()
+    {
+        Partly(Butterfly, new Sahar.Core.Mind.Runtime.MindRuntimeException("load-failed"));
+        await Runner().RunAsync(Chat("العبي مع الفراشة"), Hello(), _io, default);
+        Assert.Single(_io.Of("call"));
+        Assert.Equal("تمام", _io.Final.Text);
+        Assert.Empty(_io.Of("error"));   // an error after her line would replace it with «لسا عم اتعلّم»
+    }
+
     [Fact]
     public async Task AFailedEarlyAction_NeverStreamsAClaim()
     {
