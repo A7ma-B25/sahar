@@ -131,6 +131,10 @@ public static class QuranBar
     public static QuranResume? Keep(int surah, string reciter, TimeSpan at) =>
         at < ResumeMargin ? null : new QuranResume(surah, reciter, (int)Math.Floor(at.TotalSeconds));
 
+    /// <summary>The surah picker's resume row: «وقفت عند ١٢:٠٤» when a place is kept for this surah and reciter.</summary>
+    public static string? ResumeLine(QuranResume? saved, int surah, string reciter) =>
+        ResumeFrom(saved, surah, reciter, null) is { } at ? "وقفت عند " + Clock(at) : null;
+
     /// <summary>Where to start when he asks to go on: the saved place for this surah and reciter, unless it is at the
     /// very end.</summary>
     public static TimeSpan? ResumeFrom(QuranResume? saved, int surah, string reciter, TimeSpan? duration)

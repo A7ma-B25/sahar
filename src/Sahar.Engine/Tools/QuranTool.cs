@@ -89,8 +89,7 @@ internal sealed class QuranTool : IDisposable
             i =>
             {
                 int surah = offset == 1 && i == 0 ? s.QuranLastSurah!.Value : i - offset + 1;
-                bool goOn = offset == 1 && i == 0;   // «▶» the last surah: on from where he stopped (ruling 5)
-                if (surah is >= 1 and <= 114) _ui.TryEnqueue(() => Safe(() => Play(surah, Valid(_get().QuranReciter), resume: goOn)));
+                if (surah is >= 1 and <= 114) _ui.TryEnqueue(() => Safe(() => Play(surah, Valid(_get().QuranReciter))));
             },
             () => _ui.TryEnqueue(() => Safe(OpenReciters)));
     }
@@ -114,8 +113,10 @@ internal sealed class QuranTool : IDisposable
     }
 
     /// <param name="make">Test mode: a stand-in player (CI's Windows Server has no MP3 decoder).</param>
-    /// <param name="resume">He asked to go on: once it opens, it seeks to where he stopped (same surah and reciter).</param>
-    public void Play(int surah, string reciter, Func<IRecitation>? make = null, bool resume = false)
+    /// <param name="resume">Once it opens, seek to where he stopped in this surah with this reciter (ruling 5). Null (any
+    /// pick of the surah, the picker's resume row included): when a place is kept for it — a surah heard to its end
+    /// keeps none, so it starts again. False: from the start.</param>
+    public void Play(int surah, string reciter, Func<IRecitation>? make = null, bool? resume = null)
     {
         if (State is "playing" or "paused") Keep();
         StopPlayer();
@@ -123,10 +124,10 @@ internal sealed class QuranTool : IDisposable
         int gen = ++_generation;
         Surah = surah;
         Reciter = reciter;
-        _resumeWanted = resume;
+        _resumeWanted = resume ?? QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, null) is not null;
         State = "opening";
         SetPlaying(true);
-        Log.Write($"quran: play surah {surah} ({reciter}){(resume ? " to go on" : "")}");
+        Log.Write($"quran: play surah {surah} ({reciter}){(_resumeWanted ? " to go on" : "")}");
         Changed?.Invoke();
         _openTimeout.Stop();
         _openTimeout.Start();
@@ -239,6 +240,13 @@ internal sealed class QuranTool : IDisposable
     }
 
     private Func<IRecitation>? _make;
+
+    /// <summary>SEAM with the look stream's surah picker: its resume row's meta for a surah («وقفت عند ١٢:٠٤»), or null.
+    /// (If feat/0.16-look declares this property too, keep one declaration.)</summary>
+    public Func<int, string?> ResumeMeta { get; set; } = _ => null;
+
+    /// <summary>«وقفت عند ١٢:٠٤» when a place is kept for this surah with the chosen reciter.</summary>
+    public string? ResumeLine(int surah) => QuranBar.ResumeLine(_get().QuranResume, surah, Valid(_get().QuranReciter));
 
     /// <summary>Where he is now, kept for «كمّل» (nothing in the first seconds).</summary>
     private void Keep()

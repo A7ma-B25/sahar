@@ -81,7 +81,8 @@ export async function render({ tx, ask, render: rerender }) {
     : h('div', { class: 'ps-actions' },
       pri(tx('personaSave'), save, { id: 'persona-save' }),
       ghost(tx('personaRestore'), () => { state.asking = true; state.status = null; redraw(); }, { id: 'persona-restore', disabled: !saved.edited && state.draft === null }));
-  if (state.asking) queueMicrotask(() => document.getElementById('persona-restore-no')?.focus());
+  // After app.js has put the page in the document (a microtask would run before that).
+  if (state.asking) setTimeout(() => document.getElementById('persona-restore-no')?.focus(), 0);
 
   const rule = (line, hint) => item({ icon: HAND.shield, line: tx(line), under: [h('span', { class: 'desc', text: tx(hint) })] });
 

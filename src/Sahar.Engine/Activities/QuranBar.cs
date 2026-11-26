@@ -102,6 +102,8 @@ internal sealed class QuranBar : IDisposable
         quran.Changed += () => Safe(Changed);
         quran.PlayingChanged += _ => Safe(Changed);
         hub.TagClicked += a => Safe(() => { if (a.Kind == ActivityKind.Quran) Open(); });
+        // The look stream's surah picker shows «وقفت عند ١٢:٠٤» on its resume row; the place is kept here.
+        quran.ResumeMeta = quran.ResumeLine;
     }
 
     // ---- the tag ----
@@ -332,6 +334,8 @@ internal sealed class QuranBar : IDisposable
     private void BarTick()
     {
         if (!IsOpen) return;
+        // While it opens he is waiting for it (and a failure needs the bar for «جرّب كمان مرة»): no idle fold then.
+        if (_quran.Recitation == RecitationState.Opening) Touch();
         if (!_dragging && Rules.Collapse(_lastActivity, DateTimeOffset.Now, _pointerOver)) { Log.Write("quran: bar folded (idle)"); Close(); return; }
         Draw();
     }
@@ -341,8 +345,8 @@ internal sealed class QuranBar : IDisposable
     {
         if (!IsOpen) return;
         var body = _body();
+        _root.StopAnimation("Offset");   // first: stopping would put back the animation's value over the new place
         Place(body, Monitors.At(new Vector2(body.X + body.Width / 2, body.Y + body.Height / 2)).WorkF);
-        _root.StopAnimation("Offset");
         Need("quran-bar", Area(), null);
     }
 

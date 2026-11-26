@@ -137,6 +137,16 @@ public sealed class QuranBarTests
     }
 
     [Fact]
+    public void ResumeLine_ForThePickersResumeRow()
+    {
+        var saved = new QuranResume(18, "ar.alafasy", 724);
+        Assert.Equal("وقفت عند ١٢:٠٤", QuranBar.ResumeLine(saved, 18, "ar.alafasy"));
+        Assert.Null(QuranBar.ResumeLine(saved, 19, "ar.alafasy"));
+        Assert.Null(QuranBar.ResumeLine(saved, 18, "ar.husary"));
+        Assert.Null(QuranBar.ResumeLine(null, 18, "ar.alafasy"));
+    }
+
+    [Fact]
     public void Resume_IsKeptInSettings_RoundTrip()
     {
         var dir = Directory.CreateTempSubdirectory("sahar-qresume-").FullName;

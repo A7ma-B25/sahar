@@ -1066,7 +1066,7 @@ internal sealed unsafe class App
                 Func<IRecitation>? fake = r.Args?.ContainsKey("fake") == true ? () => new FakeRecitation(ui, TimeSpan.FromSeconds(Arg(r, "fake")), seekable,
                     r.Args?.ContainsKey("openms") == true ? TimeSpan.FromMilliseconds(Arg(r, "openms")) : null) : null;
                 quran.Play(surah, r.Args?.TryGetValue("reciter", out var who) == true ? who : settings.QuranReciter, fake,
-                    resume: r.Args?.GetValueOrDefault("resume") == "true");
+                    resume: r.Args?.GetValueOrDefault("resume") switch { "true" => true, "false" => false, _ => null });
                 return new PipeReply(true, quran.Describe());
             });
             pipe.Register("debug-quran", _ => new PipeReply(true, quran.Describe()));

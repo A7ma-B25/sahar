@@ -5207,6 +5207,16 @@ function Stage-QuranBar {
         Start-Sleep -Milliseconds 300
         $p = [double](Kv 'debug-quran').position
         if ([math]::Abs($p - 500) -gt 4) { throw "«كمّل» started at $p s, want 500" }
+        # From the start when asked (resume false), and the place is still there for the next pick.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000","resume":"false"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        if ([double](Kv 'debug-quran').position -gt 3) { throw 'resume false did not start from the beginning' }
+        if ((Setting 'quranResume').seconds -lt 495) { throw "the kept place moved: $((Setting 'quranResume') | ConvertTo-Json -Compress)" }
+        # A plain pick of the surah (the picker's rows, resume not given) goes on from his place too.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        Start-Sleep -Milliseconds 300
+        if ([math]::Abs([double](Kv 'debug-quran').position - 500) -gt 4) { throw "a plain pick did not go on from 500 s: $((Kv 'debug-quran').position)" }
         # Another reciter does not take his place.
         Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.alafasy","fake":"1000","resume":"true"}}' | Out-Null
         QWait 'playing' 4000 | Out-Null
