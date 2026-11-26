@@ -354,10 +354,17 @@ internal sealed unsafe class D2DContext : IDisposable
     {
         nint layout = DWrite.Layout(text, size, weight, box.Right - box.Left, box.Bottom - box.Top, align, rtl, digitCell, wrap);
         Own(layout);
-        var origin = new D2DPoint { X = box.Left, Y = box.Top };
-        // ID2D1RenderTarget::DrawTextLayout(origin, layout, brush, options)
-        ((delegate* unmanaged[Stdcall]<nint, D2DPoint, nint, nint, int, void>)Com.Slot(_dc, 28))(_dc, origin, layout, brush, 0);
+        DrawLayout(layout, new Vector2(box.Left, box.Top), brush);
         return DWrite.Size(layout);
+    }
+
+    /// <summary>ID2D1RenderTarget::DrawTextLayout (slot 28) with colour fonts on: an emoji (DirectWrite's fallback to
+    /// Segoe UI Emoji) draws in its own colours, the rest in <paramref name="brush"/> (owner 2026-11-26: emoji stay).</summary>
+    public void DrawLayout(nint layout, Vector2 origin, nint brush)
+    {
+        const int D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT = 4;
+        var o = new D2DPoint(origin);
+        ((delegate* unmanaged[Stdcall]<nint, D2DPoint, nint, nint, int, void>)Com.Slot(_dc, 28))(_dc, o, layout, brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
     }
 
     /// <summary>A bitmap from 8-bit premultiplied BGRA pixels (a cover, a thumbnail); released with the context.</summary>

@@ -1,7 +1,7 @@
 # UI tests for the engine on a real Windows desktop (GitHub windows-latest).
 # Stages build on each other; later plans add stages after "smoke".
 param(
-    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval')][string[]]$Stage = @('smoke'),
+    [ValidateSet('smoke', 'idle', 'gallery', 'motion', 'events', 'perf', 'life', 'menu', 'senses', 'prayer', 'games', 'shell', 'face', 'settings', 'activities', 'mind', 'install', 'mindeval', 'bubble')][string[]]$Stage = @('smoke'),
     [string]$Exe = "$PSScriptRoot\..\..\artifacts\engine\Sahar.Engine.exe",
     [string]$Out = "$PSScriptRoot\..\..\artifacts\ui",
     [string]$Setup = "$PSScriptRoot\..\..\artifacts\installer"
@@ -117,6 +117,13 @@ $MotionKinds = @('Wander', 'Hover', 'PeekTaskbar', 'EyesFollow', 'Drag', 'Throw'
     'Wake', 'FullscreenHide', 'PerchWindow', 'CelebrateLoop')
 
 function State { (Send '{"type":"cmd","name":"state"}').state }
+
+# 0.16: her bubble stays 8 s plus 60 ms a character (at most 14 s); waits until it has gone.
+function Wait-NoSpeech([int]$ms = 15000) {
+    $deadline = (Get-Date).AddMilliseconds($ms)
+    while ((Send '{"type":"cmd","name":"debug-speech"}').error -match 'showing=true' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    if ((Send '{"type":"cmd","name":"debug-speech"}').error -match 'showing=true') { throw "her bubble stayed past $ms ms" }
+}
 
 function Assert-TopLeftInWork($st, [string]$what) {
     if ($st.x -lt $Work.Left -or $st.y -lt $Work.Top -or $st.x -gt $Work.Right -or $st.y -gt $Work.Bottom) {
@@ -2660,7 +2667,7 @@ function Stage-Prayer {
         if ((Menu).open -ne 'false') { throw 'the menu stayed open after a control' }
         if (-not (State)) { throw 'no state after a control with nothing playing' }
         # Her tool lines are not comments: letting them time out never makes her comment less.
-        Start-Sleep -Seconds 9
+        Wait-NoSpeech
         if ((Kv 'debug-comment').showing -ne 'false') { throw 'the music bubble did not go away' }
         if ((Kv 'debug-apptime').gapMinutes -ne $gap) { throw "the comment gap grew from $gap to $((Kv 'debug-apptime').gapMinutes) minutes" }
     }
@@ -3082,12 +3089,13 @@ function Stage-Shell {
         Start-Sleep -Milliseconds 600
         $after = Screenshot 'shell-talk.png'
         Assert-NoCover 'talking'
-        # Her bubble: above her body, white; its left part has no text (right-to-left).
-        $st = State
-        Assert-Drawn $before $after ([int]($st.x + $st.width / 2 - 95)) ([int]($st.y - 30)) 'her speech bubble'
+        # Her bubble (0.16): above her, the menu colour; its left part has no text (right-to-left).
+        $sp = Kv 'debug-speech'
+        $r = Rect4 $sp.rect
+        Assert-Drawn $before $after ($r.x + 14) ($r.y + [int]($r.h / 2)) 'her speech bubble'
     }
     Step 'menu open: no window covers a monitor and the taskbar stays topmost' {
-        Start-Sleep -Seconds 8   # her bubble has gone
+        Wait-NoSpeech   # her bubble has gone
         $before = Screenshot 'shell-before-menu.png'
         $c = Body-Centre
         [Mouse]::Click($c[0], $c[1], $true)
@@ -3545,7 +3553,7 @@ function Stage-Face {
         Pose-Body 470 330 | Out-Null
         [Mouse]::Move(5, 5)
         Start-Sleep -Seconds 1
-        $deadline = (Get-Date).AddSeconds(8)   # the game's last line goes first (a white bubble moves the centroid)
+        $deadline = (Get-Date).AddSeconds(15)   # the game's last line goes first (a white bubble moves the centroid)
         while ((Kv 'debug-comment').showing -eq 'true' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
         # Below the test window's white title bar (the centroid counts white pixels).
         $gx = [math]::Max(0, $Work.Left); $gy = $Work.Top + 40; $gw = $Work.Width; $gh = $Work.Height - 40
@@ -4433,7 +4441,7 @@ function Stage-Activities {
     }
     Step 'her expressions: the music sway, the halo from the cover, the leaf like an umbrella' {
         $scene = Start-TestWindow 'scene-light'
-        Start-Sleep -Seconds 8   # her bubble from the hooks above goes first
+        Wait-NoSpeech   # her bubble from the hooks above goes first
         $e = Kva 'activity-expr' '{"music":"true","cover":"#E07A3A","rain":"true"}'
         if ($e.sway -ne 'music' -or $e.droop -ne '14' -or $e.halo -eq 'mood') { throw "sway $($e.sway) droop $($e.droop) halo $($e.halo)" }
         Start-Sleep -Milliseconds 900
@@ -4930,6 +4938,146 @@ function Stage-Install {
     if (Test-Path $backup) { Copy-Item $backup $settingsPath -Force } else { Remove-Item $settingsPath -ErrorAction SilentlyContinue }
 }
 
+# ---------- 0.16 her speech bubble (spec 0.15 §4.1, boards V15Talk / V15TalkDark) ----------
+function Speech { Kv 'debug-speech' }
+function Say-Line([string]$text) {
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
+    Send ('{"type":"cmd","name":"say","args":{"text64":"' + $b64 + '"}}') | Out-Null
+    Start-Sleep -Milliseconds 500   # the 220 ms entrance has settled
+    Speech
+}
+# The most colourful pixel in a rect (max − min channel): Arabic ink is grey; a colour emoji is not.
+function Max-Chroma([string]$path, [int]$x, [int]$y, [int]$w, [int]$h) {
+    $bmp = [System.Drawing.Bitmap]::new($path)
+    try {
+        $best = 0
+        for ($j = $y; $j -lt $y + $h; $j += 2) {
+            for ($i = $x; $i -lt $x + $w; $i += 2) {
+                $c = $bmp.GetPixel($i, $j)
+                $chroma = [math]::Max($c.R, [math]::Max($c.G, $c.B)) - [math]::Min($c.R, [math]::Min($c.G, $c.B))
+                if ($chroma -gt $best) { $best = $chroma }
+            }
+        }
+        $best
+    }
+    finally { $bmp.Dispose() }
+}
+function Near-Colour($p, [string]$hex, [int]$tol) {
+    $c = [System.Drawing.ColorTranslator]::FromHtml($hex)
+    ([math]::Abs($p.R - $c.R) -le $tol) -and ([math]::Abs($p.G - $c.G) -le $tol) -and ([math]::Abs($p.B - $c.B) -le $tol)
+}
+
+function Stage-Bubble {
+    $surfaces = @{ light = '#FFFFFF'; dark = '#2A2630' }
+    $lines = @(
+        @{ name = 'say'; kind = 'say'; text = 'صباح الخير! جاهز نبلّش؟' },
+        @{ name = 'say2'; kind = 'say'; text = 'خلص المؤقت. ساعة شغل كاملة، برافو عليك!' },
+        @{ name = 'emoji'; kind = 'say'; text = 'صباح الخير ☀️ جاهز نبلّش؟ 💜' },
+        @{ name = 'long'; kind = 'long'; text = 'العصر بعد ٤٢ دقيقة، والمغرب الساعة ٥:٢٠. إذا بدك بذكّرك قبل كل صلاة بخمس دقايق، وبسكت إذا كنت باجتماع. وإذا بدك كمان بحكيلك شو الطقس بكرا 🌧️' }
+    )
+    foreach ($theme in @('light', 'dark')) {
+        Step "every kind of bubble, Arabic with emoji in colour ($theme)" {
+            Stop-Engine
+            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '" }')
+            $win = Start-TestWindow "scene-$theme"
+            try {
+                Start-Engine
+                Send '{"type":"cmd","name":"motion","args":{"kind":"Hover"}}' | Out-Null
+                Pose-Body ([int]($Work.Width * 0.55)) ([int]($Work.Height * 0.45)) | Out-Null
+                [Mouse]::Move(5, 5)
+                Start-Sleep -Milliseconds 400
+                foreach ($l in $lines) {
+                    $sp = Say-Line $l.text
+                    $st = State
+                    if ($sp.showing -ne 'true' -or $sp.kind -ne $l.kind) { throw "$($l.name): showing=$($sp.showing) kind=$($sp.kind)" }
+                    if ($sp.theme -ne $theme -or $sp.surface -ne $surfaces[$theme]) { throw "$($l.name): theme $($sp.theme) surface $($sp.surface)" }
+                    if ($l.kind -eq 'long' -and ($sp.lines -ne '3' -or $sp.clipped -ne 'true' -or $sp.link -eq 'none')) { throw "long: lines $($sp.lines) clipped $($sp.clipped) link $($sp.link)" }
+                    $r = Rect4 $sp.rect
+                    if ($r.x -lt $Work.Left -or $r.y -lt $Work.Top -or $r.x + $r.w -gt $Work.Right) { throw "$($l.name): $($sp.rect) leaves the work area" }
+                    if ($r.y + $r.h -gt $st.y) { throw "$($l.name): the bubble ($($sp.rect)) is not above her (body top $($st.y))" }
+                    $tip = $st.x + $st.width / 2 + 4 * $st.width / 160
+                    if ([math]::Abs([int]$sp.tailX - $tip) -gt 3) { throw "$($l.name): the tail at $($sp.tailX), her leaf at $tip" }
+                    $shot = Screenshot "bubble-$($l.name)-$theme.png"
+                    $p = Pixel $shot ($r.x + 6) ($r.y + [int]($r.h / 2))
+                    if (-not (Near-Colour $p $surfaces[$theme] 6)) { throw "$($l.name): the bubble is $($p.R),$($p.G),$($p.B), not $($surfaces[$theme])" }
+                    if ($theme -eq 'dark' -and $p.R -gt 200 -and $p.G -gt 200 -and $p.B -gt 200) { throw "$($l.name): white in dark" }
+                    $chroma = Max-Chroma $shot ($r.x + 8) ($r.y + 8) ($r.w - 16) ($r.h - 16)
+                    Write-Host "    $($l.name): $($sp.rect) lines $($sp.lines), most colourful pixel $chroma"
+                    if ($l.name -eq 'emoji' -and $chroma -lt 90) { throw "emoji: no colour in the bubble (max chroma $chroma): tofu or monochrome?" }
+                    if ($l.name -eq 'say' -and $chroma -gt 60) { throw "say: colour in a plain line (chroma $chroma)" }
+                    $left = [math]::Min($r.x, $st.x) - 24; $top = $r.y - 24
+                    $right = [math]::Max($r.x + $r.w, $st.x + $st.width) + 24; $bottom = $st.y + $st.height + 24
+                    Crop-Rect $shot $left $top ($right - $left) ($bottom - $top) (Join-Path $Out "app-bubble-$($l.name)-$theme.png")
+                    Assert-NoCover "bubble $($l.name) ($theme)"
+                    if ($l.kind -eq 'long') {
+                        # «كمّل بالمحادثة»: a real click on it; the bubble goes and the chat is asked for (Task 5 opens it).
+                        $k = Rect4 $sp.link
+                        [Mouse]::Click($k.x + $k.w - 20, $k.y + [int]($k.h / 2), $false)
+                        Start-Sleep -Milliseconds 400
+                        if ((Speech).showing -ne 'false') { throw 'the link did not take the bubble away' }
+                        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+                        if ($log -notmatch 'bubble: continue in the chat') { throw 'the link click did not ask for the chat' }
+                    }
+                    else {
+                        # A click on the bubble sends it away (its window never takes the focus).
+                        $fg = [Fg]::Get()
+                        [Mouse]::Click($r.x + 12, $r.y + [int]($r.h / 2), $false)
+                        Start-Sleep -Milliseconds 400
+                        if ((Speech).showing -ne 'false') { throw "$($l.name): a click did not take the bubble away" }
+                        if ([Fg]::Get() -ne $fg) { throw "$($l.name): the click took the focus" }
+                    }
+                    Start-Sleep -Milliseconds 300
+                }
+            }
+            finally { Stop-Process -Id $win.Id -ErrorAction SilentlyContinue }
+        }
+    }
+    Step 'at the right edge: inside the work area, the tail still points at her' {
+        $st = State
+        Pose-Body ($Work.Right - $st.width - 2) ([int]($Work.Height * 0.5)) | Out-Null
+        Start-Sleep -Milliseconds 300
+        $sp = Say-Line 'هون عالطرف، وبعدني شايفتك!'
+        $st = State
+        $r = Rect4 $sp.rect
+        if ($r.x + $r.w -gt $Work.Right) { throw "the bubble $($sp.rect) leaves the work area" }
+        $tail = [int]$sp.tailX
+        if ($tail -lt $r.x + 18 -or $tail -gt $r.x + $r.w - 18) { throw "the tail at $tail is off the bubble $($sp.rect)" }
+        Screenshot 'bubble-edge.png' | Out-Null
+    }
+    Step 'at the top of the screen: it hangs under her, tail up' {
+        Pose-Body ([int]($Work.Width * 0.5)) ($Work.Top + 4) | Out-Null
+        Start-Sleep -Milliseconds 300
+        $sp = Say-Line 'ما في محل فوق، فحطيتها تحت'
+        $st = State
+        $r = Rect4 $sp.rect
+        if ($sp.below -ne 'true') { throw "below=$($sp.below) at the top ($($sp.rect))" }
+        if ($r.y -lt $st.y + $st.height) { throw "the bubble $($sp.rect) covers her (body bottom $($st.y + $st.height))" }
+        $shot = Screenshot 'bubble-below.png'
+        Crop-Rect $shot ($r.x - 24) ($st.y - 24) ($r.w + 48) ($r.y + $r.h - $st.y + 48) (Join-Path $Out 'app-bubble-below-light.png')
+    }
+    Step 'say stays 8 s plus 60 ms a character, then goes by itself' {
+        Pose-Body ([int]($Work.Width * 0.55)) ([int]($Work.Height * 0.45)) | Out-Null
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        Say-Line 'هلا' | Out-Null   # 3 characters: 8.18 s
+        Start-Sleep -Milliseconds (7600 - $sw.ElapsedMilliseconds)
+        if ((Speech).showing -ne 'true') { throw "gone before 8 s ($($sw.ElapsedMilliseconds) ms)" }
+        Wait-NoSpeech 2500
+        Write-Host "    gone after $($sw.ElapsedMilliseconds) ms"
+        if ($sw.ElapsedMilliseconds -gt 9500) { throw "stayed $($sw.ElapsedMilliseconds) ms" }
+    }
+    Step 'a new line replaces the old one; her words never reach the log' {
+        Say-Line 'SENTINELBUBBLE أول' | Out-Null
+        $sp = Say-Line 'SENTINELBUBBLE تاني 💜'
+        if ($sp.showing -ne 'true') { throw 'the second line is not shown' }
+        $c = Kv 'debug-comment'
+        if ((Text64 $c.text64) -ne 'SENTINELBUBBLE تاني 💜') { throw "showing '$(Text64 $c.text64)'" }
+        Wait-NoSpeech
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
+        if ($log -match 'SENTINELBUBBLE') { throw 'engine.log holds her words' }
+        if ($log -notmatch 'bubble: say \(1 lines') { throw 'the log has no bubble line' }
+    }
+}
+
 try {
     foreach ($s in $Stage) {
         Write-Host "=== stage $s"
@@ -4952,6 +5100,7 @@ try {
             'mind' { Stage-Mind }
             'install' { Stage-Install }
             'mindeval' { Stage-MindEval }
+            'bubble' { Stage-Bubble }
         }
     }
 }
