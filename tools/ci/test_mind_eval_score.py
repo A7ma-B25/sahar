@@ -36,6 +36,12 @@ class MindEvalScoreTests(unittest.TestCase):
         row = {"id": "e01", "kind": "chat", "visible": "منيحة الحمدلله، وإنت شو أخبارك؟", "calls": [], "fastPath": False}
         self.assertEqual(set(m.score(row, {"topic": ["منيح"]}).values()), {True})
 
+    def test_emoji_never_costs_a_point(self):
+        # 0.15.0, owner: he wants emoji in her speech — glued to a word or alone, it changes no check.
+        for text in ("منيحة😊 وإنت؟", "هلق🎶 بلّشنا", "🌙شو؟"):
+            row = {"id": "e01", "kind": "chat", "visible": text, "calls": [], "fastPath": False}
+            self.assertTrue(m.score(row, {"topic": ["هلق", "منيح", "شو"]})["syrian"], text)
+
     def test_a_command_needs_its_tool_or_the_fast_path(self):
         base = {"id": "e02", "kind": "command", "expectTool": "timer.start", "visible": "تمام، شغّلت مؤقت ٥ دقايق", "fastPath": False}
         self.assertTrue(m.score(dict(base, calls=["timer.start act"]))["tool"])

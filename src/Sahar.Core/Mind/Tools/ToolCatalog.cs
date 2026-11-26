@@ -48,7 +48,7 @@ public static class ToolCatalog
         new("timer.cancel", "وقّفي المؤقت", [], ActionClass.A),
         new("reminder.set", "ذكّريه بشي: بعد كم دقيقة أو بساعة محددة", [Int("inMinutes", 1, 1440, false), new("at", ArgType.Time, false), Str("text", 80)],
             ActionClass.A, Undoable: true),
-        new("note.save", "احفظي ملاحظة", [Str("text", 500)], ActionClass.A, Undoable: true),
+        new("note.save", "احفظي ملاحظة (كلامه هو، قصير)", [Str("text", 300)], ActionClass.A, Undoable: true),
         new("note.open", "افتحي الملاحظات", [], ActionClass.A),
         new("hush.on", "اسكتي (بلا تعليقات) لمدة أو لحد ما يقلّك", [Int("minutes", 1, 600, false)], ActionClass.A, Undoable: true),
         new("hush.off", "رجعي احكي", [], ActionClass.A),

@@ -24,6 +24,13 @@ public sealed class BenchTests
     public void Dialect_SyrianPasses_MsaFails(string reply, bool pass) => Assert.Equal(pass, DialectScore.Pass(reply));
 
     [Fact]
+    public void Dialect_EmojiGluedToAWord_StillSyrian()   // 0.15.0, owner: he wants emoji in her speech
+    {
+        Assert.True(DialectScore.Pass("يلا هلق🎶"));
+        Assert.True(DialectScore.Pass("منيحة😊 وإنت؟"));
+    }
+
+    [Fact]
     public void Dialect_TooLongFails() => Assert.False(DialectScore.Pass("شو " + new string('ا', 230)));
 
     [Fact]

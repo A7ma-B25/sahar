@@ -30,8 +30,18 @@ def normalize(text):
     return t.lower()
 
 
+def _bare(w):
+    """A word without the punctuation or emoji around it (0.15.0: he wants emoji; «هلق🎶» is still «هلق»)."""
+    w = w.strip("،.!؟?,«»:\"'()")
+    while w and not (w[0].isalnum()):
+        w = w[1:]
+    while w and not (w[-1].isalnum()):
+        w = w[:-1]
+    return w
+
+
 def words(text):
-    return {w.strip("،.!؟?,«»:\"'()") for w in normalize(text).split()}
+    return {_bare(w) for w in normalize(text).split()}
 
 
 def syrian(text):

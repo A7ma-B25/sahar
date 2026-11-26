@@ -70,12 +70,21 @@ public static class DialectScore
         if (english) return text.Any(char.IsAsciiLetter);
         if (!text.Any(c => c is >= '؀' and <= 'ۿ')) return false;
         var words = ChatCommands.Normalize(text).Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => w.Trim('،', '.', '!', '؟', '?', ',', '«', '»', ':')).ToHashSet();
+            .Select(Bare).ToHashSet();
         var norm = Msa.Select(ChatCommands.Normalize);
         return Syrian.Select(ChatCommands.Normalize).Any(words.Contains) && !norm.Any(words.Contains);
     }
 
     /// <summary>The <c>say</c> of a decision JSON, or the reply itself when it is not JSON.</summary>
+    /// <summary>A word without the punctuation or emoji around it (0.15.0: he wants emoji; «هلق🎶» is still «هلق»).</summary>
+    private static string Bare(string w)
+    {
+        int a = 0, b = w.Length;
+        while (a < b && !char.IsLetterOrDigit(w[a])) a++;
+        while (b > a && !char.IsLetterOrDigit(w[b - 1])) b--;
+        return w[a..b];
+    }
+
     public static string SayOf(string reply)
     {
         try

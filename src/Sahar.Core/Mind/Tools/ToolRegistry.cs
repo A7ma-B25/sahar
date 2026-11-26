@@ -203,7 +203,7 @@ public sealed class ToolRegistry(IReadOnlyList<ToolSpec> announced) : IToolRegis
         Required(w, t.Args.Where(a => a.Required).Select(a => a.Name));
         w.WriteBoolean("additionalProperties", false);
         w.WriteEndObject();
-        w.WriteStartObject("why"); w.WriteString("type", "string"); w.WriteNumber("maxLength", 80); w.WriteEndObject();
+        w.WriteStartObject("why"); w.WriteString("type", "string"); w.WriteNumber("maxLength", 40); w.WriteEndObject();   // 0.15.0: 80 → 40 (fewer tokens per action)
         w.WriteEndObject();
         Required(w, ["tool", "args", "why"]);
         w.WriteBoolean("additionalProperties", false);
