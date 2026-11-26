@@ -4,6 +4,9 @@ import { mount } from './h.js';
 import { chatView } from './chatviews.js';
 
 const web = window.chrome && window.chrome.webview;
+// The focus ring only for keyboard use (a programmatic focus on open shows none).
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kb'); }, true);
+document.addEventListener('mousedown', () => document.documentElement.classList.remove('kb'), true);
 const post = (m) => web && web.postMessage(m);
 const stage = document.getElementById('stage');
 let model = null;

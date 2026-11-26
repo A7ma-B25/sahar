@@ -20,9 +20,12 @@ internal sealed class Panel(SurfaceClient client, Func<RectF> body)
     public string? Name => _spec?.Name;
     /// <summary>A panel just opened or closed (her pipe and the card's mutual exclusion listen).</summary>
     public event Action<bool>? OpenChanged;
+    /// <summary>A panel is about to show (its mode): an ask bubble above her clears her speech bubble first.</summary>
+    public event Action<string>? Opening;
 
     public void Show(PanelSpec spec, Action<SurfaceEvent> handler, string mode = "beside", System.Numerics.Vector2? anchor = null)
     {
+        Opening?.Invoke(mode);
         int seq = 0;
         seq = client.Show(Surface, spec.Name, mode, spec.ToModel(), body(), e => Event(seq, e), anchor);   // the last one hears "closed" first
         _seq = seq;

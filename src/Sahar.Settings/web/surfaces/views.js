@@ -127,11 +127,12 @@ export function trayView(m, st, emit) {
 }
 
 export function drawerView(m, st, emit) {
-  const any = (m.sections || []).some((s) => s.rows.length);
+  const sections = (m.sections || []).map((s) => ({ ...s, rows: s.rows || [] }));
+  const any = sections.some((s) => s.rows.length);
   return h('div', { cls: 'card panel drawer pop', role: 'dialog', 'aria-label': m.title, 'data-kind': 'drawer' },
     head(m, emit),
     any ? h('div', { cls: 'list scr', style: `max-height:${m.listHeight || 420}px` },
-      m.sections.filter((s) => s.rows.length).map((s) => [h('p', { cls: 'sect' }, s.title), s.rows.map((r) => h(r.id ? 'button' : 'div', {
+      sections.filter((s) => s.rows.length).map((s) => [h('p', { cls: 'sect' }, s.title), s.rows.map((r) => h(r.id ? 'button' : 'div', {
         cls: `drow ${r.soft ? 'soft' : ''} ${r.id ? 'hv' : ''}`, 'data-id': r.id || null, on: r.id ? { click: () => emit('pick', r.id) } : null },
         h('span', { cls: 'ic' }, icon(r.icon || 'bell', 16)),
         h('span', { cls: 'txt' }, h('b', { cls: 'ell', style: 'font-weight:400' }, r.label, r.live ? h('span', { cls: 'live', 'aria-label': 'شغّال' }) : null), r.sub ? h('span', { cls: 'ell' }, r.sub) : null),

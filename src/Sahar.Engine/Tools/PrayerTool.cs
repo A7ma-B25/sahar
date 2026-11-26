@@ -97,8 +97,9 @@ internal sealed class PrayerTool : IDisposable
         }
         var rows = Shown.Select(p =>
         {
-            bool isNext = next is { } n && n.Prayer == p && n.At.Date == day[p].Date;
-            string meta = isNext ? Sahar.Core.Text.Digits.ToArabicIndic($"بعد {Short(next!.Value.At - now)}   ") + Clock(day[p]) : Clock(day[p]);
+            // After العشا the next one is tomorrow's الفجر: it is still the soft row, with tomorrow's time.
+            bool isNext = next is { } n && n.Prayer == p;
+            string meta = isNext ? Sahar.Core.Text.Digits.ToArabicIndic($"بعد {Short(next!.Value.At - now)}   ") + Clock(next.Value.At) : Clock(day[p]);
             return new PickRow(p.ToString(), PrayerNames.Arabic(p)) { Meta = meta, Sel = isNext, Dim = !isNext && day[p] < now };
         }).ToList();
         return new PanelSpec

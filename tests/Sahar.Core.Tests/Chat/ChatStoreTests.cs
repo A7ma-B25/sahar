@@ -69,7 +69,7 @@ public class ChatStoreTests
         _now = _now.AddDays(20);   // «بالنص» is 31 days old now, «جديد» 20
         s.Prune();
         Assert.Equal(["جديد"], s.Load(mixed).Select(m => m.Text));
-        Assert.False(box.Files.ContainsKey("chat." + old));
+        Assert.False(box.Files.ContainsKey(ChatStore.FileName(old)));
     }
 
     [Fact]
@@ -124,5 +124,29 @@ public class ChatStoreTests
         var s = Store(new Box());
         var id = s.Append(null, new ChatEntry(_now, ChatWho.Her, ChatLine.Ask, "بدي احفظ ملاحظة. بتسمحلي؟") { Answer = "yes" });
         Assert.Equal("yes", s.Load(id)[0].Answer);
+    }
+}
+
+public class ChatStoreRealBoxTests : IDisposable
+{
+    private readonly string _dir = Directory.CreateTempSubdirectory("chatbox").FullName;
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch (IOException) { } }
+
+    [Fact]
+    public void WorksInTheRealSecretBox_EncryptedAtRest_AndGoneAfterForgetAll()
+    {
+        var box = new SecretBox(_dir, new TestKeyWrap());
+        var now = DateTimeOffset.Now;
+        var s = new ChatStore(box, () => now);
+        var id = s.Append(null, new ChatEntry(now, ChatWho.Me, ChatLine.Text, "SENTINEL سطر سري"));
+        Assert.True(s.Saving);
+        foreach (var f in Directory.EnumerateFiles(_dir))
+            Assert.DoesNotContain("SENTINEL", System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(f)));
+        Assert.Single(new ChatStore(new SecretBox(_dir, new TestKeyWrap()), () => now).Load(id));
+        var order = new List<string>();
+        box.Deleting += order.Add;
+        box.ForgetAll();
+        Assert.Equal(SecretBox.KeyFile, order[0]);   // the key goes first (crypto-shred)
+        Assert.Empty(new ChatStore(new SecretBox(_dir, new TestKeyWrap()), () => now).List());
     }
 }

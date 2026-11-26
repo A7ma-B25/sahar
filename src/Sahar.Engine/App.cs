@@ -345,6 +345,7 @@ internal sealed unsafe class App
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
+        panel.Opening += mode => Safe(() => { if (mode == "above") speech.Dismiss(); });   // 0.16: an ask bubble never sits under her speech
         // Rain coming (opt-in): the tray item asks for your city.
         // Owner ruling 4 (0.13): with no city of its own the weather uses the prayer place.
         var weatherPlace = settings.WeatherEnabled ? Sahar.Core.Activities.WeatherCity.Resolve(settings) : null;

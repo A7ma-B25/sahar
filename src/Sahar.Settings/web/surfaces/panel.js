@@ -4,6 +4,9 @@ import { mount } from './h.js';
 import { VIEWS, visibleRows } from './views.js';
 
 const web = window.chrome && window.chrome.webview;
+// The focus ring only for keyboard use (a programmatic focus on open shows none).
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kb'); }, true);
+document.addEventListener('mousedown', () => document.documentElement.classList.remove('kb'), true);
 const post = (m) => web && web.postMessage(m);
 const stage = document.getElementById('stage');
 
@@ -124,7 +127,8 @@ function show(msg) {
   card.classList.remove('pop');
   card.classList.add('pre');   // measured while the window is still hidden: invisible until it is placed
   const r = card.getBoundingClientRect();
-  post({ t: 'measured', seq: msg.seq, w: Math.ceil(r.width), h: Math.ceil(r.height) });
+  cur.size = { w: Math.ceil(r.width), h: Math.ceil(r.height) };
+  post({ t: 'measured', seq: msg.seq, w: cur.size.w, h: cur.size.h });
 }
 
 if (web) {
@@ -133,8 +137,19 @@ if (web) {
     if (!msg || typeof msg !== 'object') return;
     if (msg.t === 'show') show(msg);
     else if (msg.t === 'update' && cur && msg.seq === cur.seq) {
+      const before = cur.size;
+      if (cur.model.name !== msg.model.name) cur.st = {};   // a drill: its own state
       cur.model = msg.model;
       if (msg.keep !== true) { cur.st.dirty = false; }
+      render();
+      const r = stage.firstElementChild && stage.firstElementChild.getBoundingClientRect();
+      // The card grew or shrank (suggestions, an error, a drill): the host fits the window to it, in place.
+      if (r && before && (Math.ceil(r.width) !== before.w || Math.ceil(r.height) !== before.h)) {
+        cur.size = { w: Math.ceil(r.width), h: Math.ceil(r.height) };
+        post({ t: 'measured', seq: cur.seq, w: cur.size.w, h: cur.size.h, again: true });
+      }
+    } else if (msg.t === 'place' && cur && msg.seq === cur.seq && msg.again) {
+      cur.place = msg;
       render();
     } else if (msg.t === 'place' && cur && msg.seq === cur.seq) {
       cur.place = msg;

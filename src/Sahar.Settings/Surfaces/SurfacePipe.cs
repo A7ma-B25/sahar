@@ -17,6 +17,8 @@ internal sealed class SurfacePipe(UiSyncContext ui, Action<SurfaceMsg> received)
     private StreamWriter? _writer;
     public bool Connected => _writer is not null;
     public event Action? Gone;
+    /// <summary>The engine disconnected (it may come back).</summary>
+    public event Action? Lost;
 
     public void Start() => _ = Task.Run(Loop);
 
@@ -47,6 +49,7 @@ internal sealed class SurfacePipe(UiSyncContext ui, Action<SurfaceMsg> received)
             catch (Exception e) { SettingsLog.Write($"surfaces: pipe ({e.GetType().Name})"); }
             _writer = null;
             SettingsLog.Write("surfaces: engine went away");
+            ui.Post(_ => Lost?.Invoke(), null);
             lonely.Restart();
         }
     }

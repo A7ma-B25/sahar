@@ -158,7 +158,7 @@ function Stage-Look {
             Wait-Until { (Kv 'debug-panel').kind -eq 'gender' } 3000 'no «شب ولا بنت؟»'
             Look-Shot "gender-$theme" | Out-Null
             Send '{"type":"cmd","name":"panel-key","args":{"key":"1"}}' | Out-Null
-            Wait-Until { (Get-Content $script:SettingsFile -Raw) -match '"userGender"\s*:\s*"male"' } 3000 'key 1 did not answer «شب»'
+            Wait-Until { (Settings-Json) -match '"userGender"\s*:\s*"male"' } 3000 'key 1 did not answer «شب»'
         }
         Step "look ($theme): the tray menu — one language, the weather a clear toggle, quit last" {
             Look-Kv 'tray-open' ('{"x":"' + ($Work.Width - 60) + '","y":"' + ($Work.Height + 20) + '"}') | Out-Null
@@ -208,4 +208,11 @@ function Stage-Look {
         if ($script:lookWin -and -not $script:lookWin.HasExited) { $script:lookWin.Kill() }
     }
     Stop-Engine
+    # What this stage set up (a city, a name, copied text) never reaches the next stage in the same job.
+    Remove-Item $script:SettingsFile, (Join-Path $env:APPDATA 'Sahar\notes.json') -ErrorAction SilentlyContinue
+    Send-Clear-Clipboard
+}
+function Send-Clear-Clipboard {
+    Remove-Item (Join-Path $env:APPDATA 'Sahar\clipboard.json') -Force -ErrorAction SilentlyContinue
+    Set-Clipboard -Value ' '
 }

@@ -17,7 +17,7 @@ public sealed record ChatEntry(DateTimeOffset At, ChatWho Who, ChatLine Kind, st
 public sealed record ChatInfo(string Id, string Title, DateTimeOffset Created, DateTimeOffset Last, int Count, string LastLine);
 
 /// <summary>
-/// Chat history (0.15 spec §6; owner ruling 2): <c>chats.index</c> and <c>chat.&lt;id&gt;</c> in the Mind's personal
+/// Chat history (0.15 spec §6; owner ruling 2): <c>chats-index</c> and <c>chat-&lt;id&gt;</c> in the Mind's personal
 /// SecretBox (AES-GCM, DPAPI key, cross-process mutex). Retention follows MindEpisodeDays (clamped 1–3650, default 30):
 /// older messages never show and go at the next write or <see cref="Prune"/>; an empty conversation disappears.
 /// A box that refuses (locked / forgotten / busy) keeps the session going in memory with <see cref="Saving"/> false.
@@ -25,14 +25,14 @@ public sealed record ChatInfo(string Id, string Title, DateTimeOffset Created, D
 /// </summary>
 public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int>? days = null)
 {
-    public const string IndexName = "chats.index";
+    public const string IndexName = "chats-index";
     public const int TitleWords = 4;
     private Dictionary<string, Conversation>? _all;
 
     /// <summary>False once the box refused a write this session (the list says «ما قدرت احفظ الحكي هلق»).</summary>
     public bool Saving { get; private set; } = true;
 
-    public static string FileName(string id) => "chat." + id;
+    public static string FileName(string id) => "chat-" + id;
 
     private sealed class Conversation
     {
@@ -188,7 +188,7 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
     {
         if (!Saving) return;   // once refused, the session goes on in memory (no half-written history)
         try { write(); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Saving = false; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { Saving = false; }
     }
 }
 

@@ -150,3 +150,10 @@ test('icons: every icon the views name exists', () => {
   for (const n of ['search', 'play', 'pause', 'stop', 'book', 'copy', 'trash', 'clock', 'check', 'x', 'menu', 'compose', 'send', 'pen', 'lock', 'power', 'gear', 'rain', 'bars', 'chevEnd', 'chevStart', 'arrowDown'])
     assert.ok(PATHS[n], n);
 });
+
+test('drawer: a section the engine sent without rows (an empty list is left out of its JSON) does not break it', () => {
+  const t = drawerView({ kind: 'drawer', title: 'الدرج', sections: [{ title: 'شغّال هلق' }, { title: 'شو صار اليوم', rows: [{ icon: 'bell', label: 'خلص المؤقت' }] }], empty: { title: 'ما في شي' }, foot: {} }, {}, noop);
+  assert.match(text(t), /خلص المؤقت/);
+  const none = drawerView({ kind: 'drawer', title: 'الدرج', sections: [{ title: 'a' }], empty: { title: 'ما في شي هلق' }, foot: {} }, {}, noop);
+  assert.match(text(none), /ما في شي هلق/);
+});

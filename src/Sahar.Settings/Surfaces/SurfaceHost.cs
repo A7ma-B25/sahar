@@ -117,6 +117,7 @@ internal sealed class SurfaceHost
         }
         _pipe = new SurfacePipe(Ui!, Received);
         _pipe.Gone += () => Native.PostQuitMessage(0);
+        _pipe.Lost += () => { foreach (var x in _s.Values) if (x.Open) Close(x, null); };   // she quit or restarted: nothing of hers stays up
         _pipe.Start();
     }
 
@@ -243,7 +244,8 @@ internal sealed class SurfaceHost
                 if (s.Queued is { } q) { s.Queued = null; PostRaw(s, "show", q, includeModel: true); }
                 break;
             case "measured" when s.Showing is { } m && m.Seq == seq:
-                Placed(s, m, r.GetProperty("w").GetSingle(), r.GetProperty("h").GetSingle());
+                Placed(s, m, r.GetProperty("w").GetSingle(), r.GetProperty("h").GetSingle(),
+                    again: r.TryGetProperty("again", out var ag) && ag.ValueKind == JsonValueKind.True);
                 break;
             case "shown" when s.Showing is { } m && m.Seq == seq:
                 s.LastMs = s.Clock.Elapsed.TotalMilliseconds;
@@ -266,7 +268,7 @@ internal sealed class SurfaceHost
         }
     }
 
-    private void Placed(Surface s, SurfaceMsg m, float wDip, float hDip)
+    private void Placed(Surface s, SurfaceMsg m, float wDip, float hDip, bool again = false)
     {
         float dpi = m.Dpi > 0 ? m.Dpi : 1f;
         var work = new RectF(m.Wx, m.Wy, m.Ww, m.Wh);
@@ -300,8 +302,8 @@ internal sealed class SurfaceHost
         int x = (int)MathF.Round(card.X - ML * dpi), y = (int)MathF.Round(card.Y - MT * dpi);
         int w = (int)MathF.Ceiling(card.Width + (ML + MR) * dpi), h = (int)MathF.Ceiling(card.Height + (MT + MB) * dpi);
         s.Card = ((int)card.X, (int)card.Y, (int)card.Width, (int)card.Height);
-        s.Win.Place(x, y, w, h, dpi, show: true, activate: true);
-        Post(s, $$"""{"t":"place","seq":{{m.Seq}},"left":{{(left ? "true" : "false")}},"claspY":{{claspY.ToString(System.Globalization.CultureInfo.InvariantCulture)}},"mode":"{{m.Mode ?? "beside"}}"}""");
+        s.Win.Place(x, y, w, h, dpi, show: true, activate: !again);
+        Post(s, $$"""{"t":"place","seq":{{m.Seq}},"left":{{(left ? "true" : "false")}},"claspY":{{claspY.ToString(System.Globalization.CultureInfo.InvariantCulture)}},"mode":"{{m.Mode ?? "beside"}}","again":{{(again ? "true" : "false")}}}""");
     }
 
     private void Deactivated(Surface s)
