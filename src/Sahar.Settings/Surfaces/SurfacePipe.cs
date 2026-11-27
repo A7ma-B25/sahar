@@ -11,7 +11,8 @@ namespace Sahar.Settings.Surfaces;
 /// </summary>
 internal sealed class SurfacePipe(UiSyncContext ui, Action<SurfaceMsg> received)
 {
-    public const string Name = "sahar-surfaces";
+    /// <summary>Review I7: one per Windows session (and current user only).</summary>
+    public static readonly string Name = SurfacePipeName.For(System.Diagnostics.Process.GetCurrentProcess().SessionId);
     private static readonly UTF8Encoding Utf8 = new(false);
     private readonly SemaphoreSlim _write = new(1, 1);
     private StreamWriter? _writer;
@@ -27,8 +28,21 @@ internal sealed class SurfacePipe(UiSyncContext ui, Action<SurfaceMsg> received)
         var lonely = System.Diagnostics.Stopwatch.StartNew();
         while (true)
         {
-            using var server = new NamedPipeServerStream(Name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            NamedPipeServerStream server;
+            try
+            {
+                server = new NamedPipeServerStream(Name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // review I7: the name is taken this moment (an old pipe closing): wait, and give up with the rest
+                SettingsLog.Write($"surfaces: pipe not made ({e.GetType().Name})");
+                if (lonely.Elapsed > TimeSpan.FromSeconds(14)) { ui.Post(_ => Gone?.Invoke(), null); return; }
+                await Task.Delay(500);
+                continue;
+            }
+            using var owned = server;
             using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             try { await server.WaitForConnectionAsync(wait.Token); }
             catch (OperationCanceledException)

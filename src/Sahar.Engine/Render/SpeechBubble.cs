@@ -116,12 +116,13 @@ internal sealed class SpeechBubble : IDisposable
         End(timedOut: false);
     }
 
-    /// <summary>Gone at once and without a word (she hides for a fullscreen app): no Ended.</summary>
-    public void Clear()
+    /// <summary>Gone without a word and without counting as his click (she hides for a fullscreen app; a panel or a game
+    /// takes her place — review I1): no Ended, no Clicks, so a reply still on its way is not dropped.</summary>
+    public void Clear(bool fade = false)
     {
         _gen++;
         _hide.Stop();
-        Leave(fade: false);
+        Leave(fade);
         NeedArea(null, null);
     }
 

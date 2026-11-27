@@ -5506,6 +5506,15 @@ function Stage-Bubble {
         if ($log -match 'SENTINELBUBBLE') { throw 'engine.log holds her words' }
         if ($log -notmatch 'bubble: say \(1 lines') { throw 'the log has no bubble line' }
     }
+    Step 'hidden (a fullscreen app): a line said then gets no click window over it (review I4)' {
+        Send '{"type":"cmd","name":"hide","args":{"minutes":"1"}}' | Out-Null
+        Wait-Until { (State).hidden -eq $true -or (State).hidden -eq 'true' } 5000 'she did not hide'
+        Send ('{"type":"cmd","name":"say","args":{"text64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('سطر وهي مخبّاية')) + '"}}') | Out-Null
+        Start-Sleep -Milliseconds 500
+        if ((Speech).input -eq 'true') { throw 'her bubble put a click window over the fullscreen app' }
+        Send '{"type":"cmd","name":"show"}' | Out-Null
+        Wait-Until { -not ((State).hidden -eq $true -or (State).hidden -eq 'true') } 5000 'she did not come back'
+    }
     Stop-Engine   # the next stage starts its own
 }
 

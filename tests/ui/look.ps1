@@ -218,6 +218,49 @@ function Stage-Look {
         }
         if ($script:lookWin -and -not $script:lookWin.HasExited) { $script:lookWin.Kill() }
     }
+    Step "look: the warm host's memory (it and its WebView2 processes)" {
+        $hostPid = [int](Kv 'surface-link').pid
+        if ($hostPid -le 0) { throw 'no host process' }
+        $all = @(Get-CimInstance Win32_Process)
+        $tree = [System.Collections.Generic.HashSet[int]]::new(); [void]$tree.Add($hostPid)
+        do { $n = $tree.Count; foreach ($p in $all) { if ($tree.Contains([int]$p.ParentProcessId)) { [void]$tree.Add([int]$p.ProcessId) } } } while ($tree.Count -ne $n)
+        $mb = [math]::Round((($all | Where-Object { $tree.Contains([int]$_.ProcessId) } | Measure-Object -Property WorkingSetSize -Sum).Sum) / 1MB, 1)
+        $own = [math]::Round((Get-Process -Id $hostPid).WorkingSet64 / 1MB, 1)
+        Write-Host "    surface host working set: $mb MB in $($tree.Count) processes (the host itself $own MB)"
+        "host-working-set-mb=$mb processes=$($tree.Count) host-mb=$own" | Set-Content (Join-Path $Out 'host-memory.txt')
+    }
+    Step "look: opening a panel never counts as his click on her bubble (review I1)" {
+        Send ('{"type":"cmd","name":"say","args":{"text64":"' + (T64 'سطر قبل القائمة') + '"}}') | Out-Null
+        Wait-Until { (Kv 'debug-speech').showing -eq 'true' } 3000 'her bubble did not show'
+        $c0 = [int](Kv 'debug-speech').clicks
+        Send '{"type":"cmd","name":"tray-open","args":{"x":"900","y":"700"}}' | Out-Null
+        Wait-Surface 'panel' | Out-Null
+        if ((Kv 'debug-speech').showing -ne 'false') { throw 'her bubble stayed under the tray menu' }
+        if ([int](Kv 'debug-speech').clicks -ne $c0) { throw "the menu opening counted as a click ($c0 → $((Kv 'debug-speech').clicks))" }
+        Close-Panel
+    }
+    Step "look: the host gone — started again once; gone twice, the tray falls back to a plain menu with quit, a card says a calm line (review C2)" {
+        Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class MenuWin { [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h); [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t); }' -ErrorAction SilentlyContinue
+        $l = Kv 'surface-link'
+        Stop-Process -Id ([int]$l.pid) -Force
+        Wait-Until { $x = Kv 'surface-link'; $x.connected -eq 'true' -and $x.respawns -eq '1' } 120000 'the host was not started again after it died'
+        Wait-Until { $s = Surface; $s -and $s.panel.ready } 120000 'the new host did not warm up'
+        $r = Look-Kv 'tray-open' '{"x":"900","y":"700"}'
+        if ($r.native -ne 'false') { throw 'the started-again host did not show the tray menu' }
+        Close-Panel
+        Stop-Process -Id ([int](Kv 'surface-link').pid) -Force
+        Wait-Until { (Kv 'surface-link').state -eq 'failed' } 20000 'a second death did not end the respawns'
+        $r = Look-Kv 'tray-open' '{"x":"900","y":"700"}'
+        if ($r.native -ne 'true' -or $r.ids -notmatch 'quit') { throw "no plain tray menu with quit: $($r.ids)" }
+        Wait-Until { $h = [MenuWin]::FindWindow('#32768', $null); $h -ne [IntPtr]::Zero -and [MenuWin]::IsWindowVisible($h) } 3000 'the plain menu did not open'
+        Screenshot 'look-tray-fallback.png' | Out-Null
+        $tray = [Shell]::FindWindow('Sahar.Engine', 'Sahar tray')
+        [Shell]::PostMessage($tray, 0x1F, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null   # WM_CANCELMODE: the menu closes
+        Wait-Until { $h = [MenuWin]::FindWindow('#32768', $null); $h -eq [IntPtr]::Zero -or -not [MenuWin]::IsWindowVisible($h) } 3000 'the plain menu did not close'
+        Send '{"type":"cmd","name":"drawer-open"}' | Out-Null
+        Wait-Until { (Kv 'debug-speech').showing -eq 'true' } 3000 'no calm line when a card could not open'
+        if ((Kv 'debug-panel').open -ne 'false') { throw 'a panel thinks it is open with no host' }
+    }
     Stop-Engine
     # What this stage set up (a city, a name, copied text) never reaches the next stage in the same job.
     Remove-Item $script:SettingsFile, (Join-Path $env:APPDATA 'Sahar\notes.json') -ErrorAction SilentlyContinue

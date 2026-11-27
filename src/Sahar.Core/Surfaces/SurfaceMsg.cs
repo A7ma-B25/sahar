@@ -38,6 +38,9 @@ public sealed class SurfaceMsg
     public string? Mode { get; set; }
     /// <summary>Reduced motion: no enter/exit animation, no typing dots bounce.</summary>
     public bool Still { get; set; }
+    /// <summary>Review I2: she opened it herself (an update or download question): shown without taking his focus, no
+    /// key answers it, and a click counts only after a short guard.</summary>
+    public bool Quiet { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault)]

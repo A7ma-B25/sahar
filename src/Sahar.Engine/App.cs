@@ -234,6 +234,7 @@ internal sealed unsafe class App
             acts?.FullscreenAway(hidden && director?.Where == FullscreenWhere.Hers);
             acts?.Refresh();
             if (hidden) { menu.Close(); stopShow?.Invoke(false); clearSpeech(); }   // her bubble's click window must not stay over a fullscreen app
+            speechRef?.InputChanged();   // review I4: and a line said while she is hidden gets none (Clickable)
             input.SetVisible(!hidden);
             if (hidden) motion.Play(MotionKind.FullscreenHide);
             else
@@ -343,7 +344,7 @@ internal sealed unsafe class App
         // The app in front, and her gentle comments about it (spec §8.1, §8.2).
         using var speech = new SpeechBubble(ui, sahar, () => motion.Body, _options.Capturable) { Dark = () => menu.Dark(), Need = stage.Need };
         speechRef = speech;
-        clearSpeech = speech.Clear;
+        clearSpeech = () => speech.Clear();
         host.DeviceLost += () => Safe(speech.Redraw);
         var apps = new AppWatch(ui,
             allowed: () => settings.AwarenessEnabled && CommentRules.Allowed(lifeDirector.Typing, director.Quiet, menu.IsOpen, _state.Hidden) && !showRunning(),
@@ -352,7 +353,9 @@ internal sealed unsafe class App
         // Ignored or clicked away, she comments less (spec §8.2); a new day brings her back to 45 minutes.
         speech.Ended += _ => apps.Limiter.Dismissed(DateTimeOffset.Now);
         dismissSpeech = () => { if (!speech.Showing) return false; speech.Dismiss(); return true; };
-        panel.Opening += _ => Safe(speech.Dismiss);   // 0.16: no panel (ask, card, tray menu, «الدرج») ever sits under or over her speech bubble
+        // 0.16: no panel (ask, card, tray menu, «الدرج») ever sits under or over her speech bubble. Review I1: cleared, not
+        // dismissed — it is not his click (her reply on its way, the comment limiter and the hello stay as they were).
+        panel.Opening += _ => Safe(() => speech.Clear(fade: true));
         // Rain coming (opt-in): the tray item asks for your city.
         // Owner ruling 4 (0.13): with no city of its own the weather uses the prayer place.
         var weatherPlace = settings.WeatherEnabled ? Sahar.Core.Activities.WeatherCity.Resolve(settings) : null;
@@ -433,10 +436,10 @@ internal sealed unsafe class App
         });
         // 🎮 Games (0.9): while one runs, life waits and the game moves her.
         using var games = new GamePlayer(ui, host, sahar, motion, line => speech.Say(line), Express, _options.Capturable);
-        games.Hush = () => speech.Dismiss();   // hide-and-seek: a wordless count; the result card replaces her last line
+        games.Hush = () => speech.Clear(fade: true);   // hide-and-seek: a wordless count; the result card replaces her last line (not his click: review I1)
         lifeDirector.Sulking = () => Sulking() || games.Running;
         games.RunningChanged += on => Safe(() => input.SetVisible(!on && !_state.Hidden));   // the game gets every click
-        speech.Clickable = () => !games.Running;   // her bubble too
+        speech.Clickable = () => !games.Running && !_state.Hidden;   // her bubble too; review I4: never a click window over a fullscreen app
         games.RunningChanged += _ => Safe(speech.InputChanged);
         lifeDirector.RandomTypeAlong = !_options.TestMode;
         motion.Sulking = Sulking;
@@ -947,8 +950,23 @@ internal sealed unsafe class App
         {
             if (e.Kind == "seg" && e.Value is { } level) { tray.Pick(level); panel.Update(Sahar.Engine.Surfaces.TrayMenu.Spec(tray, settings.Activity, _state.Hidden, settings.Language)); }
             else if (e.Kind == "pick" && e.Value is { } item) { panel.Done(); tray.Pick(item); }
+            else if (e.Kind == "failed") ui.TryEnqueue(() => Safe(() => tray.ShowFallbackMenu(at, settings.Language == UiLanguage.English)));
         }), mode: "anchor", anchor: at);
-        tray.MenuAsked += at => Safe(() => OpenTrayMenu(at));
+        // Review C2: with no surface host (not there yet, or gone) the plain Windows menu: she can always be closed.
+        void TrayMenuAt(Vector2 at)
+        {
+            if (surfaces.Connected) OpenTrayMenu(at);
+            else ui.TryEnqueue(() => Safe(() => tray.ShowFallbackMenu(at, settings.Language == UiLanguage.English)));
+        }
+        tray.MenuAsked += at => Safe(() => TrayMenuAt(at));
+        DateTimeOffset calmSaid = DateTimeOffset.MinValue;
+        surfaces.Unavailable += kind => Safe(() =>
+        {
+            if (kind == "tray") return;   // the fallback menu answers that one
+            if (DateTimeOffset.UtcNow - calmSaid < TimeSpan.FromMinutes(1)) return;
+            calmSaid = DateTimeOffset.UtcNow;
+            speech.Say(Address.ToYou("ما قدرت افتحها هلق. جرّب كمان شوي."));
+        });
 
         // 0.14: her brain. Each stream fills its own MindEngine.*.cs; App.cs only builds it here.
         mind = new Sahar.Engine.Mind.MindEngine
@@ -1153,7 +1171,20 @@ internal sealed unsafe class App
             pipe.Register("game-stop", _ => { games.Stop(); return new PipeReply(true, games.Describe()); });
             pipe.Register("debug-game", _ => new PipeReply(true, games.Describe()));
             pipe.Register("hello-new", _ => { StartHello(); return new PipeReply(true); });
-            pipe.Register("tray-open", r => { OpenTrayMenu(new Vector2(Arg(r, "x"), Arg(r, "y"))); return new PipeReply(true, panel.Describe()); });
+            pipe.Register("tray-open", r =>
+            {
+                var at = new Vector2(Arg(r, "x"), Arg(r, "y"));
+                if (!surfaces.Connected)   // review C2: the stage sees the plain menu she falls back to (it opens too)
+                {
+                    var items = tray.FallbackItems(settings.Language == UiLanguage.English);
+                    TrayMenuAt(at);
+                    return new PipeReply(true, "native=true ids=" + string.Join(',', items.Select(i => i.Id)) + " items64=" +
+                        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join('\n', items.Select(i => i.Label)))));
+                }
+                OpenTrayMenu(at);
+                return new PipeReply(true, "native=false " + panel.Describe());
+            });
+            pipe.Register("surface-link", _ => new PipeReply(true, surfaces.Describe()));
             pipe.Register("drawer-open", r =>
             {
                 if (r.Args?.TryGetValue("text64", out var t) == true) drawer.Happened(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(t)), "bell");

@@ -216,6 +216,43 @@ internal sealed unsafe class Tray : IWindowHandler, IDisposable
         MenuAsked?.Invoke(at);
     }
 
+    private const uint MF_STRING = 0, MF_SEPARATOR = 0x800, TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 0x2, TPM_BOTTOMALIGN = 0x20,
+        TPM_LAYOUTRTL = 0x8000;
+
+    /// <summary>Review C2: the items of her native fallback menu (when the surface host is not there): settings (when it
+    /// can open), hide for an hour, quit — so she can always be closed.</summary>
+    public IReadOnlyList<(string Id, string Label)> FallbackItems(bool english)
+    {
+        var items = new List<(string, string)>();
+        if (SettingsAvailable()) items.Add(("settings", english ? "Settings" : Sahar.Core.Settings.Address.ToYou("إعداداتي")));
+        items.Add(("hide", english ? "Hide for an hour" : Sahar.Core.Settings.Address.ToYou("خبّيني ساعة")));
+        items.Add(("quit", english ? "Quit Sahar" : "سكّري سحورة"));
+        return items;
+    }
+
+    /// <summary>Review C2: the plain Windows menu at <paramref name="at"/>, used only while her surface host is not
+    /// connected. Blocks in its own loop until he picks or dismisses; the pick goes through <see cref="Pick"/>.</summary>
+    public void ShowFallbackMenu(System.Numerics.Vector2 at, bool english)
+    {
+        var items = FallbackItems(english);
+        nint menu = Native.CreatePopupMenu();
+        try
+        {
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Id == "quit") Native.AppendMenu(menu, MF_SEPARATOR, 0, null);
+                fixed (char* t = items[i].Label) Native.AppendMenu(menu, MF_STRING, (nuint)(i + 1), t);
+            }
+            Native.SetForegroundWindow(Hwnd);   // so a click away closes it
+            Log.Write("tray: fallback menu");
+            int cmd = Native.TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | (english ? 0 : TPM_LAYOUTRTL),
+                (int)at.X, (int)at.Y, 0, Hwnd, 0);
+            Native.PostMessage(Hwnd, 0 /* WM_NULL */, 0, 0);
+            if (cmd >= 1 && cmd <= items.Count) Pick(items[cmd - 1].Id);
+        }
+        finally { Native.DestroyMenu(menu); }
+    }
+
     /// <summary>A tray-menu item (a click in the menu, or the pipe in test mode).</summary>
     public bool Pick(string item)
     {
