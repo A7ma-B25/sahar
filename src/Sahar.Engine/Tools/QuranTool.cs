@@ -47,7 +47,7 @@ internal sealed class QuranTool : IDisposable
         // Where he is, every 15 s while it plays (ruling 5): a crash or a power cut loses 15 s at most.
         _keep = ui.CreateTimer();
         _keep.Interval = QuranBar.KeepEvery;
-        _keep.Tick += (_, _) => Safe(() => { if (State == "playing") Keep(); });
+        _keep.Tick += (_, _) => Safe(() => { if (State == "playing") { TryResume(); Keep(); } });
     }
 
     /// <summary>A recitation is on (opening, playing or paused): she is quiet and wears the quran face.</summary>
@@ -60,8 +60,8 @@ internal sealed class QuranTool : IDisposable
     /// <summary>Anything the bar shows changed (state, surah, a seek).</summary>
     public event Action? Changed;
 
-    // 0.16 (final ui-test 45882237735): Windows' player is never asked while it opens — its PlaybackSession can hold
-    // her UI thread for seconds then (a stream that hangs); only an opened recitation has a place, a length and seeking.
+    // 0.16 (final ui-test 45882237735): only an opened recitation has a place, a length and seeking. Review I6: they are
+    // read from the player's cache (MediaRecitation keeps them from the session's events), never from the session here.
     private bool Opened => State is "playing" or "paused";
     public TimeSpan Position => Opened ? Try(() => _player?.Position) ?? TimeSpan.Zero : TimeSpan.Zero;
     public TimeSpan? Duration => Opened ? Try(() => _player?.Duration) : null;
@@ -165,6 +165,7 @@ internal sealed class QuranTool : IDisposable
         Surah = surah;
         Reciter = reciter;
         _resumeWanted = resume ?? QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, null) is not null;
+        _pendingResume = null;
         State = "opening";
         SetPlaying(true);
         Log.Write($"quran: play surah {surah} ({reciter}){(_resumeWanted ? " to go on" : "")}");
@@ -188,12 +189,9 @@ internal sealed class QuranTool : IDisposable
             _openTimeout.Stop();
             State = "playing";
             _set(s => s with { QuranLastSurah = surah });
-            if (_resumeWanted && QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, player.Duration) is { } at && player.CanSeek)
-            {
-                player.Seek(at);
-                Log.Write($"quran: on from {(int)at.TotalSeconds} s");
-            }
+            _pendingResume = _resumeWanted ? QuranBar.ResumeFrom(_get().QuranResume, surah, reciter, player.Duration) : null;
             _resumeWanted = false;
+            TryResume();
             _keep.Start();
             Changed?.Invoke();
         }));
@@ -288,12 +286,27 @@ internal sealed class QuranTool : IDisposable
     /// <summary>«وقفت عند ١٢:٠٤» when a place is kept for this surah with the chosen reciter.</summary>
     public string? ResumeLine(int surah) => QuranBar.ResumeLine(_get().QuranResume, surah, Valid(_get().QuranReciter));
 
-    /// <summary>Where he is now, kept for «كمّل» (nothing in the first seconds).</summary>
+    /// <summary>Review I6: the place «كمّل» goes to, while the stream could not seek yet (it opened unable to). Until it
+    /// is reached, the saved place is never written over with the stream's own early place.</summary>
+    private TimeSpan? _pendingResume;
+
+    private void TryResume()
+    {
+        if (_pendingResume is not { } at || _player is null) return;
+        if (Position >= at) { _pendingResume = null; return; }   // he is past it anyway
+        if (!_player.CanSeek) return;
+        _player.Seek(at);
+        _pendingResume = null;
+        Log.Write($"quran: on from {(int)at.TotalSeconds} s");
+    }
+
+    /// <summary>Where he is now, kept for «كمّل» (nothing in the first seconds; only when it moved 5 s; never over the
+    /// saved place before her own is known — review I6).</summary>
     private void Keep()
     {
         if (_player is null || Surah is < 1 or > 114) return;
         var keep = QuranBar.Keep(Surah, Reciter, Position);
-        if (keep is null || keep == _get().QuranResume) return;
+        if (!QuranBar.ShouldKeep(_get().QuranResume, keep, placeKnown: _pendingResume is null)) return;
         _set(s => s with { QuranResume = keep });
     }
 

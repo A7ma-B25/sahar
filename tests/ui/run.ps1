@@ -5795,6 +5795,15 @@ function Stage-QuranBar {
         Start-Sleep -Milliseconds 300
         $p = [double](Kv 'debug-quran').position
         if ([math]::Abs($p - 500) -gt 4) { throw "«كمّل» started at $p s, want 500" }
+        # Review I6: a stream that opens unable to seek cannot go on from 500 s — and its early place never erases it.
+        Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000","resume":"true","noseek":"true"}}' | Out-Null
+        QWait 'playing' 4000 | Out-Null
+        Start-Sleep -Seconds 7   # past the first seconds, where a place is worth keeping
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"listen"}}' | Out-Null
+        Send '{"type":"cmd","name":"menu-press","args":{"id":"quran-stop"}}' | Out-Null
+        QWait 'stopped' 2000 | Out-Null
+        if ([math]::Abs((Setting 'quranResume').seconds - 500) -gt 3) { throw "an unseekable start wrote over his place: $((Setting 'quranResume') | ConvertTo-Json -Compress)" }
         # From the start when asked (resume false), and the place is still there for the next pick.
         Send '{"type":"cmd","name":"quran-play","args":{"surah":"36","reciter":"ar.husary","fake":"1000","resume":"false"}}' | Out-Null
         QWait 'playing' 4000 | Out-Null

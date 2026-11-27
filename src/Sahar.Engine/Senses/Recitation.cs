@@ -22,17 +22,52 @@ internal interface IRecitation : IDisposable
     bool CanSeek { get; }
 }
 
-/// <summary>Windows' MediaPlayer, kept out of Windows' media controls (her own music sense would see it and dance).</summary>
+/// <summary>Windows' MediaPlayer, kept out of Windows' media controls (her own music sense would see it and dance).
+/// Review I6: its PlaybackSession is never asked on her UI thread (it can hold it for seconds while a stream hangs):
+/// place, length and seeking are kept from the session's own events (on its threads), the place carried forward by a
+/// clock while it plays; a seek is sent from a worker.</summary>
 internal sealed class MediaRecitation : IRecitation
 {
     private readonly MediaPlayer _player = new() { AutoPlay = true, Volume = 1.0 };
+    private readonly Stopwatch _since = new();
+    private readonly object _gate = new();
+    private TimeSpan _pos;
+    private TimeSpan? _dur;
+    private bool _canSeek, _playing;
 
     public MediaRecitation()
     {
         _player.CommandManager.IsEnabled = false;
-        _player.MediaOpened += (_, _) => Opened?.Invoke();
-        _player.MediaEnded += (_, _) => Ended?.Invoke();
+        _player.MediaOpened += (_, _) => { Snapshot(); Opened?.Invoke(); };
+        _player.MediaEnded += (_, _) => { lock (_gate) _playing = false; Ended?.Invoke(); };
         _player.MediaFailed += (_, e) => Failed?.Invoke(e.Error.ToString());
+        var s = _player.PlaybackSession;
+        s.PositionChanged += (_, _) => Snapshot();
+        s.PlaybackStateChanged += (_, _) => Snapshot();
+        s.NaturalDurationChanged += (_, _) => Snapshot();
+        s.SeekableRangesChanged += (_, _) => Snapshot();
+        s.BufferingEnded += (_, _) => Snapshot();
+    }
+
+    /// <summary>On the session's thread: what the UI thread reads.</summary>
+    private void Snapshot()
+    {
+        try
+        {
+            var s = _player.PlaybackSession;
+            var pos = s.Position;
+            var dur = s.NaturalDuration;
+            bool seek = s.CanSeek, playing = s.PlaybackState == MediaPlaybackState.Playing;
+            lock (_gate)
+            {
+                _pos = pos;
+                _dur = dur > TimeSpan.Zero ? dur : null;
+                _canSeek = seek;
+                _playing = playing;
+                _since.Restart();
+            }
+        }
+        catch (Exception) { }   // closing: the last values stay
     }
 
     public event Action? Opened;
@@ -40,18 +75,33 @@ internal sealed class MediaRecitation : IRecitation
     public event Action<string>? Failed;
 
     public void Start(Uri url) => _player.Source = MediaSource.CreateFromUri(url);
-    public void Pause() => _player.Pause();
+    public void Pause() { lock (_gate) { _pos = Position; _playing = false; } _player.Pause(); }
     public void Resume() => _player.Play();
 
     public void Seek(TimeSpan to)
     {
-        var s = _player.PlaybackSession;
-        if (s.CanSeek) s.Position = to;
+        lock (_gate) { if (!_canSeek) return; _pos = to; _since.Restart(); }
+        _ = Task.Run(() =>
+        {
+            try { var s = _player.PlaybackSession; if (s.CanSeek) s.Position = to; }
+            catch (Exception) { }
+        });
     }
 
-    public TimeSpan Position => _player.PlaybackSession.Position;
-    public TimeSpan? Duration => _player.PlaybackSession.NaturalDuration is var d && d > TimeSpan.Zero ? d : null;
-    public bool CanSeek => _player.PlaybackSession.CanSeek;
+    public TimeSpan Position
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var p = _playing ? _pos + _since.Elapsed : _pos;
+                return _dur is { } d && p > d ? d : p;
+            }
+        }
+    }
+
+    public TimeSpan? Duration { get { lock (_gate) return _dur; } }
+    public bool CanSeek { get { lock (_gate) return _canSeek; } }
 
     public void Dispose()
     {

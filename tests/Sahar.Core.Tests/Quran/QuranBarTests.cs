@@ -185,4 +185,26 @@ public sealed class QuranBarTests
         Assert.Equal(BarButton.Toggle, QuranBarLayout.Hit(r, 170, 118));
         Assert.Null(QuranBarLayout.Hit(r, 170, 2));
     }
+
+    // ---- review I6 ----
+
+    [Fact]
+    public void ShouldKeep_OnlyWhenThePlaceMovedFiveSeconds()
+    {
+        var saved = new QuranResume(18, "afasy", 100);
+        Assert.False(QuranBar.ShouldKeep(saved, new QuranResume(18, "afasy", 104), placeKnown: true));
+        Assert.True(QuranBar.ShouldKeep(saved, new QuranResume(18, "afasy", 105), placeKnown: true));
+        Assert.True(QuranBar.ShouldKeep(saved, new QuranResume(19, "afasy", 101), placeKnown: true));
+        Assert.True(QuranBar.ShouldKeep(null, new QuranResume(18, "afasy", 30), placeKnown: true));
+        Assert.False(QuranBar.ShouldKeep(saved, null, placeKnown: true));
+    }
+
+    [Fact]
+    public void ShouldKeep_NeverOverwritesTheSavedPlaceBeforeItsOwnIsKnown()
+    {
+        // it opened unable to seek, so «كمّل» could not go to 100 s: 20 s in, the saved 100 s stays
+        var saved = new QuranResume(18, "afasy", 100);
+        Assert.False(QuranBar.ShouldKeep(saved, new QuranResume(18, "afasy", 20), placeKnown: false));
+        Assert.True(QuranBar.ShouldKeep(saved, new QuranResume(18, "afasy", 140), placeKnown: false));   // past it: a real place
+    }
 }

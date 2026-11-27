@@ -131,6 +131,17 @@ public static class QuranBar
     public static QuranResume? Keep(int surah, string reciter, TimeSpan at) =>
         at < ResumeMargin ? null : new QuranResume(surah, reciter, (int)Math.Floor(at.TotalSeconds));
 
+    /// <summary>Review I6: keep <paramref name="next"/> only when it moved 5 s or more from what is saved (no settings
+    /// write every 15 s while paused), and never over the saved place of this surah before her own place is known — a
+    /// stream that opened unable to seek starts at 0, and that must not erase where he was (unless he got past it).</summary>
+    public static bool ShouldKeep(QuranResume? saved, QuranResume? next, bool placeKnown)
+    {
+        if (next is null) return false;
+        if (saved is null || saved.Surah != next.Surah || saved.Reciter != next.Reciter) return true;
+        if (!placeKnown && next.Seconds <= saved.Seconds) return false;
+        return Math.Abs(next.Seconds - saved.Seconds) >= 5;
+    }
+
     /// <summary>The surah picker's resume row: «وقفت عند ١٢:٠٤» when a place is kept for this surah and reciter.</summary>
     public static string? ResumeLine(QuranResume? saved, int surah, string reciter) =>
         ResumeFrom(saved, surah, reciter, null) is { } at ? "وقفت عند " + Clock(at) : null;
