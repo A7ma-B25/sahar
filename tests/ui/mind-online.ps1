@@ -93,7 +93,7 @@ function Stage-MindOnline {
             if ((Fake-Count '/groq/chat/completions') -ne $n + 1) { throw 'groq was not asked exactly once' }
             $her = @(Chat-Her)
             if (($her[-1]) -notmatch 'جواب أونلاين') { throw "her line: $($her[-1])" }
-            if ((Routes)[-1] -ne 'online:chat') { throw "route: $((Routes)[-1])" }
+            if (@(Routes)[-1] -ne 'online:chat') { throw "route: $(@(Routes)[-1])" }
             $hits = (Fake '/_stats').hits
             if ($hits.PSObject.Properties['SENTINELDEBT']) { throw 'the sensitive past line was sent online' }
             if ($hits.PSObject.Properties['good-']) { throw 'a key was in a request body' }
@@ -101,7 +101,7 @@ function Stage-MindOnline {
         Step 'online: an action line stays local («ذكريني…»)' {
             $before = Fake-Total
             Window-Line 'ذكريني بعد شوي إشرب مي'
-            Wait-Until { (Routes)[-1] -eq 'local:action' } 15000 "route: $((Routes)[-1])"
+            Wait-Until { @(Routes)[-1] -eq 'local:action' } 15000 "route: $(@(Routes)[-1])"
             Wait-Until { $k = Kv 'debug-chat'; $k.lastBrain -eq 'local' -and $k.typing -eq 'false' } 15000 'no local answer'
             if ((Fake-Total) -ne $before) { throw 'an action line reached the online provider' }
         }
@@ -126,7 +126,7 @@ function Stage-MindOnline {
             if (-not ($her | Where-Object { $_ -match 'خلّصت طلبات الأونلاين' })) { throw 'her «out for today» line is not in the chat' }
             $before = Fake-Total
             Window-Line 'سؤال تاني'
-            Wait-Until { (Routes)[-1] -eq 'local:no-provider' } 15000 "route after all out: $((Routes)[-1])"
+            Wait-Until { @(Routes)[-1] -eq 'local:no-provider' } 15000 "route after all out: $(@(Routes)[-1])"
             if (([regex]::Matches((MindLog), ', told')).Count -ne 1) { throw 'told more than once' }
             if ((Fake-Total) -ne $before) { throw 'an out provider was asked again' }
         }
@@ -139,7 +139,7 @@ function Stage-MindOnline {
             Reload-Settings | Out-Null
             $before = Fake-Total
             Window-Line 'شو رأيك بالقمر؟'
-            Wait-Until { (Routes)[-1] -eq 'local:local-only' } 15000 "route: $((Routes)[-1])"
+            Wait-Until { @(Routes)[-1] -eq 'local:local-only' } 15000 "route: $(@(Routes)[-1])"
             Send '{"type":"cmd","name":"mind-online","args":{"op":"test","provider":"groq"}}' | Out-Null
             Send '{"type":"cmd","name":"mind-online","args":{"op":"status"}}' | Out-Null
             Start-Sleep -Seconds 3
