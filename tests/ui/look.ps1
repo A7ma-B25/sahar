@@ -219,7 +219,7 @@ function Stage-Look {
         if ($script:lookWin -and -not $script:lookWin.HasExited) { $script:lookWin.Kill() }
     }
     Step "look: the warm host's memory (it and its WebView2 processes)" {
-        $hostPid = [int](Kv 'surface-link').pid
+        $hostPid = [int](Surface).pid   # the host answering the pipe (one left from the last start may be it)
         if ($hostPid -le 0) { throw 'no host process' }
         $all = @(Get-CimInstance Win32_Process)
         $tree = [System.Collections.Generic.HashSet[int]]::new(); [void]$tree.Add($hostPid)
@@ -254,14 +254,13 @@ function Stage-Look {
     }
     Step "look: the host gone — started again once; gone twice, the tray falls back to a plain menu with quit, a card says a calm line (review C2)" {
         Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class MenuWin { [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h); [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t); }' -ErrorAction SilentlyContinue
-        $l = Kv 'surface-link'
-        Stop-Process -Id ([int]$l.pid) -Force
+        Stop-Process -Id ([int](Surface).pid) -Force
         Wait-Until { $x = Kv 'surface-link'; $x.connected -eq 'true' -and $x.respawns -eq '1' } 120000 'the host was not started again after it died'
         Wait-Until { $s = Surface; $s -and $s.panel.ready } 120000 'the new host did not warm up'
         $r = Look-Kv 'tray-open' '{"x":"900","y":"700"}'
         if ($r.native -ne 'false') { throw 'the started-again host did not show the tray menu' }
         Close-Panel
-        Stop-Process -Id ([int](Kv 'surface-link').pid) -Force
+        Stop-Process -Id ([int](Surface).pid) -Force
         Wait-Until { (Kv 'surface-link').state -eq 'failed' } 20000 'a second death did not end the respawns'
         $r = Look-Kv 'tray-open' '{"x":"900","y":"700"}'
         if ($r.native -ne 'true' -or $r.ids -notmatch 'quit') { throw "no plain tray menu with quit: $($r.ids)" }

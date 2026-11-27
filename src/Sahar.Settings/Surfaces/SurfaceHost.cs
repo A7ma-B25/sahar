@@ -366,6 +366,7 @@ internal sealed class SurfaceHost
         {
             w.WriteStartObject();
             w.WriteNumber("blocked", _blocked);
+            w.WriteNumber("pid", Environment.ProcessId);   // the stage measures it and, once, stops it
             foreach (var s in _s.Values)
             {
                 w.WriteStartObject(s.Name);
