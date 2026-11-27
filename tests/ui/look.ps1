@@ -240,10 +240,15 @@ function Stage-Look {
         Close-Panel
     }
     Step "look: an ask she starts never takes his focus and no key answers it (review I2)" {
-        Send '{"type":"cmd","name":"mind-offer"}' | Out-Null
-        $s = Wait-Surface 'panel'
-        if ($s.panel.kind -ne 'mind-download') { throw "not her download question: $($s.panel.kind)" }
-        if ($s.panel.foreground) { throw 'her own question took the foreground (his typing would answer it)' }
+        $typing = Start-TestWindow 'typing'   # he is typing in another app (it has the foreground)
+        try {
+            Send '{"type":"cmd","name":"mind-offer"}' | Out-Null
+            $s = Wait-Surface 'panel'
+            if ($s.panel.kind -ne 'mind-download') { throw "not her download question: $($s.panel.kind)" }
+            Start-Sleep -Milliseconds 300
+            if ((Surface).panel.foreground) { throw 'her own question took the foreground (his typing would answer it)' }
+        }
+        finally { if ($typing -and -not $typing.HasExited) { $typing.Kill() } }
         foreach ($k in 'Enter', '1') { Send ('{"type":"cmd","name":"panel-key","args":{"key":"' + $k + '"}}') | Out-Null }
         Start-Sleep -Milliseconds 900   # past the click guard too
         if ((Kv 'debug-panel').open -ne 'true') { throw 'a key answered her question' }
