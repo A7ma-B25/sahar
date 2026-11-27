@@ -11,6 +11,15 @@ on:
         description: Publish the "test-build" pre-release
         type: boolean
         default: false
+      force_ui:
+        description: Run every UI stage here even when a "ui-test all" run already passed on this commit
+        type: boolean
+        default: false
+      mind_eval:
+        description: Her real brain (mind-eval.yml) alongside — auto (when her brain's files changed since the last published test build, or since origin/main on a branch, and no mind-eval passed on this commit), yes, or no
+        type: choice
+        options: [auto, 'yes', 'no']
+        default: auto
   push:
     tags: ["v0.*-test"]
     # Until this workflow is on main (dispatch needs it there), packaging changes on v1 branches build the zip
@@ -20,7 +29,7 @@ on:
 
 permissions:
   contents: write
-  actions: read   # to find a full ui-test pass on this commit
+  actions: read   # to find a full ui-test pass (and a mind-eval) on this commit
 
 concurrency:
   group: test-build
@@ -49,10 +58,50 @@ jobs:
       - run: python3 -I -m unittest discover -s tools/art -p 'test_*.py' -v
       - run: python3 -I -m unittest discover -s tools/ci -p 'test_*.py' -v
 
+  # Her real brain on the runner's CPU (~25 min, beside the windows job): only when her brain's files changed since
+  # the last published test build (on main) or since origin/main (a branch), or when asked; never twice on a commit.
+  # Its score is for the release notes by hand: it does not hold the publish back.
+  mind-eval-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      mindeval: ${{ steps.plan.outputs.mindeval }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASKED: ${{ inputs.mind_eval || 'auto' }}
+        run: |
+          if [ "$ASKED" = yes ]; then on=true
+          elif [ "$ASKED" = no ]; then on=false
+          else
+            base=origin/main
+            if [ "$GITHUB_REF" = refs/heads/main ]; then
+              base=$(gh release view test-build -R "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)
+              git rev-parse --verify -q "$base^{commit}" >/dev/null || base=HEAD~1
+            fi
+            brain=$(python3 -I tools/ci/ui_stages.py brain --base "$base")
+            done=$(python3 -I tools/ci/prior_runs.py mindeval --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA")
+            if [ "$brain" = brain=true ] && [ "$done" = run= ]; then on=true; else on=false; fi
+            echo "since $base: $brain, prior mind-eval: $done"
+          fi
+          echo "mindeval=$on" | tee -a "$GITHUB_OUTPUT"
+
+  mind-eval:
+    needs: mind-eval-plan
+    if: ${{ needs.mind-eval-plan.outputs.mindeval == 'true' }}
+    uses: ./.github/workflows/mind-eval.yml
+    with:
+      model: gemma-4-e4b-q4km
+      budget: '240'
+
   windows:
     needs: core
     runs-on: windows-latest
-    timeout-minutes: 50   # every stage in one job (settings, activities, mind and install included) + the installer
+    timeout-minutes: 100   # every stage in one job (settings, activities, mind and install included) + the installer, or a wait for ui-test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -63,6 +112,16 @@ jobs:
           node-version: 22
       - name: Install agent-desktop
         run: npm i -g agent-desktop@1.2.0
+      # NuGet packages, and the pinned llama.cpp zips with the mind stage's tiny model (plan Ruling 4, 291.5 MB; never
+      # the 5 GB model): cached by their pins.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: artifacts/mind/downloads
+          key: mind-runtime-vulkan-cpu-model-${{ hashFiles('tools/mind/pins.json') }}
       - name: Publish engine (Native AOT)
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: Publish the settings app (self-contained, next to the engine)
@@ -86,11 +145,6 @@ jobs:
           $pv = @("HKLM:\SOFTWARE\WOW6432Node\$key", "HKCU:\Software\$key") | ForEach-Object { (Get-ItemProperty $_ -ErrorAction SilentlyContinue).pv } | Where-Object { $_ -and $_ -ne '0.0.0.0' } | Select-Object -First 1
           if (-not $pv) { throw 'The WebView2 runtime is not installed on this runner: the settings app cannot run.' }
           Write-Host "WebView2 runtime $pv"
-      # The mind stage's tiny model (plan Ruling 4, 291.5 MB, pinned): cached by its pin; never the 5 GB model.
-      - uses: actions/cache@v4
-        with:
-          path: artifacts/mind/downloads
-          key: mind-ci-model-${{ hashFiles('tools/mind/pins.json') }}
       - name: The mind stage's tiny model (pinned)
         shell: pwsh
         run: ./tools/mind/fetch.ps1 -Model -Out artifacts/mind
@@ -103,19 +157,17 @@ jobs:
       - name: Installer
         shell: pwsh
         run: ./packaging/installer/build.ps1 -Version $env:SAHAR_VERSION
-      # Publishing a commit that already passed every UI stage (a successful "ui-test all" run on the same SHA):
-      # only smoke and gallery run here (the release carries gallery.png). Otherwise every stage, as before.
+      # A commit that already passed every UI stage (a successful "ui-test all" run on the same SHA, published or
+      # not): only smoke and gallery run here (the zip's engine starts; the release carries gallery.png). A "ui-test
+      # all" still running on this SHA (started with this build) is waited for, up to 40 min. Otherwise, or with
+      # force_ui, every stage, as before (~37 min).
       - name: A full UI pass on this commit?
         id: prior
-        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        if: ${{ !inputs.force_ui }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          run=$(gh api "repos/${{ github.repository }}/actions/workflows/ui-test.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=100" \
-            --jq '[.workflow_runs[] | select(.display_title == "ui-test all")][0].id // empty')
-          if [ -n "$run" ]; then echo "full UI pass on ${{ github.sha }}: run $run"; else echo "no full UI pass on ${{ github.sha }}"; fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
+        run: python -I tools/ci/prior_runs.py ui --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --wait-minutes 40
       - name: UI tests (all stages)
         if: steps.prior.outputs.run == ''
         shell: pwsh

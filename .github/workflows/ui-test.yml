@@ -9,48 +9,106 @@ on:
   workflow_dispatch:
     inputs:
       stages:
-        description: Stages to run (comma-separated), or all; a task runs the ones it touches, a release runs them all
+        description: >-
+          all (what a release runs), auto (only the stages the branch's changes since `base` touch, plus smoke:
+          tools/ci/ui_stages.py), a comma-separated list, or mindeval (her real brain only)
         type: string
         default: all
+      base:
+        description: For stages=auto and mind_eval=auto — what the changes are counted from
+        type: string
+        default: origin/main
+      mind_eval:
+        description: Her real brain (mind-eval.yml) alongside — auto (when her brain's files changed since `base`), yes, or no
+        type: choice
+        options: [auto, 'yes', 'no']
+        default: auto
       eval_model:
-        description: For stages=mindeval only — the pinned model (gemma-4-e4b-q4km or jais-3-7b-q4km)
+        description: For mind-eval — the pinned model (gemma-4-e4b-q4km or jais-3-7b-q4km)
         type: string
         default: gemma-4-e4b-q4km
       eval_only:
-        description: For stages=mindeval only — golden ids (comma-separated), or empty for all
+        description: For mind-eval — golden ids (comma-separated), or empty for all
         type: string
         default: ''
 
+# A new run of the same stages on the same branch replaces the old one (all and mindeval can run side by side).
 concurrency:
-  group: ui-test-${{ github.ref }}
+  group: ui-test-${{ github.ref }}-${{ inputs.stages || 'all' }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  actions: read   # tools/ci/prior_runs.py: a mind-eval that already passed on this commit
+
 jobs:
-  # 0.14.1: `-f stages=mindeval` runs the opt-in eval of her real brain instead (mind-eval.yml), never with "all".
-  mind-eval:
-    if: ${{ inputs.stages == 'mindeval' }}
-    uses: ./.github/workflows/mind-eval.yml
-    with:
-      model: ${{ inputs.eval_model }}
-      only: ${{ inputs.eval_only }}
-      budget: '240'
-  # The stage list → parallel Windows jobs (tools/ci/ui_groups.py): all → four balanced groups, ≤ 3 stages → one job.
+  # What runs: the stage list → parallel Windows jobs (tools/ci/ui_groups.py: all → nine groups, ≤ 3 stages → one
+  # job), and whether her real brain is evaluated too.
   plan:
-    if: ${{ inputs.stages != 'mindeval' }}
     runs-on: ubuntu-latest
     outputs:
-      groups: ${{ steps.plan.outputs.groups }}
+      groups: ${{ steps.groups.outputs.groups }}
+      mindeval: ${{ steps.mindeval.outputs.mindeval }}
     steps:
       - uses: actions/checkout@v4
-      - id: plan
+        with:
+          fetch-depth: 0   # the diff against the base
+      - name: Stages
+        id: stages
         shell: bash
         env:
           STAGES: ${{ inputs.stages || 'all' }}
-        run: python3 -I tools/ci/ui_groups.py "$STAGES" | tee -a "$GITHUB_OUTPUT"
+          BASE: ${{ inputs.base || 'origin/main' }}
+        run: |
+          case "$STAGES" in
+            auto) python3 -I tools/ci/ui_stages.py stages --base "$BASE" | tee -a "$GITHUB_OUTPUT" ;;
+            mindeval) echo "stages=" | tee -a "$GITHUB_OUTPUT" ;;
+            *) echo "stages=$STAGES" | tee -a "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Groups
+        id: groups
+        shell: bash
+        env:
+          STAGES: ${{ steps.stages.outputs.stages }}
+        run: |
+          if [ -z "$STAGES" ]; then echo 'groups=[]' | tee -a "$GITHUB_OUTPUT"
+          else python3 -I tools/ci/ui_groups.py "$STAGES" | tee -a "$GITHUB_OUTPUT"; fi
+      # 0.14.1 opt-in, now also automatic: her real brain (~25 min of Windows, in parallel) when stages=mindeval or
+      # mind_eval=yes; on auto when her brain's files changed (since `base`; on a push, since the commit before it)
+      # and no mind-eval has passed on this commit yet.
+      - name: Mind-eval?
+        id: mindeval
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGES: ${{ inputs.stages || 'all' }}
+          ASKED: ${{ inputs.mind_eval || 'auto' }}
+          BASE: ${{ github.event_name == 'push' && github.event.before || inputs.base || 'origin/main' }}
+        run: |
+          if [ "$STAGES" = mindeval ] || [ "$ASKED" = yes ]; then on=true
+          elif [ "$ASKED" = no ]; then on=false
+          else
+            git rev-parse --verify -q "$BASE^{commit}" >/dev/null || BASE=origin/main   # a push that made the branch
+            brain=$(python3 -I tools/ci/ui_stages.py brain --base "$BASE")
+            done=$(python3 -I tools/ci/prior_runs.py mindeval --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA")
+            if [ "$brain" = brain=true ] && [ "$done" = run= ]; then on=true; else on=false; fi
+            echo "$brain, prior mind-eval: $done"
+          fi
+          echo "mindeval=$on" | tee -a "$GITHUB_OUTPUT"
+
+  mind-eval:
+    needs: plan
+    if: ${{ needs.plan.outputs.mindeval == 'true' }}
+    uses: ./.github/workflows/mind-eval.yml
+    with:
+      model: ${{ inputs.eval_model || 'gemma-4-e4b-q4km' }}
+      only: ${{ inputs.eval_only }}
+      budget: '240'
 
   # The engine is built once and shared with every UI job.
   build:
-    if: ${{ inputs.stages != 'mindeval' }}
+    needs: plan
+    if: ${{ needs.plan.outputs.groups != '[]' }}
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -58,6 +116,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # NuGet packages (the Native AOT compiler is the big one) and the pinned llama.cpp zips: by their pins.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: artifacts/mind/downloads
+          key: mind-runtime-vulkan-cpu-${{ hashFiles('tools/mind/pins.json') }}
       - name: Settings store on Windows (two writers, sharing violations, File.Replace)
         run: dotnet test tests/Sahar.Core.Tests -c Release --filter FullyQualifiedName~SettingsStore
       - name: Publish engine (Native AOT)

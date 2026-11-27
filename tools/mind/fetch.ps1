@@ -33,7 +33,14 @@ function Fetch([string]$url, [string]$file, [long]$bytes, [string]$sha) {
     $path = Join-Path $cache $file
     if ((Test-Path $path) -and $sha -and (Sha256 $path) -eq $sha) { Write-Host "  $file (cached, verified)"; return $path }
     Write-Host "  downloading $url"
-    Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
+    # One retry: GitHub's release downloads fail now and then (a 5xx "Unicorn!" page, CI run 45861363040).
+    try { Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing }
+    catch {
+        Write-Host "::warning::$file`: $($_.Exception.Message.Split([char]10)[0]): trying once more in 15 s"
+        Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 15
+        Invoke-WebRequest -Uri $url -OutFile $path -UseBasicParsing
+    }
     $len = (Get-Item $path).Length
     if ($bytes -and $len -ne $bytes) { throw "$file is $len bytes, pinned $bytes" }
     return $path

@@ -2,7 +2,8 @@ name: mind-eval
 # 0.14.1, opt-in (by hand only): her REAL brain end to end on the runner's CPU — the real pinned model (~5 GB, pinned
 # SHA-256, cached), the real engine and Sahar.Mind.exe, the golden lines of tests/mind/golden/eval.jsonl typed into her
 # card, and what became visible scored (tools/ci/mind_eval_score.py). Artifact: prompts, her replies, tool calls,
-# the scored summary. Never on push: a full run is ~30–50 min of Windows time.
+# the scored summary. Never on its own on push: a full run is ~20–30 min of Windows time. ui-test and test-build call it
+# when her brain's files changed (tools/ci/ui_stages.py BRAIN) and no mind-eval passed on the commit yet, or when asked.
 run-name: mind-eval ${{ inputs.model }} ${{ inputs.only }}
 
 on:
@@ -43,6 +44,15 @@ jobs:
           node-version: 22
       - name: Install agent-desktop (screenshots)
         run: npm i -g agent-desktop@1.2.0
+      # NuGet packages and the pinned llama.cpp CPU zip, by their pins (the model has its own cache below).
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: artifacts/mind/downloads
+          key: mind-runtime-cpu-${{ hashFiles('tools/mind/pins.json') }}
       - name: Publish the engine and her brain's process (Native AOT)
         shell: pwsh
         run: |
