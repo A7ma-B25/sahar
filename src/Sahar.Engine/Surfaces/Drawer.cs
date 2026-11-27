@@ -1,27 +1,48 @@
 using Sahar.Core.Activities;
+using Sahar.Core.Chat;
+using Sahar.Core.Mind;
+using Sahar.Core.Mind.Memory;
 using Sahar.Engine.Tools;
 
 namespace Sahar.Engine.Surfaces;
 
 /// <summary>
 /// «الدرج» (owner ruling 12): everything at once — what is live now (every activity, not only the tag's), what is on
-/// her shelf, and what happened today (activities and moments as they came, newest first). The history lives in memory
-/// for this session only; nothing of it is logged or written.
+/// her shelf, and what happened (activities and moments as they came, newest first). The history is the last 24 h,
+/// kept across restarts sealed in her personal box (<see cref="DrawerHistory"/>, owner 0.16 review) and wiped by
+/// «انسي كل شي»; nothing of it is logged.
 /// </summary>
-internal sealed class Drawer(Func<DateTimeOffset>? now = null)
+internal sealed class Drawer
 {
-    public const int MaxHistory = 40;
-    private readonly List<(DateTimeOffset At, string Text, string Icon)> _history = [];
-    private readonly Func<DateTimeOffset> _now = now ?? (() => DateTimeOffset.Now);
+    public const int MaxHistory = DrawerHistory.Max;
+    private readonly Func<DateTimeOffset> _now;
+    private readonly Func<ISecretBox> _box;
+    private DrawerHistory _history;
 
-    public int Count => _history.Count;
+    public Drawer(Func<ISecretBox>? box = null, Func<DateTimeOffset>? now = null)
+    {
+        _now = now ?? (() => DateTimeOffset.Now);
+        _box = box ?? (() => MindParts.SecretBox(MindPaths.Personal));
+        _history = new DrawerHistory(_box(), _now);
+    }
+
+    public int Count => _history.Items.Count;
 
     public void Happened(Activity a) => Happened(a.Meta is { Length: > 0 } m ? a.Text + " · " + m : a.Text, Icon(a.Icon));
 
-    public void Happened(string text, string icon)
+    public void Happened(string text, string icon) => _history.Add(text, icon);
+
+    /// <summary>«انسي كل شي», first half: nothing is written while her folder is shredded.</summary>
+    public void Pause() => _history = new DrawerHistory(new NoBox(), _now);
+
+    /// <summary>«انسي كل شي» done: empty, in a fresh box.</summary>
+    public void Forget() => _history = new DrawerHistory(_box(), _now);
+
+    private sealed class NoBox : ISecretBox
     {
-        _history.Insert(0, (_now(), text, icon));
-        if (_history.Count > MaxHistory) _history.RemoveAt(_history.Count - 1);
+        public byte[]? Read(string name) => null;
+        public void Write(string name, ReadOnlySpan<byte> data) => throw new MindStoreException("forgotten");
+        public void Delete(string name) { }
     }
 
     public static string Icon(string activityIcon) => activityIcon switch
@@ -45,7 +66,7 @@ internal sealed class Drawer(Func<DateTimeOffset>? now = null)
             { Icon = Icon(a.Icon), Meta = a.Meta, Live = ActivityRank.Hangs(a.Kind), Soft = a.Asking }))
             .ToList();
         var shelfRows = shelf.Take(12).Select((s, i) => new PickRow("shelf:" + i, Path.GetFileName(s.Path)) { Icon = "drawer", Meta = ClipboardTool.Age(_now() - s.Added) }).ToList();
-        var history = _history.Select((h, i) => new PickRow("", h.Text) { Icon = h.Icon, Meta = Clock(h.At) }).ToList();
+        var history = _history.Items.Select(h => new PickRow("", h.Text) { Icon = h.Icon, Meta = Clock(h.At) }).ToList();
         return new PanelSpec
         {
             Kind = "drawer", Name = "drawer", Title = "الدرج", Sub = Sahar.Core.Settings.Address.ToYou("كل شي شغّال، وكل شي صار اليوم"),

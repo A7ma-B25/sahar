@@ -977,6 +977,7 @@ internal sealed unsafe class App
             CameraMic = cameraMic, Activities = acts, Express = Express, SinceKeyboard = () => tray.SinceKeyboard,
             ActivityTools = new Sahar.Engine.Mind.ActivityToolsAdapter(weatherSource, claudeSource, shelfSource, acts, () => settings),
             IsDraftAsk = t => Sahar.Core.Mind.Drafts.DraftAsk.Parse(t) is not null,
+            DrawerPause = () => Safe(drawer.Pause), DrawerForget = () => Safe(drawer.Forget),
         };
         mind.Attach();
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));

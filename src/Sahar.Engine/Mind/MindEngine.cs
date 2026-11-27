@@ -34,6 +34,9 @@ internal sealed partial class MindEngine
     public required Surfaces.Panel Panel { get; init; }
     /// <summary>0.16: the chat window (her drafts, inline asks and the replies he asked for in it).</summary>
     public Surfaces.ChatHub? Chat { get; set; }
+    /// <summary>«انسي كل شي» reaches «الدرج»'s saved history too (owner, 0.16 review).</summary>
+    public Action? DrawerPause { get; set; }
+    public Action? DrawerForget { get; set; }
     public required TimerTool Timer { get; init; }
     public required DndTool Dnd { get; init; }
     public required NoteTool Notes { get; init; }

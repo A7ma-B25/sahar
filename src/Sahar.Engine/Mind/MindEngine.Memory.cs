@@ -58,6 +58,7 @@ internal sealed partial class MindEngine
         {
             bool sent = SendIfRunning(new MindMsg { T = "quit" });
             Chat?.Pause();   // no chat line is written while the folder is shredded
+            DrawerPause?.Invoke();   // nor a «الدرج» line
             Log.Write($"mind: stop for forget ({(sent ? "was running" : "not running")})");
             return new PipeReply(true, "ok=true");
         });
@@ -66,6 +67,7 @@ internal sealed partial class MindEngine
             Log.Write("mind: forgot everything");
             NewMemory();   // her own store saw the old key: a fresh one starts from nothing
             Chat?.Forget();   // the chat window empties at once
+            DrawerForget?.Invoke();   // «الدرج» forgets what happened too
             Speech.Say(Address.ToYou("نسيت كل شي… مرحبا من جديد 🌙"));
             return new PipeReply(true, "ok=true");
         });
