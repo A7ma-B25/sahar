@@ -4323,7 +4323,8 @@ function Stage-Settings {
             " const wide = [...document.querySelectorAll('#page *')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.left < p.left - 1 || r.right > p.right + 1); }).map((e) => e.id || e.className).slice(0, 5);" +
             " const heads = [...document.querySelectorAll('.on-row')].map((r) => { const h = r.querySelector('.on-head').getBoundingClientRect(); const b = r.querySelector('.on-move').getBoundingClientRect(); return Math.abs((h.top + h.bottom) / 2 - (b.top + b.bottom) / 2) < 2; });" +
             " return JSON.stringify({ mainX: m.scrollWidth - m.clientWidth, docX: document.documentElement.scrollWidth - document.documentElement.clientWidth, navX: n.scrollHeight - n.clientHeight, wide, heads," +
-            " dirs: ['on-model-groq', 'on-model-openrouter', 'on-key-groq'].map((id) => getComputedStyle(document.getElementById(id)).direction).join(','), folded: document.getElementById('on-custom-body').hidden," +
+            " dirs: ['on-model-groq', 'on-model-openrouter', 'on-url-custom'].map((id) => getComputedStyle(document.getElementById(id)).direction).join(',') + ',' + document.getElementById('on-key-groq').dir," +   # the empty key field reads its Arabic placeholder right-to-left
+            " folded: document.getElementById('on-custom-body').hidden," +
             " gap: Math.round(document.getElementById('on-localonly').getBoundingClientRect().top - document.querySelector('.on-status').getBoundingClientRect().bottom) }); })()"
         foreach ($theme in 'light', 'dark') {
             SOk 'emulate' ('{"theme":"' + $theme + '"}')
@@ -4334,7 +4335,7 @@ function Stage-Settings {
             Write-Host "    $theme`: mainX=$($l.mainX) docX=$($l.docX) navX=$($l.navX) dirs=$($l.dirs) folded=$($l.folded) gap=$($l.gap) heads=$($l.heads -join ',') wide=$($l.wide -join ',')"
             if ($l.mainX -gt 0 -or $l.docX -gt 0 -or @($l.wide).Count) { throw "something is wider than the page: $($l.wide -join ', ')" }
             if ($l.navX -gt 0) { throw "the sidebar scrolls at the window's own size ($($l.navX) px too tall)" }
-            if ($l.dirs -ne 'ltr,ltr,ltr') { throw "model ids / keys are not left-to-right: $($l.dirs)" }
+            if ($l.dirs -ne 'ltr,ltr,ltr,ltr') { throw "model ids / keys are not left-to-right: $($l.dirs)" }
             if (-not $l.folded) { throw '«مزوّد مخصّص (متقدّم)» is not folded' }
             if ($l.gap -lt 8) { throw "the status card and «محلي فقط» touch (gap $($l.gap) px)" }
             if (@($l.heads) -contains $false) { throw 'up/down are not on their provider''s header line' }
