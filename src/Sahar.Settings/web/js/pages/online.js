@@ -30,7 +30,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
   const nowLine = h('span', { class: 'mr-status-line', id: 'on-now' });
   const drawNow = () => { nowLine.textContent = !usable() ? tx('onNowOff') : v.mindChatBrain === 'local' ? tx('onNowLocal') : tx('onNowOnline'); };
   drawNow();
-  const status = card(h('div', { class: 'm-text' }, nowLine));
+  const status = card(h('div', { class: 'mr-status' }, h('div', { class: 'm-text' }, nowLine)));
 
   const local = switchRow(tx('onLocalOnly'), tx('onLocalOnlyHint'), !!v.mindLocalOnly, async (on) => { await set('mindLocalOnly', on); rerender(); }, 'mindLocalOnly');
   local.id = 'on-localonly';
@@ -39,11 +39,11 @@ export async function render({ S, tx, set, ask, render: rerender }) {
 
   if (!v.mindOnlineConsent) {
     const ok = pri(tx('onConsentOk'), async () => { await set('mindOnlineConsent', true); rerender(); }, { id: 'on-consent-ok' });
-    const consent = card(h('div', { class: 'm-text' },
+    const consent = card(h('div', { class: 'mr-status' }, h('div', { class: 'm-text' },
       h('span', { class: 'label', text: tx('onConsentTitle') }),
       h('p', { class: 'desc', text: tx('onConsentSent') }),
       h('p', { class: 'desc', text: tx('onConsentNever') }),
-      h('p', { class: 'desc', text: tx('onConsentTrain') })), h('div', { class: 'btn-row' }, ok));
+      h('p', { class: 'desc', text: tx('onConsentTrain') }))), h('div', { class: 'btn-row' }, ok));
     consent.id = 'on-consent';
     return [...top, consent];
   }
@@ -143,7 +143,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
     waitBench = true;
   }, { id: 'on-bench' });
   const back = ghost(tx('onBackLocal'), async () => { await set('mindChatBrain', 'local'); back.textContent = tx('onBackDone'); drawNow(); }, { id: 'on-back-local' });
-  const benchCard = card(h('div', { class: 'm-text' }, h('p', { class: 'desc', text: tx('onBenchHint') }), benchOut), h('div', { class: 'btn-row' }, benchBtn, back));
+  const benchCard = card(h('div', { class: 'mr-status' }, h('div', { class: 'm-text' }, h('p', { class: 'desc', text: tx('onBenchHint') }), benchOut)), h('div', { class: 'btn-row' }, benchBtn, back));
   benchCard.hidden = !usable();
 
   // ---- the poll: the Mind's status (keys, quota, the last test, the bench) ----

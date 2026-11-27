@@ -67,6 +67,8 @@ function Stage-MindOnline {
             foreach ($theme in 'light', 'dark') {
                 SOk 'emulate' ('{"theme":"' + $theme + '"}')
                 Start-Sleep -Milliseconds 600
+                Write-Host "    page: consent=$(Js 'String(window.sahar.settings().mindOnlineConsent)') keys=$(Js 'JSON.stringify(window.sahar.settings().mindOnlineKeys)') rows=$(Js "document.querySelectorAll('.on-row').length"); file: consent=$(Setting 'mindOnlineConsent')"
+                Wait-Until { (Js "document.querySelectorAll('.on-row').length") -eq '3' } 5000 'the providers are not on the page after a re-render'
                 Capture "app-online-$theme"
             }
             SOk 'emulate' '{"theme":""}'
