@@ -210,6 +210,36 @@ function Stage-Look {
             $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
             if ($log -match 'صباح الخير يا سحورة' -or $log -match 'من حكينا') { throw 'chat text is in engine.log' }
         }
+        # 0.17: the brain chip (online set up) and her badges; her markdown; links stay text.
+        Step "look ($theme): the chat's brain chip and badges («أونلاين» / «محلي»), safe markdown" {
+            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '", "mindOnlineConsent": true, "mindOnlineKeys": ["groq"] }')
+            Reload-Settings | Out-Null
+            Send '{"type":"cmd","name":"chat-open","args":{"fresh":"true"}}' | Out-Null
+            Wait-Surface 'chat' | Out-Null
+            Send ('{"type":"cmd","name":"chat-said","args":{"brain":"online","text64":"' + (T64 "هاد **جواب** أونلاين 🌙`n`n- أول شي`n- تاني شي`n`nشوف [هون](https://example.com/x)") + '"}}') | Out-Null
+            Send ('{"type":"cmd","name":"chat-said","args":{"brain":"local","text64":"' + (T64 'وهاد من عقلي المحلي') + '"}}') | Out-Null
+            Start-Sleep -Milliseconds 500
+            $r = Look-Kv 'surface-eval' ('{"surface":"chat","script64":"' + (T64 "JSON.stringify({ chip: document.querySelector('[data-id=brain]')?.textContent ?? null, badges: [...document.querySelectorAll('.brainbadge')].map(b => b.textContent), strong: document.querySelectorAll('.msg.her strong').length, li: document.querySelectorAll('.msg.her li').length, a: document.querySelectorAll('.msg a, .msg img').length })") + '"}')
+            $chk = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($r.result64))
+            Write-Host "    chat: $chk"
+            $o = ($chk | ConvertFrom-Json) | ConvertFrom-Json
+            if ($o.chip -ne 'أونلاين') { throw "the brain chip: $($o.chip)" }
+            if (($o.badges -join ',') -ne 'أونلاين,محلي') { throw "badges: $($o.badges -join ',')" }
+            if ($o.strong -lt 1 -or $o.li -ne 2) { throw "markdown: strong=$($o.strong) li=$($o.li)" }
+            if ($o.a -ne 0) { throw 'a link or an image was rendered' }
+            Look-Shot "chat-brain-$theme" 'chat' | Out-Null
+            Send '{"type":"cmd","name":"panel-click","args":{"surface":"chat","id":"brain"}}' | Out-Null
+            Wait-Until { (Setting 'mindChatBrain') -eq 'local' } 3000 'the chip did not switch to local'
+            Wait-Until { (Kv 'debug-chat').chip -eq 'local' } 3000 'the chip did not redraw'
+            Send '{"type":"cmd","name":"chat-close"}' | Out-Null
+            Write-Settings ('{ "helloDone": true, "appearance": "' + $theme + '" }')
+            Reload-Settings | Out-Null
+            Send '{"type":"cmd","name":"chat-open","args":{"fresh":"true"}}' | Out-Null
+            Wait-Surface 'chat' | Out-Null
+            Start-Sleep -Milliseconds 400
+            if ((Kv 'debug-chat').chip -ne 'hidden') { throw 'the chip shows without online set up' }
+            Send '{"type":"cmd","name":"chat-close"}' | Out-Null
+        }
         Step "look ($theme): open times from the warm host" {
             Write-Host "    $($script:lookMs -join ' | ')"
             $slow = @($script:lookMs | Where-Object { [double](($_ -split ' ')[1]) -gt 1500 })

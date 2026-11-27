@@ -53,7 +53,7 @@ internal static class SurfaceTests
         pipe.Register("chat-open", r => { chat.Open(r.Args?.GetValueOrDefault("fresh") == "true"); return new PipeReply(true, chat.Describe()); });
         pipe.Register("chat-close", _ => { chat.Close(); return new PipeReply(true, chat.Describe()); });
         pipe.Register("debug-chat", _ => new PipeReply(true, chat.Describe()));
-        pipe.Register("chat-said", r => { chat.Said(Text(r.Args, "text64") ?? ""); return new PipeReply(true, chat.Describe()); });
+        pipe.Register("chat-said", r => { chat.Said(Text(r.Args, "text64") ?? "", brain: r.Args?.GetValueOrDefault("brain")); return new PipeReply(true, chat.Describe()); });
         pipe.RegisterAsync("chat-type", r =>
         {
             var text = Text(r.Args, "text64") ?? "";
