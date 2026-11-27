@@ -253,7 +253,7 @@
    كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
    هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
 3. اختار إذا بدك ياها تشتغل مع الويندوز ← «التالي» ← «إنهاء». سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.17.0-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
+   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.17.1-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
    (نفس تحذير SmartScreen؛ خلّي كل الملفات والمجلدات يلي جنبها سوا). إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
 4. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
    "إخفاء ساعة" بيخبّيها ساعة وبترجع لحالها.
@@ -308,8 +308,16 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.17.0 (Windows)
+Sahar — test build 0.17.1 (Windows)
 ==================================
+
+What's new in 0.17.1 — the «العقل أونلاين» page, tidied 🧹
+-----------------------------------------------
+- The cards no longer touch: her status, «محلي فقط» and «قبل ما نبلّش» each sit apart, as on the other pages.
+- Each provider is one tidy header: its number, name, key chip and small up/down arrows; today's requests under it.
+- Model ids, URLs and keys read left-to-right, whole (no more clipped «joogle/…»).
+- «مزوّد مخصّص (متقدّم)» is folded until you open it; «جرّب عقلي» shows only once a key is saved.
+- The sidebar fits the window's own height, so there is one scrollbar.
 
 What's new in 0.17.0 — an online brain for words 🌐
 -----------------------------------------------
@@ -487,7 +495,7 @@ Install it
 2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
    click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
 3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.
-   Portable instead: unzip Sahar-0.17.0-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
+   Portable instead: unzip Sahar-0.17.1-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
    keep the files and folders beside it together). Running her from the zip: the installer closes her for you;
    delete the old folder afterwards.
 4. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
