@@ -87,8 +87,9 @@ internal sealed partial class MindEngine
         Surfaces.ChatHub.Clipboard = Copy;
         if (Chat is { } chatHub)
         {
-            // 0.17.2: warm the online connection when the window opens (no chat quota; the Mind throttles it).
-            chatHub.Opened = () => Safe(() => { if (Sahar.Core.Mind.Online.OnlineChain.Usable(Settings())) EnsureAndSend(new MindMsg { T = "online", Op = "warm" }); });
+            // 0.17.2: warm the online connection when the window opens (no chat quota; the Mind throttles it). Only a
+            // running Mind (opening the window never starts her brain; a Mind that starts asks OpenRouter's counter anyway).
+            chatHub.Opened = () => Safe(() => { if (Sahar.Core.Mind.Online.OnlineChain.Usable(Settings())) SendIfRunning(new MindMsg { T = "online", Op = "warm" }); });
             chatHub.SetBrain = v => { Save(x => x with { MindChatBrain = v }); Ui.TryEnqueue(() => Safe(chatHub.Refresh)); };
             // Review I1: a new or deleted conversation: the online brain's pairs go (same box, the Mind reads it fresh).
             chatHub.Cleared = () => Safe(() =>
