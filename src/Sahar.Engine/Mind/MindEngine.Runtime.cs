@@ -61,6 +61,24 @@ internal sealed partial class MindEngine
             return new PipeReply(true, "ok=true");
         });
         Pipe.Register("mind-reload", _ => { EnsureAndSend(new MindMsg { T = "store-changed" }); return new PipeReply(true, "ok=true"); });
+        // 0.17 «العقل أونلاين»: the key goes once to the Mind, which seals it (never logged, never kept here).
+        Pipe.Register("mind-online", r =>
+        {
+            var op = Arg(r, "op");
+            if (op is not ("key" or "forget" or "test" or "status" or "bench")) return new PipeReply(false, "bad online op");
+            string? key = null;
+            if (op == "key")
+            {
+                try { key = Encoding.UTF8.GetString(Convert.FromBase64String(Arg(r, "key64") ?? "")); }
+                catch (FormatException) { return new PipeReply(false, "bad key"); }
+            }
+            if (op is "key" or "forget" or "test" && Arg(r, "provider") is not ("groq" or "openrouter" or "custom")) return new PipeReply(false, "bad provider");
+            bool sent = EnsureAndSend(new MindMsg { T = "online", Op = op, Model = Arg(r, "provider"), Text = key });
+            Log.Write($"mind: online {op}");
+            return new PipeReply(sent, sent ? "ok=true" : "no mind");
+        });
+        Pipe.Register("mind-online-status", _ => new PipeReply(true, "json64=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            _online is { } o ? System.Text.Json.JsonSerializer.Serialize(o, MindJson.Default.OnlineInfo) : "null")) + $" seq={_onlineSeq}"));
         if (TestMode)
         {
             Pipe.Register("debug-mind", _ => new PipeReply(true, Describe()));
@@ -177,6 +195,11 @@ internal sealed partial class MindEngine
                 if (m.Ready is { } r) Log.Write($"mind: ready ({r.Backend}, {r.LoadMs} ms, vram {r.VramMB} MB)");
                 if (_wantsReady) { _wantsReady = false; Speech.Say(Address.For(Address.You, RuntimeText.Done)); }
                 break;
+            case "online-status" when m.Online is { } info:
+                _online = info;
+                _onlineSeq++;
+                OnlineKeysSeen(info);
+                break;
             case "models":
                 _models = new ModelManifest(m.Models ?? [], m.Model);
                 _activeAt = 0;   // read again on the next ask
@@ -252,6 +275,21 @@ internal sealed partial class MindEngine
             Log.Write($"mind: download question answered ({(yes ? "yes" : "later")})");
             if (yes) EnsureAndSend(new MindMsg { T = "download", Op = "start", Model = model.Id });
         }, yesIcon: "download");
+    }
+
+    private OnlineInfo? _online;
+    private int _onlineSeq;
+
+    /// <summary>The Mind's sealed keys → the settings flags (so the chat chip knows without asking the Mind). Flags only.</summary>
+    private void OnlineKeysSeen(OnlineInfo info)
+    {
+        var keyed = info.Providers.Where(p => p.Key).Select(p => p.Id).ToList();
+        if (!keyed.SequenceEqual(Settings().MindOnlineKeys))
+        {
+            Save(x => x with { MindOnlineKeys = keyed });
+            Log.Write($"mind: online keys {keyed.Count}");
+        }
+        Chat?.Refresh();
     }
 
     private string Status()

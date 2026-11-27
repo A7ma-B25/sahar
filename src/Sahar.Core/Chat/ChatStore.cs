@@ -11,6 +11,8 @@ public enum ChatLine { Text, Draft, Ask, Receipt }
 public sealed record ChatEntry(DateTimeOffset At, ChatWho Who, ChatLine Kind, string Text)
 {
     public string? Answer { get; init; }
+    /// <summary>0.17: which brain wrote her line (local | online; null = before 0.17, local) — the chat's tiny badge.</summary>
+    public string? Brain { get; init; }
 }
 
 /// <summary>A conversation in the list: its title and last line are content too (encrypted like the rest).</summary>

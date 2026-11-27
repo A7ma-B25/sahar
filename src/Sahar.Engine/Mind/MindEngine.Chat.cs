@@ -8,6 +8,7 @@ using Sahar.Core.Mind;
 using Sahar.Core.Mind.Autonomy;
 using Sahar.Core.Mind.Initiative;
 using Sahar.Core.Mind.Log;
+using Sahar.Core.Mind.Online;
 using Sahar.Core.Mind.Protocol;
 using Sahar.Core.Mind.Tools;
 using Sahar.Core.Protocol;
@@ -31,6 +32,8 @@ internal sealed partial class MindEngine
     /// <summary>«اكتبلي رد بأسلوبي…» (stream B's <c>DraftAsk.Parse(line) is not null</c>, set at integration): such a line
     /// is a turn with source "draft" (Ruling 6); B shows the draft with «بصوتك» and a copy button. Drafting never sends.</summary>
     public Func<string, bool>? IsDraftAsk { get; set; }
+    /// <summary>0.17 (ruling R2): a card line that asks her to write or explain, with online usable: App moves it to the chat window.</summary>
+    public Action<string>? MoveToChat { get; set; }
 
     private EngineTools _tools = null!;
     private Sahar.Core.Mind.Memory.ISecretBox _box = null!;
@@ -81,8 +84,10 @@ internal sealed partial class MindEngine
             TimedOutInChat = t => Chat?.AskEnded(t),
         };
         OfferDownload ??= OfferDownloadQuestion;
-        Surfaces.ChatHub.Clipboard = Copy;   // review minor: an older draft (no copy of its own) copies too
+        Surfaces.ChatHub.Clipboard = Copy;
+        if (Chat is { } chatHub) chatHub.SetBrain = v => { Save(x => x with { MindChatBrain = v }); Ui.TryEnqueue(() => Safe(chatHub.Refresh)); };   // review minor: an older draft (no copy of its own) copies too
         ChatHandler = OnChat;
+        SettingsChanged += _ => Ui.TryEnqueue(() => Safe(() => Chat?.Refresh()));   // 0.17: the chip follows «العقل أونلاين»
         Received += OnMind;
         Menu.ChatTyped += () => { if (Ready()) WarmUp(); };
         Menu.OpenChanged += open => Safe(() => CardOpenChanged(open));
@@ -126,6 +131,18 @@ internal sealed partial class MindEngine
     /// <summary>A line from the chat window: like the card's row, but her answer comes back to the window.</summary>
     public bool TakeWindowChat(ChatCommand c, string text)
     {
+        // 0.17 spec §9: with the chip on «محلي», a writing line gets one suggestion per conversation (never a silent switch).
+        var s = Settings();
+        if (_brainOnce is null && c.Kind == ChatKind.Unknown && s.MindChatBrain == "local" && OnlineChain.Usable(s) && Intents.Writing(text)
+            && !Intents.Action(text) && IsDraftAsk?.Invoke(text) != true && Chat is { } ch && ch.SuggestOnce()
+            && ch.Ask(Address.For(Address.You, SuggestLine), yes => Ui.TryEnqueue(() => Safe(() =>
+            {
+                Log.Write($"mind: online suggested ({(yes ? "yes" : "no")})");
+                _brainOnce = yes ? "online" : "local";
+                try { TakeWindowChat(c, text); }
+                finally { _brainOnce = null; }
+            })), "إي، أونلاين", "لا، محلي", TimeSpan.FromMinutes(2)))
+            return true;
         _fromWindowNext = true;   // review I3: the card's «عم فكّر…» is not for this turn
         try { if (!TakeChat(c, text)) return false; }
         finally { _fromWindowNext = false; }
@@ -135,6 +152,19 @@ internal sealed partial class MindEngine
     }
 
     private bool _fromWindowNext;
+    /// <summary>His answer to the suggestion, for the one line it was about.</summary>
+    private string? _brainOnce;
+    private const string SuggestLine = "هيدا بيطلع أحلى أونلاين، بدّك جاوبك أونلاين؟";
+
+    /// <summary>0.17 spec §8: her focus face («•••») while a chat turn thinks — only over her own face, never an event's.</summary>
+    private bool _thinkingFace;
+    private void ThinkingFace(bool on)
+    {
+        if (on == _thinkingFace) return;
+        if (on && Director.CurrentKey is not ("idle" or "music")) return;
+        _thinkingFace = on;
+        Express(on ? "claude-working" : "", false);
+    }
 
     /// <summary>Review I3: a window turn ended (answered, replaced, failed): its «عم تكتب…» goes and nothing points at it.</summary>
     private void EndWindowTurn(string id)
@@ -172,7 +202,17 @@ internal sealed partial class MindEngine
             Ui.TryEnqueue(() => Safe(() => LogFastPath(c, text, hushBefore)));
             return false;
         }
-        if (!MindReady())
+        var s0 = Settings();
+        bool online = OnlineChain.Usable(s0);
+        // 0.17 (ruling R2): writing or explaining from the card → the chat window (never online from the card itself).
+        if (!_fromWindowNext && !draft && online && s0.MindChatBrain != "local" && MoveToChat is { } move && Intents.Writing(text) && !Intents.Action(text))
+        {
+            Log.Write("mind: card line moved to the chat window (writing)");
+            move(text);
+            return true;
+        }
+        // 0.17: the chat window can talk online even before her local brain is there (actions still need it).
+        if (!MindReady() && !(_fromWindowNext && online))
         {
             var today = DateOnly.FromDateTime(DateTime.Now);
             if (c.Kind == ChatKind.Unknown && _offeredOn != today && !Settings().MindEnabled)
@@ -185,7 +225,10 @@ internal sealed partial class MindEngine
         var id = "c" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
         if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); Forget(running); EndWindowTurn(running); }
         var source = draft ? "draft" : "chat";
-        if (!SendMind(new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() })) return false;
+        var turnMsg = new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() };
+        if (_fromWindowNext) turnMsg = turnMsg with { Window = true, Brain = _brainOnce ?? s0.MindChatBrain };
+        if (!SendMind(turnMsg)) return false;
+        ThinkingFace(true);   // 0.17 spec §8: her body answers before any word
         _turns[id] = (ActSource.User, Clip(text, 60), source);
         _chatTurn = id;
         if (!_fromWindowNext) Menu.MindThinking(true);
@@ -278,7 +321,14 @@ internal sealed partial class MindEngine
                 Chat?.Thinking(m.Phase == "thinking");
                 break;
             case "partial" when m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id) && m.Text is { } windowPartial:
-                Chat?.Partial(Address.For(Address.You, Words(windowPartial)));
+                ThinkingFace(false);
+                Chat?.Partial(windowPartial.Length == 0 ? "" : Address.For(Address.You, Words(windowPartial)));
+                break;
+            case "say" when m.Final == false && m.Kind == "note" && m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id):
+                // 0.17: «خلّصت طلبات الأونلاين لليوم» before her local answer: a line of its own; the turn goes on.
+                Chat?.Said(Address.For(Address.You, Words(m.Text ?? "")), brain: "local");
+                Chat?.Thinking(true);
+                Log.Write("mind: online is out for today (told)");
                 break;
             case "state" when m.Id is not null && m.Id == _chatTurn:
                 if (m.Phase == "thinking") Menu.MindThinking(true);
@@ -308,6 +358,7 @@ internal sealed partial class MindEngine
                 break;
             case "error" when m.Id is not null:
                 Log.Write($"mind: turn error {m.Error}");
+                if (m.Id == _chatTurn) ThinkingFace(false);
                 if (m.Id == _chatTurn && FromWindow(m.Id))
                 {
                     if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Chat?.Said(Address.For(Address.You, ChatReply.Learning));
@@ -363,6 +414,7 @@ internal sealed partial class MindEngine
             return;
         }
         _ran.Remove(id, out var ran);
+        if (id == _chatTurn) ThinkingFace(false);
         if (id != _chatTurn) { _turns.Remove(id); Forget(id); Log.Write("mind: said dropped (late)"); return; }   // a replaced turn's late words
         _chatTurn = null;
         _turns.Remove(id);
@@ -370,8 +422,8 @@ internal sealed partial class MindEngine
         {
             _windowTurn = null;
             if (text.Length == 0) { Chat?.Thinking(false); Log.Write("mind: said dropped (empty)"); return; }
-            Log.Write($"mind: said to the chat ({text.Length} chars)");
-            Chat?.Said(Address.For(Address.You, text));
+            Log.Write($"mind: said to the chat ({text.Length} chars, {(m.Brain == "online" ? "online" : "local")})");
+            Chat?.Said(Address.For(Address.You, text), brain: m.Brain == "online" ? "online" : "local");
             return;
         }
         Menu.MindThinking(false);

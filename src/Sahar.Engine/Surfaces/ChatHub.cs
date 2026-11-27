@@ -40,6 +40,16 @@ internal sealed class ChatHub
 
     /// <summary>A line he sent from the window: App runs it like the card's chat row, with her answer coming back here.</summary>
     public Action<string>? Send { get; set; }
+    /// <summary>0.17: his tap on the brain chip (online | local), saved by the Mind's engine side.</summary>
+    public Action<string>? SetBrain { get; set; }
+    private readonly HashSet<string> _suggested = [];
+
+    /// <summary>0.17 spec §9: the «أونلاين أحلى» suggestion, at most once per conversation.</summary>
+    public bool SuggestOnce() => _suggested.Add(_conv ?? "new");
+
+    /// <summary>The settings or the Mind's status changed (the chip shows or hides).</summary>
+    public void Refresh() { if (_open) Push(); }
+
     /// <summary>He was answered while the window was closed: her content-free say bubble («ردّيت عليك»).</summary>
     public Action? AnsweredWhileClosed { get; set; }
 
@@ -124,6 +134,10 @@ internal sealed class ChatHub
                     break;
                 case "copy" when e.Value is { } mid && int.TryParse(mid.TrimStart('m'), out int i): CopyDraft(i); break;
                 case "ask" when e.Value is { } a: AnswerAsk(a); break;
+                case "brain" when e.Value is "online" or "local":
+                    SetBrain?.Invoke(e.Value);
+                    Log.Write($"chat: brain {e.Value}");
+                    break;
             }
         }
         catch (Exception x) { Log.Write($"chat: error {x.GetType().Name}"); }
@@ -165,13 +179,13 @@ internal sealed class ChatHub
     }
 
     /// <summary>Her answer to a line he sent here (or the fast path's reply), with an optional receipt line.</summary>
-    public void Said(string text, string? receipt = null, string? receiptIcon = null)
+    public void Said(string text, string? receipt = null, string? receiptIcon = null, string? brain = null)
     {
         _typing = false;
         _partial = null;
         _partialTimer.Stop();
         var m = new ChatEntry(_now(), ChatWho.Her, receipt is null ? ChatLine.Text : ChatLine.Receipt,
-            receipt is null ? text : text + "\n" + receiptIcon + "\u0001" + receipt);
+            receipt is null ? text : text + "\n" + receiptIcon + "\u0001" + receipt) { Brain = brain };
         _conv = _store.Append(_conv, m);
         if (_open) Push();
         else AnsweredWhileClosed?.Invoke();
@@ -324,6 +338,11 @@ internal sealed class ChatHub
         var j = JModel.Of("chat").S("view", _view).S("conv", _conv ?? "").S("name", "سحورة").N("max", 500).T("typing", _typing).S("partial", _partial);
         j.O("labels").S("all", "كل الحكي").S("new", "حكي جديد").S("close", "سكّر").S("typing", "عم تكتب…").S("send", you("ابعت"))
             .S("composer", "احكي مع سحورة").S("placeholder", you("احكي معي…")).S("newBelow", "جديد").S("back", "رجوع").S("dialog", "الحكي مع سحورة").End();
+        // 0.17 spec §8: the brain chip, only when online can answer (hidden, not disabled, otherwise).
+        var st = _settings();
+        bool chip = Sahar.Core.Mind.Online.OnlineChain.Usable(st);
+        j.O("brain").T("show", chip).S("value", st.MindChatBrain == "local" ? "local" : "online").S("online", "أونلاين").S("local", "محلي")
+            .S("hint", st.MindChatBrain == "local" ? "عم جاوب من عقلي المحلي" : "عم جاوب أونلاين، والأفعال من عقلي المحلي").End();
         var info = _conv is null ? null : _store.List().FirstOrDefault(c => c.Id == _conv);
         j.S("status", info?.Title ?? "حكي جديد");
         var msgs = _conv is null ? [] : _store.Load(_conv);
@@ -421,10 +440,15 @@ internal sealed class ChatHub
                 j.S("kind", "text").S("text", m.Text);
                 break;
         }
+        // 0.17: her lines carry a tiny badge of the brain that wrote them (once online was used at all).
+        if (m.Who == ChatWho.Her && m.Kind is ChatLine.Text or ChatLine.Receipt && m.Brain is { } b) j.S("brain", b == "online" ? "أونلاين" : "محلي").S("brainId", b);
         j.End();
     }
 
     public string Describe() =>
         $"open={(_open ? "true" : "false")} view={_view} conv={(_conv is null ? "none" : "some")} count={(_conv is null ? 0 : _store.Load(_conv).Count)} " +
-        $"chats={_store.List().Count} saving={(_store.Saving ? "true" : "false")} typing={(_typing ? "true" : "false")} drafts={Drafts}";
+        $"chats={_store.List().Count} saving={(_store.Saving ? "true" : "false")} typing={(_typing ? "true" : "false")} drafts={Drafts} " +
+        $"chip={(Sahar.Core.Mind.Online.OnlineChain.Usable(_settings()) ? _settings().MindChatBrain : "hidden")} lastBrain={LastBrain()}";
+
+    private string LastBrain() => _conv is null ? "none" : _store.Load(_conv).LastOrDefault(m => m.Who == ChatWho.Her && m.Kind != ChatLine.Ask)?.Brain ?? "none";
 }

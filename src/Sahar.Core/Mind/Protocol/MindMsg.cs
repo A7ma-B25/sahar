@@ -124,4 +124,5 @@ public static class MindWire
 [JsonSerializable(typeof(Runtime.ModelManifest))]
 [JsonSerializable(typeof(Runtime.DownloadState))]
 [JsonSerializable(typeof(Memory.ProfileItem))]
+[JsonSerializable(typeof(OnlineInfo))]
 public sealed partial class MindJson : JsonSerializerContext;

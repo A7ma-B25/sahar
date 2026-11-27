@@ -192,6 +192,17 @@ public class ChatStoreTests
         var id = s.Append(null, new ChatEntry(_now, ChatWho.Her, ChatLine.Ask, "بدي احفظ ملاحظة. بتسمحلي؟") { Answer = "yes" });
         Assert.Equal("yes", s.Load(id)[0].Answer);
     }
+
+    [Fact]
+    public void Brain_RoundTrips_AndOldLinesHaveNone()
+    {
+        var box = new Box();
+        var id = Store(box).Append(null, Me("اشرحلي شي"));
+        Store(box).Append(id, Her("هيك…") with { Brain = "online" });
+        var again = Store(box).Load(id);
+        Assert.Null(again[0].Brain);
+        Assert.Equal("online", again[1].Brain);
+    }
 }
 
 public class ChatStoreRealBoxTests : IDisposable

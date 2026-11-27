@@ -978,6 +978,8 @@ internal sealed unsafe class App
             ActivityTools = new Sahar.Engine.Mind.ActivityToolsAdapter(weatherSource, claudeSource, shelfSource, acts, () => settings),
             IsDraftAsk = t => Sahar.Core.Mind.Drafts.DraftAsk.Parse(t) is not null,
             DrawerPause = () => Safe(drawer.Pause), DrawerForget = () => Safe(drawer.Forget),
+            // 0.17 (ruling R2): a card line asking her to write or explain goes to the chat window, where long words live.
+            MoveToChat = text => ui.TryEnqueue(() => Safe(() => { menu.Close(); chat.Open(); chat.Mine(text); ChatLine(text, window: true); })),
         };
         mind.Attach();
         pipe.Register("state", _ => new PipeReply(true, State: _state.Snapshot()));
