@@ -39,4 +39,20 @@ plays» (44760115118, 0.14.1), «still 646 px from the typing spot» (4361191723
 (0.14.0), the 0.16 update-question and settings-folder steps (fixed on feat/0.16-look before 39c523e).
 
 ## Proof runs
-(see below)
+- ui-test all **45996716033** on 46b10fa: green, no re-run. UI part 15.4 min (12:12:32 → 12:27:54); mind-eval ran
+  beside it (tools/mind/fetch.ps1 changed) and passed in 23.5 min. The face tap burst ran at 17 fps — the old check
+  would have failed it — and passed with 24 frames in the fade, largest gap 144 ms; hide-and-seek found the test window
+  on the first game; the thirty copies kept items 30…11 exactly.
+- test-build publish=false **45996921271** on the same SHA: waited 9 min for that ui-test, then ran smoke + gallery
+  (66 s) instead of every stage (37.3 min in 45963348861); its own mind-eval skipped (one was already going).
+  15.8 min in all, against 42 min for 0.16.0's (45963348861).
+- ui-test stages=auto base=46b10fa **45999425636** on b6af6af (this ledger, docs only): plan picked `stages=smoke`,
+  `brain=false` → mind-eval skipped; 5.1 min. Its build job restored the NuGet and llama.cpp caches (Native AOT publish
+  57 s against 77–81 s; the zips "cached, verified").
+
+## Before / after (one release gate: ui-test all + test-build + mind-eval on the candidate)
+- Before, 0.16.0 on 39c523e: ui-test all 45963289158 22 min (a face flake, re-run), test-build 45963348861 42 min (the
+  UI suite again, serially), ui-test mindeval 45966753654 20 min by hand after: 08:07 → 08:54, **47 min**; then the
+  push to main's ui-test all 45969673666 failed on another face flake.
+- After, ci/speed: ui-test all with mind-eval beside it + test-build started together: 12:12 → 12:36, **23.5 min**
+  (about 16 min when her brain is untouched: no mind-eval; test-build then ends ~2 min after the UI jobs).
