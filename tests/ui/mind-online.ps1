@@ -83,8 +83,14 @@ function Stage-MindOnline {
             if ((Fake-Total) -ne $before) { throw 'a card line reached the online provider' }
         }
         Step 'online: a chat-window line streams online, with the «أونلاين» badge' {
+            $gm = Fake-Count '/groq/models'
+            $c0 = Fake-Count '/groq/chat/completions'
             Send '{"type":"cmd","name":"chat-open","args":{"fresh":"true"}}' | Out-Null
             Wait-Surface 'chat' | Out-Null
+            # 0.17.2: opening the window warms each keyed provider's connection with a request that spends no chat quota.
+            Wait-Until { (MindLog) -match 'online: warm groq ok' -and (MindLog) -match 'online: warm openrouter ok' } 10000 "the window did not warm the connections: $(([regex]::Matches((MindLog), 'online: warm[^\r\n]*') | ForEach-Object Value) -join '; ')"
+            if ((Fake-Count '/groq/models') -le $gm) { throw 'the warm-up did not reach groq' }
+            if ((Fake-Count '/groq/chat/completions') -ne $c0) { throw 'the warm-up spent a chat request' }
             $n = Fake-Count '/groq/chat/completions'
             $sw = [Diagnostics.Stopwatch]::StartNew()
             Window-Line 'شو رأيك بالقهوة الصبح؟'

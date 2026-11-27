@@ -11,13 +11,13 @@ namespace Sahar.Core.Mind.Online;
 /// Review C1: "out for the day" comes ONLY from the provider's own daily numbers (Groq's x-ratelimit-*-requests for
 /// <see cref="QuotaKind.Headers"/> providers; OpenRouter's key counter, whose day is UTC); any other 429 is a short
 /// cooldown (Retry-After, else 45 s) held in memory. Review I5: after every provider failed to connect, online rests for
-/// 3 minutes. "She told him" happens once a day. Counts live in her SecretBox (<c>online-state</c>; numbers only); a
+/// a minute (0.17.2: was 3; a timed-out or unreachable provider alone cools for <see cref="ProviderCooldown"/>). "She told him" happens once a day. Counts live in her SecretBox (<c>online-state</c>; numbers only); a
 /// box that cannot be read now is never written over. Thread-safe.
 /// </summary>
 public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
 {
     public const string File = "online-state";
-    public static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(45), OfflineRest = TimeSpan.FromMinutes(3);
+    public static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(45), OfflineRest = TimeSpan.FromSeconds(60), ProviderCooldown = TimeSpan.FromSeconds(60);
     private readonly object _gate = new();
     private string? _day;
     private bool _told;
@@ -54,6 +54,13 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
         lock (_gate) _cool[provider] = now() + (retryAfter is { } s && s > 0 ? TimeSpan.FromSeconds(Math.Min(s, 600)) : DefaultCooldown);
     }
 
+    /// <summary>0.17.2: a provider that timed out or could not be reached: skipped for <paramref name="for"/> while the
+    /// others are still tried (one slow provider is not "no internet").</summary>
+    public void Cool(string provider, TimeSpan @for)
+    {
+        lock (_gate) _cool[provider] = now() + @for;
+    }
+
     public bool Cooling(string provider)
     {
         lock (_gate) return _cool.TryGetValue(provider, out var until) && now() < until;
@@ -62,6 +69,8 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
     /// <summary>Every provider failed to connect: online rests a few minutes (no 3 × 12 s wait before each answer).</summary>
     public void GoOffline() { lock (_gate) _offlineUntil = now() + OfflineRest; }
     public bool Offline { get { lock (_gate) return now() < _offlineUntil; } }
+    /// <summary>0.17.2: a provider answered (the warm-up): the rest ends now.</summary>
+    public void BackOnline() { lock (_gate) _offlineUntil = DateTimeOffset.MinValue; }
 
     public bool Exhausted(string provider)
     {
@@ -260,6 +269,25 @@ public static class KeyCheck
         }
         catch (HttpRequestException) { return new KeyResult(OnlineErrors.Offline); }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return new KeyResult(OnlineErrors.Timeout); }
+    }
+
+    /// <summary>0.17.2: opens the TLS connection before his first line (the chat window opened), on the same handler the
+    /// chat uses so the pooled connection is warm. Spends no chat quota: OpenRouter's <c>GET key</c> (documented as not
+    /// counted), <c>GET models</c> elsewhere (Groq's limits are per model, for its inference calls). True when the host
+    /// answered at all (any status: the connection is up); false on a transport failure or after 15 s.</summary>
+    public static async Task<bool> WarmAsync(HttpMessageHandler handler, ProviderProfile p, string key, CancellationToken ct)
+    {
+        using var http = new HttpClient(handler, disposeHandler: false) { BaseAddress = p.BaseUrl, Timeout = TimeSpan.FromSeconds(15) };
+        using var req = new HttpRequestMessage(HttpMethod.Get, p.Quota == QuotaKind.OpenRouterKey ? "key" : "models");
+        req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
+        foreach (var (k, v) in p.Headers) req.Headers.TryAddWithoutValidation(k, v);
+        try
+        {
+            using var r = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            return true;
+        }
+        catch (HttpRequestException) { return false; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
     }
 
     /// <summary>Is <paramref name="model"/> in a models list (<c>data[].id</c>)? null when the body is not such a list.</summary>

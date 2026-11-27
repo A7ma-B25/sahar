@@ -16,8 +16,11 @@ public sealed record OnlineOutcome(bool Answered, string? Provider, string? Last
 /// One online turn (spec 0.17 §4, §6, §7): ONE plain-text streamed chat-completions request per usable provider of the
 /// chain, in order — no tools, no decision JSON. 429/5xx are tried once more after Retry-After (≤ 3 s) or 800 ms; every
 /// attempt counts. Review C1: a 429 after the retry is a cooldown, not the day's end — only the provider's own daily
-/// numbers (Groq's headers, OpenRouter's key counter) end its day. Review I5: when every provider failed to connect,
-/// online rests 3 minutes and she says so once; no first word within <see cref="FirstWordCap"/> ends the online try.
+/// numbers (Groq's headers, OpenRouter's key counter) end its day. Review I5 / 0.17.2: only when EVERY provider that
+/// could answer was tried and none could be reached (DNS, connect, TLS, proxy) online rests a minute and she says «ما في
+/// نت» once; a provider that timed out or could not be reached alone cools for a minute while the others are tried; no
+/// first word within <see cref="FirstWordCap"/> ends the online try (that provider cools; not "offline"). 0.17.2: a 429
+/// on an OpenRouter free model takes its one retry on the alternate free model, at once (≤ 2 requests per provider).
 /// Review I1: only earlier ONLINE pairs go in the prompt. Review I3: words stream as cumulative <c>partial</c>s through
 /// the same SayGuard as her say, and the guarded line is what history keeps. Distress never reaches here (the router
 /// sends it to the local runner); the check below is a last net. Never logs text.
@@ -58,12 +61,18 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
         cap.CancelAfter(FirstWordCap);
         bool firstWord = false;
         string? last = null;
-        bool spoke = false, allUnreachable = true;
+        bool spoke = false;
+        // 0.17.2: "no internet" needs every provider that could answer (not out for today) tried and unreachable.
+        bool everyoneTried = chain.Where(c => !state.Exhausted(c.P.Id)).All(c => usable.Any(u => u.P.Id == c.P.Id));
+        int tried = 0, unreachable = 0;
         foreach (var (p, key) in usable)
         {
-            var request = new LlmRequest(OnlinePrompt.Build(persona, onlinePairs, personal, turn.Situation, line, p.PromptCap), null, Sampling.Online);
+            tried++;
+            var messages = OnlinePrompt.Build(persona, onlinePairs, personal, turn.Situation, line, p.PromptCap);
+            string? model = null;
             for (int attempt = 1; attempt <= 2; attempt++)
             {
+                var request = new LlmRequest(messages, null, Sampling.Online, model);
                 ct.ThrowIfCancellationRequested();
                 state.Count(p.Id);
                 var words = new StringBuilder();
@@ -84,7 +93,7 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                     var reply = await client(p, key).CompleteAsync(request, Partial, cap.Token);
                     if (p.Quota == QuotaKind.Headers) state.Seen(p.Id, reply.Rate);
                     var said = reply.Text.Trim();
-                    if (said.Length == 0) { last = OnlineErrors.BadOutput; allUnreachable = false; Log?.Invoke($"{p.Id} {last}"); break; }
+                    if (said.Length == 0) { last = OnlineErrors.BadOutput; Log?.Invoke($"{p.Id} {last}"); break; }
                     var guarded = Guard(said, english);
                     io.Send(new MindMsg { T = "say", Id = id, Text = guarded.Text, Mood = guarded.Mood, Final = true, Brain = "online" });
                     history.Add(line, guarded.Text ?? said, "online");
@@ -94,7 +103,8 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                 {
                     Log?.Invoke($"{p.Id} no first word in {FirstWordCap.TotalSeconds:0}s");
                     Wipe();
-                    return new(false, null, OnlineErrors.Timeout, Rest(), 0, (int)sw.ElapsedMilliseconds, 0);
+                    state.Cool(p.Id, OnlineState.ProviderCooldown);   // 0.17.2: slow is not offline
+                    return new(false, null, OnlineErrors.Timeout, null, 0, (int)sw.ElapsedMilliseconds, 0);
                 }
                 catch (Exception x) when (x is HttpRequestException or IOException)
                 {
@@ -102,6 +112,8 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                     last = OnlineErrors.Offline;
                     Log?.Invoke($"{p.Id} offline {x.GetType().Name} (attempt {attempt})");
                     Wipe();
+                    unreachable++;
+                    state.Cool(p.Id, OnlineState.ProviderCooldown);
                     break;
                 }
                 catch (MindRuntimeException e)
@@ -111,7 +123,20 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                     if (p.Quota == QuotaKind.Headers) state.Seen(p.Id, rate);
                     Log?.Invoke($"{p.Id} {e.Code}{(e.Detail is { } d ? " " + d : "")} (attempt {attempt})");
                     Wipe();
-                    if (e.Code is not (OnlineErrors.Offline or OnlineErrors.Timeout)) allUnreachable = false;
+                    if (e.Code is OnlineErrors.Offline or OnlineErrors.Timeout)
+                    {
+                        // 0.17.2: this provider alone cools a minute; the next is tried. Only "could not reach" counts
+                        // toward «ما في نت» (a late first byte is a slow provider, his VPN's cold start).
+                        if (e.Code == OnlineErrors.Offline) unreachable++;
+                        state.Cool(p.Id, OnlineState.ProviderCooldown);
+                        break;
+                    }
+                    if (e.Code == OnlineErrors.Quota && attempt == 1 && p.Alternate is { } alt && !state.Exhausted(p.Id))
+                    {
+                        model = alt;   // a busy free model: its sibling at once, as the one retry
+                        Log?.Invoke($"{p.Id} alternate {alt}");
+                        continue;
+                    }
                     if (OnlineErrors.Retryable(e.Code) && attempt == 1 && !state.Exhausted(p.Id))
                     {
                         var wait = rate?.RetryAfterS is { } s && s > 0 ? TimeSpan.FromSeconds(Math.Min(s, MaxRetryWait.TotalSeconds)) : RetryWait;
@@ -123,7 +148,8 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                 }
             }
         }
-        string? note = allUnreachable ? Rest() : AllOut(chain) && state.TellOnce() ? ToldLine : null;
+        bool offline = tried > 0 && unreachable == tried && everyoneTried;
+        string? note = offline ? Rest() : AllOut(chain) && state.TellOnce() ? ToldLine : null;
         return new(false, null, last, note, 0, (int)sw.ElapsedMilliseconds, 0);
 
         void Wipe()
@@ -137,7 +163,7 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
     /// <summary>Every provider of the chain is out for today by its own numbers.</summary>
     private bool AllOut(IReadOnlyList<(ProviderProfile P, string Key)> chain) => chain.All(c => state.Exhausted(c.P.Id));
 
-    /// <summary>No provider could be reached: online rests a few minutes; she says it once per rest.</summary>
+    /// <summary>No provider could be reached: online rests a minute; she says it once per rest.</summary>
     private string? Rest()
     {
         bool already = state.Offline;

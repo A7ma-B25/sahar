@@ -135,7 +135,7 @@ public sealed class OnlineStoreTests
         Assert.Equal("quota", (await KeyCheck.RunAsync(f, ProviderProfiles.OpenRouter(), "k", default)).Code);
     }
 
-    private static FakeProvider.Answer Models() => new(HttpStatusCode.OK, """{"data":[{"id":"google/gemma-4-31b-it:free"},{"id":"openai/gpt-oss-120b"}]}""");
+    private static FakeProvider.Answer Models() => new(HttpStatusCode.OK, """{"data":[{"id":"google/gemma-4-26b-a4b-it:free"},{"id":"google/gemma-4-31b-it:free"},{"id":"openai/gpt-oss-120b"}]}""");
 
     [Theory]
     [InlineData(200, "ok")]

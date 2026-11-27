@@ -182,14 +182,14 @@ public sealed class ReviewFixTests
     [Fact]
     public async Task I5_AllOffline_SkipsOnlineForMinutes_NoteOnce()
     {
-        Fail("groq", "offline"); Fail("openrouter", "timeout");
+        Fail("groq", "offline"); Fail("openrouter", "offline");   // 0.17.2: a timeout alone is not offline (Fix0172Tests)
         var r = await Turn().RunAsync(Line("x"), Hello, Chain("groq", "openrouter"), new FakeIO(), default);
         Assert.Equal(OnlineTurn.OfflineLine, r.Note);
         Assert.True(State.Offline);
         var r2 = await Turn().RunAsync(Line("y"), Hello, Chain("groq", "openrouter"), new FakeIO(), default);
         Assert.Null(r2.Note);
         Assert.Equal(2, _asked.Count);   // nothing asked while offline
-        _now = _now.AddMinutes(4);
+        _now = _now.AddSeconds(61);   // 0.17.2: a minute's rest (was 3)
         Assert.False(State.Offline);
     }
 
@@ -201,6 +201,8 @@ public sealed class ReviewFixTests
         var r = await t.RunAsync(Line("x"), Hello, Chain("groq", "openrouter"), new FakeIO(), default);
         Assert.False(r.Answered);
         Assert.Equal(1, slow.Calls);   // the cap ends the online turn, not just this provider
+        Assert.Null(r.Note);   // 0.17.2: slow is not «ما في نت»
+        Assert.False(State.Offline);
     }
 
     private sealed class SlowLlm : ILlm

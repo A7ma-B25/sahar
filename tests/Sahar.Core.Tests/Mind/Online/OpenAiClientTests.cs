@@ -61,7 +61,7 @@ public sealed class OpenAiClientTests
         Assert.Equal(11, r.PromptTokens);
         Assert.Equal(7, r.OutputTokens);
         Assert.Equal("Sahar", f.Seen[0].Req.Headers.GetValues("X-Title").Single());
-        Assert.Equal("google/gemma-4-31b-it:free", Body(f).GetProperty("model").GetString());
+        Assert.Equal(ProviderProfiles.OpenRouterDefault, Body(f).GetProperty("model").GetString());
     }
 
     [Theory]

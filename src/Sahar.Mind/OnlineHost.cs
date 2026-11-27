@@ -18,8 +18,14 @@ namespace Sahar.Mind;
 internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> send)
 {
     // The system proxy (UseProxy defaults to the system's settings); a fresh connection now and then (his VPN may change).
-    // Review: no redirects (a key never follows one), and a short connect (his VPN down must not cost 3 × 10 s).
-    private readonly SocketsHttpHandler _http = new() { UseProxy = true, AllowAutoRedirect = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5), ConnectTimeout = TimeSpan.FromSeconds(6) };
+    // Review: no redirects (a key never follows one). 0.17.2: connect 10 s (was 6: his first TLS through a cold VPN took
+    // longer), and a warmed connection stays pooled 4 minutes idle (the default 1 minute dropped it before his line).
+    private readonly SocketsHttpHandler _http = new()
+    {
+        UseProxy = true, AllowAutoRedirect = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(4), ConnectTimeout = TimeSpan.FromSeconds(10),
+    };
+    private long _warmAt;
     private readonly Dictionary<string, OpenAiClient> _clients = [];
     private ISecretBox? _box;
     private OnlineState? _state;
@@ -64,7 +70,7 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
         PartialEvery = TimeSpan.FromMilliseconds(60),
     };
 
-    /// <summary>engine → mind <c>online</c>: key | forget | test | status | bench (Model = the provider id; Text = the key, never logged).</summary>
+    /// <summary>engine → mind <c>online</c>: key | forget | test | status | bench | warm (Model = the provider id; Text = the key, never logged).</summary>
     public async Task HandleAsync(MindMsg m, CancellationToken ct)
     {
         var provider = m.Model ?? "";
@@ -92,6 +98,9 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
                 break;
             case "status":
                 await RefreshOpenRouterAsync(ct);
+                break;
+            case "warm":
+                await WarmAsync(ct);
                 break;
         }
         SendStatus();
@@ -125,6 +134,29 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
         if (r.Used is { } u && r.Limit is { } l) State.SetRemote(provider, u, l);
         else if (r.Code == OnlineErrors.Quota) State.Exhaust(provider);
         MindLog.Write($"online: key test {provider} {r.Code}");
+    }
+
+    /// <summary>0.17.2: the chat window opened — each keyed provider's connection is opened now with a request that spends
+    /// no chat quota (<see cref="KeyCheck.WarmAsync"/>), so his first line does not pay DNS + TLS through the VPN. At most
+    /// once a minute. A provider that answered ends a "no internet" rest at once. (Saving a key warms too: its test is
+    /// the same kind of request on the same handler.)</summary>
+    private async Task WarmAsync(CancellationToken ct)
+    {
+        var s = settings();
+        if (s.MindLocalOnly || !s.MindOnlineConsent) return;
+        long now = Environment.TickCount64;
+        if (_warmAt != 0 && now - _warmAt < 60_000) return;
+        _warmAt = now;
+        var chain = Chain();
+        if (chain.Count == 0) return;
+        var reached = await Task.WhenAll(chain.Select(async c =>
+        {
+            var sw = Stopwatch.StartNew();
+            bool ok = await KeyCheck.WarmAsync(_http, c.P, c.Key, ct);
+            MindLog.Write($"online: warm {c.P.Id} {(ok ? "ok" : "failed")} {sw.ElapsedMilliseconds}ms");
+            return ok;
+        }));
+        if (reached.Any(r => r) && State.Offline) { State.BackOnline(); MindLog.Write("online: back online (warm)"); }
     }
 
     /// <summary>OpenRouter's own counter (GET key costs no quota): at start, on the page, after its calls.</summary>

@@ -16,8 +16,9 @@ public sealed record Sampling(double Temperature = 0.7, double TopP = 0.9, int T
 public sealed record RateInfo(int? Remaining, int? Limit, double? RetryAfterS);
 
 /// <summary>A completion request. <see cref="JsonSchema"/> non-null = the reply is grammar-constrained to it
-/// (llama-server <c>response_format: json_schema</c>).</summary>
-public sealed record LlmRequest(IReadOnlyList<ChatMessage> Messages, string? JsonSchema = null, Sampling? Sampling = null);
+/// (llama-server <c>response_format: json_schema</c>). <see cref="Model"/>: 0.17.2, another model id of the same
+/// provider for this one request (OpenRouter's alternate free model after a 429); null = the profile's.</summary>
+public sealed record LlmRequest(IReadOnlyList<ChatMessage> Messages, string? JsonSchema = null, Sampling? Sampling = null, string? Model = null);
 
 /// <summary>The model's whole reply plus timings (numbers only reach logs).</summary>
 public sealed record LlmReply(string Text, int PromptTokens, int OutputTokens, TimeSpan FirstToken, TimeSpan Total)

@@ -55,6 +55,9 @@ internal sealed class ChatHub
     /// <summary>The settings or the Mind's status changed (the chip shows or hides).</summary>
     public void Refresh() { if (_open) Push(); }
 
+    /// <summary>0.17.2: the window just opened (the Mind warms the online connection before his first line).</summary>
+    public Action? Opened { get; set; }
+
     /// <summary>He was answered while the window was closed: her content-free say bubble («ردّيت عليك»).</summary>
     public Action? AnsweredWhileClosed { get; set; }
 
@@ -97,6 +100,7 @@ internal sealed class ChatHub
         seq = _client.Show(Surface, "chat", "window", Model(), _body(), e => Event(seq, e));
         _seq = seq;
         Log.Write("chat: open");
+        try { Opened?.Invoke(); } catch (Exception e) { Log.Write($"chat: opened hook failed ({e.GetType().Name})"); }
     }
 
     public void Close()

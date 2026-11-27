@@ -18,22 +18,34 @@ public sealed record ProviderProfile(
     /// <summary>Review C1: the prompt's cap in estimated tokens (Groq's free tier allows 8 K tokens a minute: a smaller
     /// prompt leaves room for the answer and a second question).</summary>
     public int PromptCap { get; init; } = 4000;
+    /// <summary>0.17.2: another model of this provider for the retry after a 429 (OpenRouter's free models only: a busy
+    /// free model's upstream is often fine for its sibling); null = the same model again.</summary>
+    public string? Alternate { get; init; }
 }
 
 /// <summary>The profiles Sahar knows. Facts checked 2026-11-27 (Groq rate-limits and reasoning docs; OpenRouter limits
-/// and its model list).</summary>
+/// and its model list). 0.17.2 (OpenRouter's public GET /api/v1/models, 2026-11-28: ten <c>:free</c> models): the
+/// default is Gemma 4 26B A4B (the family of her local brain, Gemma's 140-language training; a 3.8B-active MoE is
+/// cheaper to serve than the dense 31B that gave him 429 twice); its alternate on a 429 is the 31B (a separate per-model
+/// bucket upstream). Nemotron 3.5 Super VL (NVIDIA-hosted, 120B) and ERNIE 5.5 Flash (Baidu, 280B) are offered too;
+/// their Arabic is not verified.</summary>
 public static class ProviderProfiles
 {
     public const string LocalId = "local", GroqId = "groq", OpenRouterId = "openrouter", CustomId = "custom";
     public static readonly IReadOnlyList<string> OnlineIds = [GroqId, OpenRouterId, CustomId];
 
     public const string GroqDefault = "openai/gpt-oss-120b";
-    public const string OpenRouterDefault = "google/gemma-4-31b-it:free";
+    public const string OpenRouterDefault = "google/gemma-4-26b-a4b-it:free";
 
     /// <summary>Suggestions on the page (any id the provider has works too).</summary>
     public static readonly IReadOnlyList<string> GroqModels = [GroqDefault, "llama-3.3-70b-versatile", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"];
     public static readonly IReadOnlyList<string> OpenRouterModels =
-        [OpenRouterDefault, "google/gemma-4-26b-a4b-it:free", "nvidia/nemotron-3-ultra-550b-a55b:free", "openrouter/free"];
+        [OpenRouterDefault, "google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-super-vl:free", "baidu/ernie-5.5-flash-preview:free", "openrouter/free"];
+
+    /// <summary>The free model tried after a 429 on <paramref name="model"/>: the first other <c>:free</c> id of the list
+    /// (a paid model or the router is never swapped).</summary>
+    public static string? OpenRouterAlternate(string model) =>
+        model.EndsWith(":free", StringComparison.Ordinal) ? OpenRouterModels.FirstOrDefault(m => m != model && m.EndsWith(":free", StringComparison.Ordinal)) : null;
 
     /// <summary>CI only: <c>SAHAR_MIND_ONLINE_BASE</c> (a loopback URL) stands in for the real hosts; anything else is ignored.</summary>
     public static string? TestBase { get; set; } = Environment.GetEnvironmentVariable("SAHAR_MIND_ONLINE_BASE") is { Length: > 0 } b && IsLoopback(b) ? b.TrimEnd('/') + "/" : null;
@@ -49,10 +61,13 @@ public static class ProviderProfiles
         return new(GroqId, "Groq", Base("https://api.groq.com/openai/v1/", "groq"), m, false, true, QuotaKind.Headers, 1000, [], extra) { PromptCap = 2500 };
     }
 
-    public static ProviderProfile OpenRouter(string? model = null) =>
+    public static ProviderProfile OpenRouter(string? model = null)
+    {
+        var m = Model(model, OpenRouterDefault);
         // OpenRouter's attribution headers: a generic app name, nothing about him.
-        new(OpenRouterId, "OpenRouter", Base("https://openrouter.ai/api/v1/", "openrouter"), Model(model, OpenRouterDefault), false, true, QuotaKind.OpenRouterKey, 50,
-            [new("HTTP-Referer", "https://github.com/A7ma-B25/sahar"), new("X-Title", "Sahar")]);
+        return new(OpenRouterId, "OpenRouter", Base("https://openrouter.ai/api/v1/", "openrouter"), m, false, true, QuotaKind.OpenRouterKey, 50,
+            [new("HTTP-Referer", "https://github.com/A7ma-B25/sahar"), new("X-Title", "Sahar")]) { Alternate = OpenRouterAlternate(m) };
+    }
 
     /// <summary>Any OpenAI-compatible endpoint he types (Claude/OpenAI/others later); null when the URL or model is not allowed.</summary>
     public static ProviderProfile? Custom(string? url, string? model)

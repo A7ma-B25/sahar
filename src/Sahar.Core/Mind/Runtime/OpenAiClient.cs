@@ -25,8 +25,9 @@ public sealed class OpenAiClient : ILlm, IDisposable
     private readonly ProviderProfile _p;
     private readonly string _key;
 
-    /// <summary>Online: no first byte within this → timeout (spec §7: 12 s).</summary>
-    public TimeSpan FirstByte { get; init; } = TimeSpan.FromSeconds(12);
+    /// <summary>Online: no first byte within this → timeout (0.17.2: 20 s — his first request goes through a cold VPN,
+    /// and gpt-oss reasons before its first token; was 12 s).</summary>
+    public TimeSpan FirstByte { get; init; } = TimeSpan.FromSeconds(20);
     /// <summary>Online: no byte for this long while streaming → timeout (spec §7: 20 s).</summary>
     public TimeSpan Stall { get; init; } = TimeSpan.FromSeconds(20);
 
@@ -76,6 +77,10 @@ public sealed class OpenAiClient : ILlm, IDisposable
             using var first = CancellationTokenSource.CreateLinkedTokenSource(ct);
             first.CancelAfter(FirstByte);
             try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, first.Token); break; }
+            // 0.17.2: the handler's ConnectTimeout (TaskCanceledException over a TimeoutException) is connect-level, not a
+            // late first byte (his log said «timeout first-byte» after 6 s: it was the connect).
+            catch (OperationCanceledException e) when (!ct.IsCancellationRequested && !first.IsCancellationRequested && e.InnerException is TimeoutException)
+            { throw new MindRuntimeException(OnlineErrors.Offline, "connect-timeout"); }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new MindRuntimeException(OnlineErrors.Timeout, "first-byte"); }
             catch (HttpRequestException e) { throw new MindRuntimeException(OnlineErrors.Offline, e.HttpRequestError.ToString()); }
         }
@@ -174,7 +179,7 @@ public sealed class OpenAiClient : ILlm, IDisposable
         using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
         {
             w.WriteStartObject();
-            w.WriteString("model", _p.Model);
+            w.WriteString("model", r.Model ?? _p.Model);
             w.WriteStartArray("messages");
             foreach (var m in r.Messages)
             {
