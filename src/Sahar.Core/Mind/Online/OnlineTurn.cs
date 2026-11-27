@@ -145,7 +145,7 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
         return already ? null : OfflineLine;
     }
 
-    /// <summary>Her words through the same last check as every say (labels and diagnoses become the listening line).</summary>
+    /// <summary>Her words through the same last check as every say (0.17 owner decision: a risk-high tag only; no word filter).</summary>
     private static MindMsg Guard(string text, bool english) =>
         SayGuard.Check(new MindMsg { T = "say", Text = text }, english).Msg;
 }

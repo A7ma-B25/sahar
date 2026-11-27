@@ -8,18 +8,19 @@ namespace Sahar.Core.Tests.Mind;
 /// becomes the fixed, reviewed reply (never improvised). Checked on every say before it leaves the Mind.</summary>
 public sealed class SayGuardTests
 {
+    /// <summary>Owner decision 2026-11-27 («لا ما بدي هي الحماية الغيها»): the output word filter is gone for both
+    /// brains — her words pass as written (a technical answer about «تشخيص المشكلة» or "diagnostics" too). The prompt's
+    /// rules (no diagnosing him, no labels or medicines) and the fixed distress handling stay.</summary>
     [Theory]
     [InlineData("يمكن عندك اكتئاب، لازم تشوف دكتور")]
-    [InlineData("هاد شكلو ADHD")]
+    [InlineData("شغّل أداة تشخيص المشكلة بالويندوز")]
     [InlineData("You might have an anxiety disorder.")]
-    [InlineData("حاسة إنك مكتئب")]
-    [InlineData("sounds like PTSD to me")]
-    public void Labels_AreRewritten(string say)
+    [InlineData("Run the diagnostics, then read about trauma-informed design.")]
+    public void WordFilter_Removed_WordsPassAsWritten(string say)
     {
         var r = SayGuard.Check(new MindMsg { T = "say", Text = say });
-        Assert.NotEqual(say, r.Text);
-        Assert.Equal(SayGuard.Rewritten, r.Kind);
-        Assert.DoesNotMatch("(?i)اكتئاب|مكتئب|ADHD|disorder|PTSD", r.Text!);
+        Assert.Equal(say, r.Text);
+        Assert.Equal(SayGuard.Kept, r.Kind);
     }
 
     [Theory]

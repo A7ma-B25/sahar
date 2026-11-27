@@ -154,26 +154,17 @@ public sealed class ReviewFixTests
         Assert.Equal((BrainChoice.Local, "distress"), r);
     }
 
-    // ---- I3 (partial; ruling R10: SayGuard's list is a safety rule and stays as is) ----
+    // ---- I3 (owner decision 2026-11-27: the output word filter is removed; a risk-high say still becomes the fixed reply) ----
 
     [Fact]
-    public async Task I3_HistoryStoresTheGuardedLine()
+    public async Task I3_TechnicalAnswer_KeptWhole_AndInHistory()
     {
-        Say("groq", "عندك اكتئاب");
+        const string text = "شغّل أداة تشخيص المشكلة، وبعدين شوف الـ diagnostics.";
+        Say("groq", text);
         var io = new FakeIO();
         await Turn().RunAsync(Line("x"), Hello, Chain("groq"), io, default);
-        Assert.Equal(SayGuard.SafeArabic, io.Final.Text);
-        Assert.Equal(SayGuard.SafeArabic, History.Recent().Single().Her);
-    }
-
-    [Fact]
-    public async Task I3_PartialsAreGuardedToo_NeverShownThenSwapped()
-    {
-        Q("groq").Enqueue(p => { p?.Invoke("طيب، "); p?.Invoke("عندك اكتئاب "); p?.Invoke("وهيك"); return new LlmReply("طيب، عندك اكتئاب وهيك", 1, 1, TimeSpan.Zero, TimeSpan.Zero); });
-        var io = new FakeIO();
-        await Turn().RunAsync(Line("x"), Hello, Chain("groq"), io, default);
-        Assert.DoesNotContain(io.Of("partial"), m => m.Text!.Contains("اكتئاب"));
-        Assert.Contains(io.Of("partial"), m => m.Text == SayGuard.SafeArabic);
+        Assert.Equal(text, io.Final.Text);
+        Assert.Equal(text, History.Recent().Single().Her);
     }
 
     // ---- I4: digits stay as written in code, links and numbers mixed with Latin ----
