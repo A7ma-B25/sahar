@@ -1,8 +1,9 @@
 """What already passed on this commit, so a workflow does not run it again (GitHub's API through `gh`, GITHUB_TOKEN).
 
     python -I tools/ci/prior_runs.py ui --repo OWNER/NAME --sha SHA [--wait-minutes 45]
-        A successful "ui-test all" run on SHA (every UI stage passed): prints run=<id>, or run= when there is none.
-        While one is still running (or re-running) on SHA it waits for it, up to --wait-minutes, then decides.
+        A "ui-test all" run on SHA whose build and UI jobs all passed (every UI stage; a mind-eval beside them does
+        not count): prints run=<id>, or run= when there is none. While one is still running (or re-running) on SHA
+        it waits for it, up to --wait-minutes, then decides.
     python -I tools/ci/prior_runs.py mindeval --repo OWNER/NAME --sha SHA
         A mind-eval that succeeded on SHA (a ui-test or test-build run whose mind-eval job passed): prints run=<id> or run=.
 
@@ -18,12 +19,20 @@ FULL_TITLE = "ui-test all"   # ui-test.yml's run-name for stages=all (and every 
 ACTIVE = {"queued", "in_progress", "waiting", "requested", "pending"}
 
 
-def decide_ui(runs):
-    """runs: ui-test runs on one commit (the API's workflow_runs). ('pass', id) when a full run succeeded,
-    ('wait', id) when one is still going, else ('none', None)."""
+def ui_passed(jobs):
+    """A full run's UI part passed: its build and every "ui (...)" job succeeded (a mind-eval beside them, still
+    running or failed, is not a UI stage)."""
+    ui = [j for j in jobs if j.get("name", "").startswith("ui (")]
+    build = [j for j in jobs if j.get("name") == "build"]
+    return bool(ui) and all(j.get("conclusion") == "success" for j in ui + build)
+
+
+def decide_ui(runs, jobs_by_run):
+    """runs: ui-test runs on one commit (the API's workflow_runs); jobs_by_run: {run id: its jobs} for the full ones.
+    ('pass', id) when a full run's UI part passed, ('wait', id) when one is still going, else ('none', None)."""
     full = [r for r in runs if r.get("display_title") == FULL_TITLE]
     for r in full:
-        if r.get("status") == "completed" and r.get("conclusion") == "success":
+        if (r.get("status") == "completed" and r.get("conclusion") == "success") or ui_passed(jobs_by_run.get(r["id"], [])):
             return "pass", r["id"]
     for r in full:
         if r.get("status") in ACTIVE:
@@ -45,6 +54,10 @@ def gh_json(path):
     return json.loads(out)
 
 
+def jobs_of(repo, run_id):
+    return gh_json(f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100")["jobs"]
+
+
 def runs_on(repo, workflow, sha):
     return gh_json(f"repos/{repo}/actions/workflows/{workflow}/runs?head_sha={sha}&per_page=100")["workflow_runs"]
 
@@ -60,7 +73,9 @@ def emit(line):
 def ui(repo, sha, wait_minutes):
     deadline = time.monotonic() + wait_minutes * 60
     while True:
-        verdict, run = decide_ui(runs_on(repo, "ui-test.yml", sha))
+        runs = runs_on(repo, "ui-test.yml", sha)
+        jobs = {r["id"]: jobs_of(repo, r["id"]) for r in runs if r.get("display_title") == FULL_TITLE}
+        verdict, run = decide_ui(runs, jobs)
         if verdict == "pass":
             print(f"a full UI pass on {sha}: run {run}", file=sys.stderr)
             return emit(f"run={run}")
@@ -77,7 +92,7 @@ def mindeval(repo, sha):
     for workflow in ("ui-test.yml", "test-build.yml"):
         for r in runs_on(repo, workflow, sha):
             if r.get("status") == "completed":
-                jobs[r["id"]] = gh_json(f"repos/{repo}/actions/runs/{r['id']}/jobs?per_page=100")["jobs"]
+                jobs[r["id"]] = jobs_of(repo, r["id"])
     run = mindeval_passed(jobs)
     print(f"mind-eval on {sha}: " + (f"passed in run {run}" if run else "none yet"), file=sys.stderr)
     emit(f"run={run or ''}")
