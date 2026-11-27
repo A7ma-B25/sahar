@@ -4344,6 +4344,7 @@ function Stage-Settings {
         SOk 'emulate' '{"theme":"light"}'
         SClick '#on-custom-toggle'
         Wait-Until { (Js "document.getElementById('on-custom-body').hidden") -eq $false } 2000 'the custom provider did not unfold'
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("document.getElementById('on-row-custom').scrollIntoView({ block: 'center' }); true")) + '"}')
         Start-Sleep -Milliseconds 300
         Capture 'app-online-custom-light'
         # The smallest window (720×520 DIP): the page still fits its width.
