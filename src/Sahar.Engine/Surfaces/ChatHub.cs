@@ -40,6 +40,11 @@ internal sealed class ChatHub
 
     /// <summary>A line he sent from the window: App runs it like the card's chat row, with her answer coming back here.</summary>
     public Action<string>? Send { get; set; }
+    /// <summary>0.17 review I1: «حكي جديد» or a deleted conversation — the online brain forgets its pairs.</summary>
+    public Action? Cleared { get; set; }
+    /// <summary>0.17 review: long text (to explain or rewrite) when online can answer; her small local brain gets the start.</summary>
+    private int Max => Sahar.Core.Mind.Online.OnlineChain.Usable(_settings()) ? 8000 : 500;
+
     /// <summary>0.17: his tap on the brain chip (online | local), saved by the Mind's engine side.</summary>
     public Action<string>? SetBrain { get; set; }
     private readonly HashSet<string> _suggested = [];
@@ -116,19 +121,20 @@ internal sealed class ChatHub
                 case "close": Close(); break;
                 case "send" when !string.IsNullOrWhiteSpace(e.Value):
                     var text = e.Value!.Trim();
-                    if (text.Length > 500) text = text[..500];
+                    if (text.Length > Max) text = text[..Max];
                     if (_view != "thread") _view = "thread";
                     Mine(text);
                     Log.Write($"chat: sent ({text.Length} chars)");
                     Send?.Invoke(text);
                     break;
                 case "all": _view = _view == "list" ? "thread" : "list"; Push(); break;
-                case "new": _conv = null; _view = "thread"; Push(); break;
+                case "new": _conv = null; _view = "thread"; Cleared?.Invoke(); Push(); break;
                 case "open" when e.Value is { } id: _conv = id; _view = "thread"; Push(); break;
                 case "rename" when e.Value is { } v && v.Split('\n', 2) is [var rid, var title]: _store.Rename(rid, title); Push(); break;
                 case "delete" when e.Value is { } did:
                     _store.Delete(did);
                     if (_conv == did) _conv = null;
+                    Cleared?.Invoke();
                     Log.Write("chat: conversation deleted");
                     Push();
                     break;
@@ -335,7 +341,7 @@ internal sealed class ChatHub
     internal JModel Model()
     {
         var you = Address.ToYou;
-        var j = JModel.Of("chat").S("view", _view).S("conv", _conv ?? "").S("name", "سحورة").N("max", 500).T("typing", _typing).S("partial", _partial);
+        var j = JModel.Of("chat").S("view", _view).S("conv", _conv ?? "").S("name", "سحورة").N("max", Max).T("typing", _typing).S("partial", _partial);
         j.O("labels").S("all", "كل الحكي").S("new", "حكي جديد").S("close", "سكّر").S("typing", "عم تكتب…").S("send", you("ابعت"))
             .S("composer", "احكي مع سحورة").S("placeholder", you("احكي معي…")).S("newBelow", "جديد").S("back", "رجوع").S("dialog", "الحكي مع سحورة").End();
         // 0.17 spec §8: the brain chip, only when online can answer (hidden, not disabled, otherwise).

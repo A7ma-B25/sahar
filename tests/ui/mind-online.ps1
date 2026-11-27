@@ -111,16 +111,19 @@ function Stage-MindOnline {
             Wait-Until { (MindLog) -match 'turn: initiative \d+ms' } 20000 'the initiative turn'
             if ((Fake-Total) -ne $before) { throw 'a background turn reached the online provider' }
         }
-        Step 'online: groq 429 → retried once → OpenRouter answers; then all out → told once → local' {
+        Step 'online: a 429 is a cooldown (retried once, the next provider answers); a provider''s own count ends its day → told once → local' {
             Fake '/_mode?p=groq&mode=429' 'POST' | Out-Null
+            Fake '/_mode?p=orkey&mode=full' 'POST' | Out-Null   # OpenRouter's counter reads 50 of 50 after its next answer
             $g = Fake-Count '/groq/chat/completions'
             Window-Line 'احكيلي عن حلب'
             Wait-Until { (MindLog) -match 'turn: online openrouter' } 30000 "no openrouter answer: $((Routes) -join ', ')"
             if ((Fake-Count '/groq/chat/completions') -ne $g + 2) { throw "groq asked $((Fake-Count '/groq/chat/completions') - $g) times (want 2: one try + one retry)" }
-            Fake '/_mode?p=openrouter&mode=429' 'POST' | Out-Null
+            Wait-Until { (MindLog) -notmatch 'fell through' } 1000 'a plain 429 must not end the turn online'
+            Start-Sleep -Seconds 2   # the groq cooldown (Retry-After 1 s) passes; OpenRouter's counter was read after its answer
+            Fake '/_mode?p=groq&mode=429day' 'POST' | Out-Null
+            Wait-Until { $k = Kv 'debug-chat'; $k.typing -eq 'false' } 15000 'the turn did not end'
             Window-Line 'وشو بتحبي تعملي بالعطلة؟'
-            Wait-Until { (MindLog) -match 'fell through \(quota\), told' } 30000 'not told that online is out'
-            # the «out for today» line is hers too (local): wait for the local answer itself to end the turn
+            Wait-Until { (MindLog) -match 'fell through \(quota\), told' } 30000 "not told that online is out: $(([regex]::Matches((MindLog), 'turn: online[^\r\n]*') | Select-Object -Last 1).Value)"
             Wait-Until { $k = Kv 'debug-chat'; $k.lastBrain -eq 'local' -and $k.typing -eq 'false' } 15000 'no local answer after online ran out'
             $her = @(Chat-Her)
             if (-not ($her | Where-Object { $_ -match 'خلّصت طلبات الأونلاين' })) { throw 'her «out for today» line is not in the chat' }
@@ -133,6 +136,7 @@ function Stage-MindOnline {
         Step 'online: «محلي فقط» sends nothing (no turn, no key test, no counter)' {
             Fake '/_mode?p=groq&mode=ok' 'POST' | Out-Null
             Fake '/_mode?p=openrouter&mode=ok' 'POST' | Out-Null
+            Fake '/_mode?p=orkey&mode=ok' 'POST' | Out-Null
             $s = (Settings-Json | ConvertFrom-Json)
             $s | Add-Member -NotePropertyName mindLocalOnly -NotePropertyValue $true -Force
             Write-Settings ($s | ConvertTo-Json -Depth 5)

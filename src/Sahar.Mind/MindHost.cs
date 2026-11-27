@@ -159,21 +159,25 @@ internal sealed class MindHost : ITurnIO
                 {
                     var s = Settings();
                     var chain = _online.Chain();
-                    var (brain, reason) = BrainRouter.Decide(new RouteInput(source, true, turn.Brain, s.MindLocalOnly, s.MindOnlineConsent, turn.Text ?? "", _online.AnyUsable(chain)));
+                    // Review I2: a distress cue goes to the local runner (the fixed reply, and her quiet day after).
+                    bool distressCue = MindParts.PromptParts(Store).Distress(turn.Text ?? "") is not null;
+                    var (brain, reason) = BrainRouter.Decide(new RouteInput(source, true, turn.Brain, s.MindLocalOnly, s.MindOnlineConsent, turn.Text ?? "", _online.AnyUsable(chain), distressCue));
                     MindLog.Write($"turn: route {(brain == BrainChoice.Online ? "online" : "local")} ({reason})");
                     if (brain == BrainChoice.Online)
                     {
                         var o = await _online.Turn(MindParts.PromptParts(Store), Store).RunAsync(turn with { Id = id }, _hello, chain, this, cts.Token);
                         MindLog.Write(o.Answered
                             ? FormattableString.Invariant($"turn: online {o.Provider ?? "fixed"} first={o.FirstMs}ms total={o.TotalMs}ms out={o.OutTokens}")
-                            : $"turn: online fell through ({o.LastError ?? "none"}){(o.Tell ? ", told" : "")}");
+                            : $"turn: online fell through ({o.LastError ?? "none"}){(o.Note == OnlineTurn.ToldLine ? ", told" : o.Note is not null ? ", offline told" : "")}");
                         _online.SendStatus();
                         if (o.Provider == ProviderProfiles.OpenRouterId) _ = _online.RefreshOpenRouterAsync(_quit.Token).ContinueWith(_ => _online.SendStatus(), TaskScheduler.Default);
                         if (o.Answered) return;
-                        // Every online provider is out for today: she says so once, then her local brain answers.
-                        if (o.Tell) Send(new MindMsg { T = "say", Id = id, Text = OnlineTurn.ToldLine, Final = false, Kind = "note", Brain = "local" });
+                        // Out for today, or no internet: she says so once, then her local brain answers.
+                        if (o.Note is { } note) Send(new MindMsg { T = "say", Id = id, Text = note, Final = false, Kind = "note", Brain = "local" });
                     }
                 }
+                // 0.17 review: the chat window takes long text for the online brain; her small local brain gets its start.
+                if (turn.Text is { Length: > LocalLineMax } longLine) turn = turn with { Text = longLine[..LocalLineMax] };
                 if (!_runtime.Loaded)
                 {
                     Send(new MindMsg { T = "state", Id = id, Phase = "loading" });
@@ -221,13 +225,21 @@ internal sealed class MindHost : ITurnIO
         });
     }
 
-    /// <summary>0.17: the page's key, test, status and bench (one at a time is enough; each ends with an online-status).</summary>
+    private const int LocalLineMax = 1000;
+    private readonly SemaphoreSlim _onlineOps = new(1, 1);
+
+    /// <summary>0.17: the page's key, test, status and bench — one at a time (review), each ending with an online-status.</summary>
     private void Online(MindMsg m)
     {
         _lastUse = DateTimeOffset.UtcNow;
         _ = Task.Run(async () =>
         {
-            try { await _online.HandleAsync(m, _quit.Token); }
+            try
+            {
+                await _onlineOps.WaitAsync(_quit.Token);
+                try { await _online.HandleAsync(m, _quit.Token); }
+                finally { _onlineOps.Release(); }
+            }
             catch (OperationCanceledException) { }
             catch (Exception e) { MindLog.Write($"online: {m.Op} failed ({e.GetType().Name})"); _online.SendStatus(); }
         });

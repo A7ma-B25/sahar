@@ -95,7 +95,7 @@ addStrings({
 /** The key test's lines (the Mind's codes, spec §7). */
 export const TEST_LINES = {
   ar: { ok: 'يشتغل ✓', 'key-bad': 'المفتاح غلط', quota: 'خلصت طلبات اليوم', 'no-credit': 'الرصيد خلص عندهن', server: 'المزوّد واقع هلق، جرّب بعدين',
-    'local-only': '«محلي فقط» شغّال: ما بطلع شي برّا', 'no-key': 'ما في مفتاح محفوظ', other: 'محجوب أو ما في نت' },
+    'local-only': '«محلي فقط» شغّال: ما بطلع شي برّا', 'no-key': 'ما في مفتاح محفوظ', 'model-bad': 'اسم الموديل غلط', 'no-consent': 'وافق أول عالملاحظة فوق', other: 'محجوب أو ما في نت' },
   en: { ok: 'Works ✓', 'key-bad': 'Wrong key', quota: 'No requests left today', 'no-credit': 'Out of credit there', server: 'The provider is down now, try later',
-    'local-only': '«Local only» is on: nothing goes out', 'no-key': 'No key saved', other: 'Blocked or no internet' },
+    'local-only': '«Local only» is on: nothing goes out', 'no-key': 'No key saved', 'model-bad': 'Wrong model name', 'no-consent': 'Agree to the note above first', other: 'Blocked or no internet' },
 };

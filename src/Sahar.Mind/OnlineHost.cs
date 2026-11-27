@@ -18,7 +18,9 @@ namespace Sahar.Mind;
 internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> send)
 {
     // The system proxy (UseProxy defaults to the system's settings); a fresh connection now and then (his VPN may change).
-    private readonly SocketsHttpHandler _http = new() { UseProxy = true, PooledConnectionLifetime = TimeSpan.FromMinutes(5), ConnectTimeout = TimeSpan.FromSeconds(10) };
+    // Review: no redirects (a key never follows one), and a short connect (his VPN down must not cost 3 × 10 s).
+    private readonly SocketsHttpHandler _http = new() { UseProxy = true, AllowAutoRedirect = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5), ConnectTimeout = TimeSpan.FromSeconds(6) };
+    private readonly Dictionary<string, OpenAiClient> _clients = [];
     private ISecretBox? _box;
     private OnlineState? _state;
     private TurnHistory? _history;
@@ -42,9 +44,19 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
         return OnlineChain.From(s, keyed).Where(c => c.HasKey).Select(c => (c.P, keys.Get(c.P.Id)!)).ToList();
     }
 
-    public bool AnyUsable(IReadOnlyList<(ProviderProfile P, string Key)> chain) => chain.Any(c => !State.Exhausted(c.P.Id));
+    public bool AnyUsable(IReadOnlyList<(ProviderProfile P, string Key)> chain) => chain.Any(c => State.Usable(c.P.Id));
 
-    public ILlm Client(ProviderProfile p, string key) => new OpenAiClient(_http, p, key);
+    /// <summary>One client per provider, model and key (review: reused, the old one disposed when any of them changes).</summary>
+    public ILlm Client(ProviderProfile p, string key)
+    {
+        lock (_clients)
+        {
+            var tag = p.Model + "\n" + p.BaseUrl + "\n" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
+            if (_clients.TryGetValue(p.Id, out var c) && c.Tag == tag) return c;
+            c?.Dispose();
+            return _clients[p.Id] = new OpenAiClient(_http, p, key) { Tag = tag };
+        }
+    }
 
     public OnlineTurn Turn(IPromptParts prompts, IMindStore store) => new(Client, prompts, store, State, History)
     {
@@ -58,6 +70,10 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
         var provider = m.Model ?? "";
         switch (m.Op)
         {
+            case "key" when !settings().MindOnlineConsent:
+                _testProvider = provider;
+                _test = OnlineErrors.NoConsent;   // review: no key before his «موافق»
+                break;
             case "key":
                 bool kept = Keys.Set(provider, m.Text);
                 MindLog.Write($"online: key {(kept ? "sealed" : "refused")} ({provider})");
@@ -101,6 +117,7 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
         _testProvider = provider;
         var s = settings();
         if (s.MindLocalOnly) { _test = OnlineErrors.LocalOnly; return; }
+        if (!s.MindOnlineConsent) { _test = OnlineErrors.NoConsent; return; }
         if (Keys.Get(provider) is not { } key) { _test = OnlineErrors.NoKey; return; }
         if (OnlineChain.For(provider, s) is not { } p) { _test = OnlineErrors.BadOutput; return; }
         var r = await KeyCheck.RunAsync(_http, p, key, ct);
@@ -127,7 +144,7 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
     /// the page says so before), first-word times and one sample line.</summary>
     private async Task BenchAsync(CancellationToken ct)
     {
-        var chain = Chain().Where(c => !State.Exhausted(c.P.Id)).ToList();
+        var chain = Chain().Where(c => State.Usable(c.P.Id)).ToList();
         if (settings().MindLocalOnly || chain.Count == 0) { _bench = new OnlineBench("", [], 0, 0, null, OnlineErrors.NoKey); return; }
         var (p, key) = chain[0];
         string[] asks = ["احكيلي جملة وحدة عن القمر.", "شو أحلى شي بالشتي؟ جملة وحدة.", "قوليلي نكتة قصيرة.", "كيف بتنصحيني أبلّش يومي؟ جملتين.", "اشرحيلي شو يعني ذكاء اصطناعي بسطرين."];
@@ -143,7 +160,7 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
             {
                 var reply = await Client(p, key).CompleteAsync(new LlmRequest([new ChatMessage("user", a)], null, Sampling.Online with { MaxTokens = 120 }),
                     _ => { if (first < 0) first = (int)sw.ElapsedMilliseconds; }, ct);
-                State.Seen(p.Id, reply.Rate);
+                if (p.Quota == QuotaKind.Headers) State.Seen(p.Id, reply.Rate);
                 times.Add(first < 0 ? (int)sw.ElapsedMilliseconds : first);
                 ok++;
                 sample ??= reply.Text.Trim() is var t && t.Length > 200 ? t[..200] + "…" : reply.Text.Trim();
@@ -151,8 +168,7 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
             catch (MindRuntimeException e)
             {
                 error = e.Code;
-                if (e.Code == OnlineErrors.Quota) State.Exhaust(p.Id);
-                if (!OnlineErrors.Retryable(e.Code)) break;
+                break;   // review: the first failure ends the bench (a 429 is never "done for the day" here)
             }
         }
         _bench = new OnlineBench(p.Id, times, ok, asks.Length, sample, error);

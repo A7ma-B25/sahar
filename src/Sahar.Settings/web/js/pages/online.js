@@ -137,9 +137,11 @@ export async function render({ S, tx, set, ask, render: rerender }) {
   // ---- «جرّب عقلي» ----
   const benchOut = h('p', { class: 'desc', id: 'on-bench-result', 'aria-live': 'polite' });
   const benchBtn = ghost(tx('onBenchRun'), async () => {
+    if (waitBench) return;   // review: one bench at a time (each costs today's requests)
+    benchBtn.disabled = true;
     benchOut.textContent = tx('onBenchRunning');
     const r = await ask('mind-online-bench');
-    if (!r.ok) { benchOut.textContent = tx('onEngineOff'); return; }
+    if (!r.ok) { benchOut.textContent = tx('onEngineOff'); benchBtn.disabled = false; return; }
     waitBench = true;
   }, { id: 'on-bench' });
   const back = ghost(tx('onBackLocal'), async () => { await set('mindChatBrain', 'local'); back.textContent = tx('onBackDone'); drawNow(); }, { id: 'on-back-local' });
@@ -168,6 +170,7 @@ export async function render({ S, tx, set, ask, render: rerender }) {
       const ms = b.firstMs && b.firstMs.length ? Math.min(...b.firstMs) : 0;
       benchOut.textContent = b.ok ? tx('onBenchResult', { ok: num(b.ok), total: num(b.total), ms: num(ms) }) + (b.sample ? '\n«' + b.sample + '»' : '') : tx('onBenchFailed', { why: line(b.error) });
       waitBench = false;
+      benchBtn.disabled = false;
     }
     benchCard.hidden = !(!S.value.mindLocalOnly && S.value.mindOnlineConsent && (i?.providers || []).some((p) => p.key));
   }

@@ -48,6 +48,8 @@ function Stage-MindEval {
         }
         foreach ($row in $rows) {
             Step "mindeval: $($row.id) ($($row.kind))" {
+                # 0.17 (review I6): her turns now persist (encrypted «turn-history»): each golden line starts with none.
+                Remove-Item (Join-Path $home0 'mind\turn-history.enc') -ErrorAction SilentlyContinue
                 Send '{"type":"cmd","name":"show"}' | Out-Null       # a line before may have hidden her (sleep.hide)
                 Start-Sleep -Milliseconds 6500                          # the last reply leaves the header (6 s) and her bubble
                 Send '{"type":"cmd","name":"game-stop"}' | Out-Null

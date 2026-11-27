@@ -19,7 +19,7 @@ namespace Sahar.Core.Mind.Runtime;
 /// stream-error; rate headers ride along in <see cref="LlmReply.Rate"/> or the exception's <c>Data["rate"]</c>; the
 /// provider's body is never read. Written with Utf8JsonWriter / JsonDocument only (AOT). Never logs text.
 /// </summary>
-public sealed class OpenAiClient : ILlm
+public sealed class OpenAiClient : ILlm, IDisposable
 {
     private readonly HttpClient _http;
     private readonly ProviderProfile _p;
@@ -40,6 +40,9 @@ public sealed class OpenAiClient : ILlm
     }
 
     public ProviderProfile Profile => _p;
+    /// <summary>The Mind's cache key for this client (never the key itself).</summary>
+    public string? Tag { get; init; }
+    public void Dispose() => _http.Dispose();
 
     public async Task<bool> HealthyAsync(CancellationToken ct)
     {

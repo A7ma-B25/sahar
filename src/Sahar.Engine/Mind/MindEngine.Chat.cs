@@ -85,7 +85,16 @@ internal sealed partial class MindEngine
         };
         OfferDownload ??= OfferDownloadQuestion;
         Surfaces.ChatHub.Clipboard = Copy;
-        if (Chat is { } chatHub) chatHub.SetBrain = v => { Save(x => x with { MindChatBrain = v }); Ui.TryEnqueue(() => Safe(chatHub.Refresh)); };   // review minor: an older draft (no copy of its own) copies too
+        if (Chat is { } chatHub)
+        {
+            chatHub.SetBrain = v => { Save(x => x with { MindChatBrain = v }); Ui.TryEnqueue(() => Safe(chatHub.Refresh)); };
+            // Review I1: a new or deleted conversation: the online brain's pairs go (same box, the Mind reads it fresh).
+            chatHub.Cleared = () => Safe(() =>
+            {
+                new Sahar.Core.Mind.Turn.TurnHistory(_box, () => DateTimeOffset.Now, () => Settings().MindEpisodeDays).Clear("online");
+                Log.Write("mind: online history cleared");
+            });
+        }   // review minor: an older draft (no copy of its own) copies too
         ChatHandler = OnChat;
         SettingsChanged += _ => Ui.TryEnqueue(() => Safe(() => Chat?.Refresh()));   // 0.17: the chip follows «العقل أونلاين»
         Received += OnMind;
@@ -163,6 +172,8 @@ internal sealed partial class MindEngine
         if (on == _thinkingFace) return;
         if (on && Director.CurrentKey is not ("idle" or "music")) return;
         _thinkingFace = on;
+        // Review: «off» goes back to the director's own face — a real Claude Code face that came meanwhile stays.
+        if (!on && Director.CurrentKey == "claude-working") return;
         Express(on ? "claude-working" : "", false);
     }
 
@@ -322,11 +333,11 @@ internal sealed partial class MindEngine
                 break;
             case "partial" when m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id) && m.Text is { } windowPartial:
                 ThinkingFace(false);
-                Chat?.Partial(windowPartial.Length == 0 ? "" : Address.For(Address.You, Words(windowPartial)));
+                Chat?.Partial(windowPartial.Length == 0 ? "" : Address.For(Address.You, ChatWords(windowPartial)));
                 break;
             case "say" when m.Final == false && m.Kind == "note" && m.Id is not null && m.Id == _chatTurn && FromWindow(m.Id):
                 // 0.17: «خلّصت طلبات الأونلاين لليوم» before her local answer: a line of its own; the turn goes on.
-                Chat?.Said(Address.For(Address.You, Words(m.Text ?? "")), brain: "local");
+                Chat?.Said(Address.For(Address.You, ChatWords(m.Text ?? "")), brain: "local");
                 Chat?.Thinking(true);
                 Log.Write("mind: online is out for today (told)");
                 break;
@@ -392,6 +403,10 @@ internal sealed partial class MindEngine
     /// applied where they are drawn.</summary>
     private string Words(string text) => Settings().Language == UiLanguage.English ? text : Digits.ToArabicIndic(text);
 
+    /// <summary>0.17 review I4: in the chat window her digits stay as written in code, links and Latin words (range(10),
+    /// v1.2, gpt-4o); prose numbers still read Arabic.</summary>
+    private string ChatWords(string text) => Settings().Language == UiLanguage.English ? text : Digits.ForChat(text);
+
     private void Said(MindMsg m)
     {
         var id = m.Id ?? "";
@@ -421,6 +436,7 @@ internal sealed partial class MindEngine
         if (FromWindow(id))
         {
             _windowTurn = null;
+            text = ChatWords(m.Text ?? "");
             if (text.Length == 0) { Chat?.Thinking(false); Log.Write("mind: said dropped (empty)"); return; }
             Log.Write($"mind: said to the chat ({text.Length} chars, {(m.Brain == "online" ? "online" : "local")})");
             Chat?.Said(Address.For(Address.You, text), brain: m.Brain == "online" ? "online" : "local");

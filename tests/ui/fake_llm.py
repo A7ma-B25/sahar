@@ -4,7 +4,8 @@ Routes (each provider under its own prefix, as SAHAR_MIND_ONLINE_BASE=http://127
   POST /<p>/chat/completions   SSE words, or the scripted failure for <p> (/_mode)
   GET  /<p>/models             200 for the good key ("good-<p>"), else 401
   GET  /openrouter/key         the free daily counter (used 3 of 50)
-  POST /_mode?p=<p>&mode=ok|429|500|401|midstream   what <p> does next (sticky)
+  POST /_mode?p=<p>&mode=ok|429|429day|500|401|midstream   what <p> does next (sticky); p=orkey mode=full: the
+                               OpenRouter free counter says 50 of 50
   GET  /_stats                 JSON: requests per route, and whether any body held a marker word (/_marker?w=...)
 Bodies are never written to disk; only counts and the marker check leave this process.
 """
@@ -55,7 +56,9 @@ class H(BaseHTTPRequestHandler):
         if not self._key_ok(p):
             return self._json(401, {"error": {"message": "bad key"}})
         if u.path == "/openrouter/key":
-            return self._json(200, {"data": {"label": "t", "is_free_tier": True, "free_model_daily_requests": {"used": 3, "limit": 50, "remaining": 47}}})
+            with LOCK:
+                used = 50 if MODE.get("orkey") == "full" else 3
+            return self._json(200, {"data": {"label": "t", "is_free_tier": True, "free_model_daily_requests": {"used": used, "limit": 50, "remaining": 50 - used}}})
         if parts[-1] == "models":
             return self._json(200, {"data": [{"id": "openai/gpt-oss-120b"}, {"id": "google/gemma-4-31b-it:free"}, {"id": "fake"}]})
         self._json(404, {})
@@ -83,7 +86,9 @@ class H(BaseHTTPRequestHandler):
             mode = MODE.get(p, "ok")
         if not self._key_ok(p):
             return self._json(401, {"error": {"message": "bad key"}})
-        if mode == "429":
+        if mode == "429":  # a per-minute limit: a cooldown, not the day's end
+            return self._json(429, {"error": {"message": "rate"}}, {"retry-after": "1"})
+        if mode == "429day":  # Groq's own count says none left today
             return self._json(429, {"error": {"message": "rate"}}, {"retry-after": "1", "x-ratelimit-remaining-requests": "0", "x-ratelimit-limit-requests": "1000"})
         if mode == "500":
             return self._json(500, {"error": {"message": "down"}})
