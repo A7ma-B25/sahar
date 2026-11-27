@@ -62,6 +62,7 @@ internal sealed class QuranTool : IDisposable
 
     // 0.16 (final ui-test 45882237735): only an opened recitation has a place, a length and seeking. Review I6: they are
     // read from the player's cache (MediaRecitation keeps them from the session's events), never from the session here.
+    // 0.17.2: MediaRecitation makes and drives its player on its own worker; every call here only posts to it.
     private bool Opened => State is "playing" or "paused";
     public TimeSpan Position => Opened ? Try(() => _player?.Position) ?? TimeSpan.Zero : TimeSpan.Zero;
     public TimeSpan? Duration => Opened ? Try(() => _player?.Duration) : null;

@@ -2745,6 +2745,30 @@ function Stage-Prayer {
         if ((Kv 'debug-life').quiet -ne 'false') { throw 'still quiet after the failure' }
         if ((State).expression -eq 'quran') { throw 'the quran face stayed after the failure' }
     }
+    Step 'Quran: her UI thread answers within 1 s right after play (the real player, no network; 0.17.2)' {
+        # Run 46045090894: «quran: play surah 1», then her UI thread blocked ~5 s (debug-quran timed out). The player now
+        # lives on its own worker; she only posts to it. Each play (a new player, the old one closed) is checked at once.
+        foreach ($surah in 1, 2, 3, 1) {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            Send ('{"type":"cmd","name":"quran-play","args":{"surah":"' + $surah + '","reciter":"ar.alafasy"}}') | Out-Null
+            $playMs = $sw.ElapsedMilliseconds
+            if ($playMs -gt 1000) { throw "quran-play $surah took $playMs ms" }
+            $worst = 0
+            for ($i = 0; $i -lt 8; $i++) {
+                $sw.Restart()
+                $q = Kv 'debug-quran'
+                $ms = $sw.ElapsedMilliseconds
+                if ($ms -gt $worst) { $worst = $ms }
+                if ($ms -gt 1000) { throw "debug-quran took $ms ms after play $surah (check $i, state=$($q.state))" }
+                Start-Sleep -Milliseconds 250
+            }
+            Write-Host "    surah $surah`: play $playMs ms, debug-quran worst $worst ms, state=$($q.state)"
+        }
+        # The last one still gives up by itself (refused or hung), once.
+        $deadline = (Get-Date).AddSeconds(25)
+        do { Start-Sleep -Milliseconds 300; $q = Kv 'debug-quran' } while ($q.state -ne 'failed' -and (Get-Date) -lt $deadline)
+        if ($q.playing -ne 'false' -or $q.state -ne 'failed') { throw "after the checks: playing=$($q.playing) state=$($q.state)" }
+    }
     # CI's Windows Server has no MP3 decoder (SourceNotSupported), so these steps use a stand-in player ("fake" seconds);
     # real playback is a manual check (README-test-build.txt).
     Step 'Quran: playing pauses the dance, is quiet and wears its face' {
