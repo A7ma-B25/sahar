@@ -32,6 +32,21 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
     public Action<TurnTiming>? Timed { get; init; }
 
     private readonly List<(string User, string Her)> _history = [];
+    /// <summary>0.17: the persisted turns (she remembers them after a restart); null = this session only.</summary>
+    public TurnHistory? History { get; init; }
+
+    /// <summary>The local brain's history: the persisted short pairs (an online essay never pushes them out of its
+    /// 800-token budget), newest last.</summary>
+    private IReadOnlyList<(string User, string Her)> Recent()
+    {
+        if (History is { } h)   // each turn: an online turn in between is part of it too
+        {
+            _history.Clear();
+            _history.AddRange(h.Recent().Where(t => PromptBuilder.Tokens(t.User) + PromptBuilder.Tokens(t.Her) <= PromptBuilder.HistoryTokens / 3)
+                .TakeLast(PromptBuilder.HistoryTurns).Select(t => (t.User, t.Her)));
+        }
+        return _history;
+    }
     /// <summary>After a distress reply: a day without proposals (spec §7.4); the engine's hello says Learn = false
     /// for the rest of that day after a restart.</summary>
     private DateTimeOffset? _distressAt;
@@ -62,7 +77,7 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
             // A draft (Ruling 6: «اكتبلي رد بأسلوبي…») is words only: no tool is announced, so nothing can run or send.
             var registry = MindParts.ToolRegistry(source == "draft" ? [] : hello.Tools ?? []);
             var schema = registry.DecisionSchema();
-            var messages = PromptBuilder.Build(Prefix(hello, source), source == "draft" ? [] : _history,
+            var messages = PromptBuilder.Build(Prefix(hello, source), source == "draft" ? [] : Recent(),
                 chat || source == "initiative" ? prompts.PersonalBlock(line, PromptBuilder.PersonalTokens) : "", turn.Situation, source, line);
             var budget = source == "reflect" ? ReflectBudget : ChatBudget;
             bool learn = hello.Caps?.Learn != false && !(_distressAt is { } at && Now() - at < DistressQuiet);
@@ -291,6 +306,7 @@ public sealed partial class TurnRunner(ILlm llm, IPromptParts prompts, IMindStor
     private void Keep(string line, string her)
     {
         if (line.Length == 0) return;
+        if (History is { } h) { h.Add(line, her, "local"); return; }
         _history.Add((line, her));
         if (_history.Count > PromptBuilder.HistoryTurns) _history.RemoveRange(0, _history.Count - PromptBuilder.HistoryTurns);
     }

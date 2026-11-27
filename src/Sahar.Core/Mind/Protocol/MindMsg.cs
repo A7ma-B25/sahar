@@ -61,7 +61,24 @@ public sealed record MindMsg
     public Runtime.DownloadProgress? Progress { get; init; }
     public Runtime.BenchResult? Bench { get; init; }
     public IReadOnlyList<Runtime.ModelEntry>? Models { get; init; }
+
+    // ---- 0.17: the online brain ----
+    /// <summary>turn: the chat window's toggle (online | local); say/partial: which brain wrote it (local | online).</summary>
+    public string? Brain { get; init; }
+    /// <summary>turn: he typed it in the chat window (only those may go online).</summary>
+    public bool? Window { get; init; }
+    /// <summary>online-status: the providers, keys present, today's quota, the last key test and bench.</summary>
+    public OnlineInfo? Online { get; init; }
 }
+
+/// <summary>One provider as the page and the engine see it: never its key, only whether one is sealed.</summary>
+public sealed record OnlineProvider(string Id, string Model, bool Key, int Used, int? Limit, bool Exhausted);
+
+/// <summary>0.17 online-status (mind → engine). <see cref="Test"/>: the last «جرّب المفتاح» code for
+/// <see cref="TestProvider"/>; <see cref="Bench"/>: «جرّب عقلي» (first word ms per request, a sample line).</summary>
+public sealed record OnlineInfo(IReadOnlyList<OnlineProvider> Providers, string? Test = null, string? TestProvider = null, OnlineBench? Bench = null, bool LocalOnly = false);
+
+public sealed record OnlineBench(string Provider, IReadOnlyList<int> FirstMs, int Ok, int Total, string? Sample, string? Error = null);
 
 /// <summary>How she addresses him (from settings; the Mind never stores it).</summary>
 public sealed record MindAddress(Settings.Gender Gender, string? Name);
@@ -74,11 +91,11 @@ public static class MindTypes
 {
     public static readonly IReadOnlySet<string> ToMind = new HashSet<string>
     {
-        "hello", "turn", "tool-result", "answer", "cancel", "warm", "unload", "quit", "store-changed", "download", "bench", "model",
+        "hello", "turn", "tool-result", "answer", "cancel", "warm", "unload", "quit", "store-changed", "download", "bench", "model", "online",
     };
     public static readonly IReadOnlySet<string> ToEngine = new HashSet<string>
     {
-        "ready", "state", "partial", "call", "say", "propose", "progress", "bench-result", "error", "models", "draft",
+        "ready", "state", "partial", "call", "say", "propose", "progress", "bench-result", "error", "models", "draft", "online-status",
     };
 }
 
