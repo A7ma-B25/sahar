@@ -28,10 +28,12 @@ public static partial class MindBridges
         AddRuntime(t, ctx);
         AddMemory(t, ctx);
         AddAutonomy(t, ctx);
+        AddOnline(t, ctx);
         return t;
     }
 
     static partial void AddRuntime(Dictionary<string, Handler> t, MindBridgeContext ctx);
     static partial void AddMemory(Dictionary<string, Handler> t, MindBridgeContext ctx);
     static partial void AddAutonomy(Dictionary<string, Handler> t, MindBridgeContext ctx);
+    static partial void AddOnline(Dictionary<string, Handler> t, MindBridgeContext ctx);
 }

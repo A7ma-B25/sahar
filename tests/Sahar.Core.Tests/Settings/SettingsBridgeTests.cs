@@ -73,7 +73,7 @@ public sealed class SettingsBridgeTests : IDisposable
         var caps = r.GetProperty("caps");
         Assert.True(caps.GetProperty("engine").GetBoolean());
         Assert.False(caps.GetProperty("broken").GetBoolean());
-        Assert.Equal(["sahar", "menu", "brain", "persona", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"],
+        Assert.Equal(["sahar", "menu", "brain", "persona", "online", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"],
             caps.GetProperty("pages").EnumerateArray().Select(p => p.GetString()!));
         Assert.Equal(6, caps.GetProperty("reciters").GetArrayLength());
         Assert.Equal("ar.alafasy", caps.GetProperty("reciters")[0].GetProperty("id").GetString());
@@ -345,7 +345,7 @@ public sealed class SettingsBridgeTests : IDisposable
 
     [Fact]
     public void Pages_ActivitiesAfterListening() =>
-        Assert.Equal(["sahar", "menu", "brain", "persona", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"], SettingsBridge.Pages);   // 0.14: her brain's four after the menu; 0.16: «شخصية سحر» after «عقلي»
+        Assert.Equal(["sahar", "menu", "brain", "persona", "online", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"], SettingsBridge.Pages);   // 0.14: her brain's four after the menu; 0.16: «شخصية سحر» after «عقلي»
 
     [Fact]
     public async Task Claude_LinkStatusUnlink()

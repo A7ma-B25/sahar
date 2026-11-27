@@ -4267,7 +4267,7 @@ function Stage-Settings {
         Reload-Settings | Out-Null
         Start-SettingsApp | Out-Null
         [Mouse]::Move([int]$Work.Right - 2, [int]$Work.Bottom - 2)   # no hover in the owner's pictures
-        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; persona = 'شخصية سحر'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
+        $titles = [ordered]@{ sahar = 'سحورة'; menu = 'القائمة'; brain = 'عقلي'; persona = 'شخصية سحر'; online = 'العقل أونلاين'; models = 'النماذج'; you = 'شو فهمت عنك'; today = 'شو عملت اليوم'; prayer = 'الصلاة'; listen = 'الاستماع'; activities = 'النشاطات'; general = 'عام'; privacy = 'الخصوصية'; about = 'عن سحر' }
         $order = @(Js "[...document.querySelectorAll('.nav-item, .nav-about')].map(e => e.dataset.page).join(',')") -split ','
         if (($order -join ',') -ne ($titles.Keys -join ',')) { throw "sidebar order: $($order -join ',')" }
         foreach ($theme in 'light', 'dark') {
@@ -4303,7 +4303,7 @@ function Stage-Settings {
         SNav 'sahar'
         SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("document.activeElement?.blur(); true")) + '"}')
         $seen = @()
-        foreach ($i in 1..18) {   # 0.14: four more sidebar entries (her brain's pages) before the page's controls
+        foreach ($i in 1..19) {   # 0.14: four more sidebar entries (her brain's pages) before the page's controls; 0.17: «العقل أونلاين»
             SKey 'Tab'
             $f = Text64 (SKv 'state').focus64
             if ($f -eq 'body' -or -not $f) { throw "Tab $i reached the body" }
@@ -4471,7 +4471,7 @@ function Stage-Settings {
             if ($r.ok) { throw "the hidden page '$page' opened" }
         }
         $n = [int](Js "document.querySelectorAll('.nav-item, .nav-about').length")
-        if ($n -ne 13) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four; 0.16: «شخصية سحر»
+        if ($n -ne 14) { throw "the sidebar has $n entries" }   # 0.13: «النشاطات»; 0.14: her brain's four; 0.16: «شخصية سحر»; 0.17: «العقل أونلاين»
         if ((Text64 (SKv 'state').title64) -ne 'إعدادات سَحَر') { throw 'window title' }
         SNav 'about'
         if ((Text64 (SKv 'state').h1_64) -ne 'عن سحر') { throw 'the last page is not «عن سحر»' }

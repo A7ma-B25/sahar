@@ -9,8 +9,8 @@ test('registry: visible pages (0.14: her brain is group 2; 0.16: «شخصية س
   assert.deepEqual(v.map((p) => p.group), [1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5]);
 });
 
-test('registry: all fifteen pages are known; sounds and claude are not available', () => {
-  assert.equal(pages.length, 15);
+test('registry: all sixteen pages are known (0.17: «العقل أونلاين»); sounds and claude are not available', () => {
+  assert.equal(pages.length, 16);
   for (const id of ['sounds', 'claude']) assert.equal(pages.find((p) => p.id === id).available, false);
   assert.ok(!visiblePages({ pages: ['sounds', 'claude', 'sahar'] }).some((p) => p.id === 'sounds' || p.id === 'claude'));
 });

@@ -1,11 +1,15 @@
 // The chat window as pure views (model → tree): thread, conversation list, empty state.
 import { h } from './h.js';
 import { icon } from './icons.js';
+import { md } from './md.js';
 
 function header(m, emit) {
   return h('header', { 'data-drag': '1' },
     h('span', { cls: 'face' }, h('img', { src: '../sahar/sahar.svg', alt: '' })),
     h('span', { cls: 'who' }, h('b', null, m.name), h('span', { cls: m.typing ? 'ell typing' : 'ell' }, m.typing ? m.labels.typing : m.status)),
+    // 0.17: the brain chip (only when online can answer): a tap switches the chat's brain.
+    m.brain && m.brain.show ? h('button', { cls: `brainchip ${m.brain.value}`, 'data-id': 'brain', title: m.brain.hint, 'aria-label': m.brain.hint,
+      on: { click: () => emit('brain', m.brain.value === 'online' ? 'local' : 'online') } }, m.brain.value === 'online' ? m.brain.online : m.brain.local) : null,
     h('button', { cls: 'ib hv', 'aria-label': m.labels.all, title: m.labels.all, 'data-id': 'all', on: { click: () => emit('all') } }, icon('menu', 20)),
     h('button', { cls: 'ib hv', 'aria-label': m.labels.new, title: m.labels.new, 'data-id': 'new', on: { click: () => emit('new') } }, icon('compose', 20)),
     h('button', { cls: 'ib hv', 'aria-label': m.labels.close, title: m.labels.close, 'data-id': 'close', on: { click: () => emit('close') } }, icon('x', 20)));
@@ -22,11 +26,12 @@ function message(x, first, emit) {
   }
   const cls = `msg ${x.who === 'me' ? 'me' : 'her'}${first ? ' first' : ''}`;
   return h('div', { cls, 'data-msg': x.id, 'data-who': x.who },
-    x.kind === 'ask' ? h('p', null, x.text) : x.text,
+    x.kind === 'ask' ? h('p', null, x.text) : x.who === 'her' ? h('div', { cls: 'md' }, md(x.text)) : x.text,
     x.receipt ? h('span', { cls: 'receipt' }, h('span', { style: 'display:flex' }, icon(x.receipt.icon || 'clock', 15)), x.receipt.text) : null,
     x.kind === 'ask' && x.ask && !x.ask.answered ? h('div', { cls: 'askbtns' },
       h('button', { cls: 'pri btn small', 'data-id': 'yes-' + x.id, on: { click: () => emit('ask', x.id + ':yes') } }, x.ask.yes),
-      h('button', { cls: 'sec btn small', 'data-id': 'no-' + x.id, on: { click: () => emit('ask', x.id + ':no') } }, x.ask.no)) : null);
+      h('button', { cls: 'sec btn small', 'data-id': 'no-' + x.id, on: { click: () => emit('ask', x.id + ':no') } }, x.ask.no)) : null,
+    x.brain ? h('span', { cls: `brainbadge ${x.brainId || ''}`, 'data-brain': x.brainId || '' }, x.brain) : null);
 }
 
 export function threadView(m, st, emit) {
@@ -38,7 +43,7 @@ export function threadView(m, st, emit) {
       inner.push(h('div', { cls: `time num ${g.who === 'me' ? 'me' : 'her'}` }, g.who === 'me' ? icon('check', 14) : null, g.time));
     }
   }
-  if (m.partial) inner.push(h('div', { cls: 'msg her first', 'data-msg': 'partial' }, m.partial));
+  if (m.partial) inner.push(h('div', { cls: 'msg her first', 'data-msg': 'partial' }, h('div', { cls: 'md' }, md(m.partial))));
   else if (m.typing) inner.push(h('div', { cls: 'typingdots', 'aria-label': m.labels.typing }, h('span', { cls: 'dot' }), h('span', { cls: 'dot' }), h('span', { cls: 'dot' })));
   return h('div', { cls: 'thread scr', 'data-id': 'thread' }, h('div', { cls: 'inner' }, inner),
     st.newBelow ? h('button', { cls: 'newchip', 'data-id': 'newchip', on: { click: () => emit('bottom') } }, icon('arrowDown', 14), m.labels.newBelow) : null);
