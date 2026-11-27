@@ -125,10 +125,22 @@ internal sealed partial class MindEngine
     /// <summary>A line from the chat window: like the card's row, but her answer comes back to the window.</summary>
     public bool TakeWindowChat(ChatCommand c, string text)
     {
-        if (!TakeChat(c, text)) return false;
+        _fromWindowNext = true;   // review I3: the card's «عم فكّر…» is not for this turn
+        try { if (!TakeChat(c, text)) return false; }
+        finally { _fromWindowNext = false; }
         _windowTurn = _chatTurn;
         Chat?.Thinking(true);
         return true;
+    }
+
+    private bool _fromWindowNext;
+
+    /// <summary>Review I3: a window turn ended (answered, replaced, failed): its «عم تكتب…» goes and nothing points at it.</summary>
+    private void EndWindowTurn(string id)
+    {
+        if (id != _windowTurn) return;
+        _windowTurn = null;
+        Chat?.Thinking(false);
     }
 
     private bool FromWindow(string? id) => id is not null && id == _windowTurn;
@@ -170,12 +182,13 @@ internal sealed partial class MindEngine
             return false;
         }
         var id = "c" + (++_turnSeq).ToString(CultureInfo.InvariantCulture);
-        if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); Forget(running); }
+        if (_chatTurn is { } running) { SendMind(new MindMsg { T = "cancel", Id = running }); _turns.Remove(running); Forget(running); EndWindowTurn(running); }
         var source = draft ? "draft" : "chat";
         if (!SendMind(new MindMsg { T = "turn", Id = id, Source = source, Text = text, Situation = Moment() })) return false;
         _turns[id] = (ActSource.User, Clip(text, 60), source);
         _chatTurn = id;
-        Menu.MindThinking(true);
+        if (!_fromWindowNext) Menu.MindThinking(true);
+        else Menu.MindThinking(false);   // a card turn it replaced was thinking
         Log.Write($"mind: turn {source}");
         return true;
     }
@@ -297,7 +310,7 @@ internal sealed partial class MindEngine
                 if (m.Id == _chatTurn && FromWindow(m.Id))
                 {
                     if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Chat?.Said(Address.For(Address.You, ChatReply.Learning));
-                    else if (m.Error != "timeout") Chat?.Thinking(false);
+                    if (m.Error != "timeout") { EndWindowTurn(m.Id); _chatTurn = null; }   // review I3: a timeout's line follows
                 }
                 else if (m.Id == _chatTurn)
                 {
@@ -314,6 +327,7 @@ internal sealed partial class MindEngine
             case "draft" when m.Id is not null && m.Id == _chatTurn:   // stream B shows it («بصوتك» + copy)
                 _turns.Remove(m.Id);
                 _chatTurn = null;
+                if (m.Id == _windowTurn) _windowTurn = null;   // the draft card ends «عم تكتب…» itself
                 Menu.MindThinking(false);
                 break;
             case "propose":
@@ -635,7 +649,7 @@ internal sealed partial class MindEngine
     private string AutonomyDescribe()
     {
         var tools = string.Join(',', _registry.Announced.Select(t => t.Name));
-        return $"chatTurn={_chatTurn ?? "-"} ask={_ask.Where ?? "none"} ask64={Convert.ToBase64String(Encoding.UTF8.GetBytes(_ask.Text ?? ""))} " +
+        return $"chatTurn={_chatTurn ?? "-"} windowTurn={_windowTurn ?? "-"} ask={_ask.Where ?? "none"} ask64={Convert.ToBase64String(Encoding.UTF8.GetBytes(_ask.Text ?? ""))} " +
             $"{Menu.MindDescribe()} gate={_lastGate} linesToday={LinesToday()} dismissed={_dismissed} logToday={_log.Day(DateOnly.FromDateTime(DateTime.Now)).Count} " +
             $"timer={(Timer.Running ? "true" : "false")} hush={(Dnd.On ? "true" : "false")} game={(Games.Running ? "true" : "false")} tools={tools}";
     }

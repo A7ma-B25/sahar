@@ -329,6 +329,39 @@ function Stage-MindAutonomy {
         Stop-SettingsApp
     }
 
+    Step 'mind (autonomy): a chat-window turn — the card never thinks for it; replaced or failed, «عم تكتب…» ends (review I3)' {
+        function Chat-Type([string]$t) {
+            $r = Send ('{"type":"cmd","name":"chat-type","args":{"text64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t)) + '"}}')
+            if (-not $r.ok) { throw "chat-type: $($r.error)" }
+        }
+        Kva 'mind-test-fake' '{"on":"true"}' | Out-Null
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Send '{"type":"cmd","name":"chat-open","args":{"fresh":"true"}}' | Out-Null
+        Wait-Surface 'chat' | Out-Null
+        Chat-Type 'احكيلي شي حلو'
+        Wait-Until { (Auto).windowTurn -ne '-' } 3000 'no chat-window turn'
+        if ((Auto).thinking -ne 'false') { throw 'the card shows «عم فكّر…» for a chat-window turn' }
+        if ((Kv 'debug-chat').typing -ne 'true') { throw 'the chat does not show «عم تكتب…»' }
+        Send '{"type":"cmd","name":"menu-open"}' | Out-Null
+        Wait-Menu 'true' 2000 'card open' | Out-Null
+        Chat-Line 'شي تاني من الكرت'
+        $a = Auto
+        if ($a.windowTurn -ne '-') { throw "the window turn the card replaced stayed: $($a.windowTurn)" }
+        if ((Kv 'debug-chat').typing -ne 'false') { throw '«عم تكتب…» stayed after the card replaced its turn' }
+        Mind-Line ('{"v":1,"t":"say","id":"' + (Last-Turn) + '","text":"تمام","final":true}')
+        Send '{"type":"cmd","name":"menu-close"}' | Out-Null
+        Chat-Type 'سؤال تاني'
+        Wait-Until { (Auto).windowTurn -ne '-' } 3000 'no second chat-window turn'
+        $w = (Auto).windowTurn
+        Mind-Line ('{"v":1,"t":"error","id":"' + $w + '","error":"busy"}')
+        Start-Sleep -Milliseconds 300
+        $a = Auto
+        if ($a.chatTurn -ne '-' -or $a.windowTurn -ne '-') { throw "a failed window turn stayed: chat=$($a.chatTurn) window=$($a.windowTurn)" }
+        if ((Kv 'debug-chat').typing -ne 'false') { throw '«عم تكتب…» stayed after the turn failed' }
+        Send '{"type":"cmd","name":"chat-close"}' | Out-Null
+        Kva 'mind-test-fake' '{"on":"false"}' | Out-Null
+    }
+
     Step 'mind (autonomy): engine.log holds kinds only, never what he typed' {
         $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw
         foreach ($s in 'SENTINEL-TYPED', 'SENTINEL-NOTE', 'ركّزني', 'شغّل الطقس') { if ($log -match [regex]::Escape($s)) { throw "engine.log holds '$s'" } }
