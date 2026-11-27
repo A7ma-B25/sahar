@@ -190,6 +190,10 @@ internal sealed class SurfaceHost
                     if (x.Showing is { } shown) shown.Capturable = m.Capturable;
                 }
                 break;
+            case "quit":   // she is quitting: nothing of hers stays running (an update replaces these files)
+                SettingsLog.Write("surfaces: she said goodbye");
+                Native.PostQuitMessage(0);
+                break;
             case "debug":
                 _pipe?.Send(new SurfaceMsg { T = "reply", Seq = m.Seq, Model = Debug() });
                 break;

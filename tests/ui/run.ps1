@@ -5126,6 +5126,12 @@ function Stage-Install {
     }
 
     Step 'fake GitHub up (tests/ui/fake_github.py on 127.0.0.1), signed with a throwaway key' {
+        # The setup that could not finish (a file in use) had already cleared Sahar.Settings\ (InstallDelete): put it
+        # back, so her surfaces (the update question) can show in these steps, as in a whole install.
+        if (-not (Test-Path $InstalledSettings)) {
+            Copy-Item -Recurse -Force (Join-Path (Split-Path $Exe) 'Sahar.Settings') $InstallDir
+            Write-Host '    Sahar.Settings\ put back after the unfinished setup'
+        }
         New-Item -ItemType Directory -Force -Path $fake | Out-Null
         Set-Content $keyFile ([Convert]::ToBase64String($testKey.ExportSubjectPublicKeyInfo())) -NoNewline -Encoding ascii
         Serve-Setup $script:setupExe

@@ -122,6 +122,7 @@ const
   EngineMutex = 'Local\Sahar.Engine';
   SettingsMutex = 'Local\Sahar.Settings';   { the settings app (0.12): its window is closed by the same --quit }
   MindMutex = 'Local\Sahar.Mind';           { her brain's process (0.14.1): it exits when the engine goes }
+  SurfacesMutex = 'Local\Sahar.Surfaces';   { her surface host (0.16): it quits when the engine says goodbye }
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B24750DD-9A27-4894-8A97-D099CBA9B19C}_is1';
 
 var
@@ -187,12 +188,13 @@ var
   I: Integer;
 begin
   I := 0;
-  while CheckForMutexes(MindMutex) and (I < 60) do
+  while CheckForMutexes(MindMutex + ',' + SurfacesMutex) and (I < 80) do
   begin
     Sleep(250);
     I := I + 1;
   end;
-  if CheckForMutexes(MindMutex) then Log('her brain is still running after 15 s');
+  if CheckForMutexes(MindMutex) then Log('her brain is still running after 20 s');
+  if CheckForMutexes(SurfacesMutex) then Log('her surface host is still running after 20 s');
 end;
 
 { Asks a running Sahar (and an open settings window) to quit with her own pipe command and waits (Exe --quit waits

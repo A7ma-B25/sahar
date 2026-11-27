@@ -288,8 +288,11 @@ internal sealed class SurfaceClient : IDisposable
 
     public void Dispose()
     {
+        // She is quitting (or an update closes her): the host goes now, so no file of it stays in use. If the line
+        // cannot go, it quits by itself 15 s after the pipe closes (it never outlives her).
+        try { if (_writer is { } w && _write.Wait(500)) { try { w.WriteLine(SurfaceJson.Write(new SurfaceMsg { T = "quit" })); } finally { _write.Release(); } } }
+        catch (Exception) { }
         _stop.Cancel();
         try { _pipe?.Dispose(); } catch (Exception) { }
-        // The host quits by itself 15 s after the pipe closes (it never outlives her).
     }
 }
