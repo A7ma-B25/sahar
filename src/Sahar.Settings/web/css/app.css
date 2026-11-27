@@ -51,6 +51,14 @@ p, .pr { text-wrap: pretty; }
 .nav-about[aria-current=page] { font-weight: 500; color: var(--accent-ink); background: var(--accent-soft); }
 .main { flex: 1 1 auto; min-inline-size: 0; overflow-y: auto; padding: 32px clamp(20px, 4vw, 48px) 48px; }
 .page { max-inline-size: 680px; display: flex; flex-direction: column; }
+/* 0.17.1: the window's own height (680 DIP) left the sidebar 7 px too tall, so it grew a second scrollbar beside the
+   page's: shorter windows get a tighter sidebar (one scroll area, the page's), the smallest one still scrolls it. */
+@media (max-height: 760px) {
+  .nav { padding-block: 16px; }
+  .brand { padding-block-end: 12px; }
+  .nav-group { margin-block-end: 12px; }
+  .nav-item { block-size: 34px; }
+}
 .page.enter { animation: page-in .14s ease; }
 @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
 

@@ -1,5 +1,13 @@
-سَحَر · Sahar — نسخة تجريبية 0.17.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.17.1 (ويندوز)
 =============================================
+
+شو الجديد بـ 0.17.1 — صفحة «العقل أونلاين» مرتّبة 🧹
+-------------------------------------------------
+- الكروت ما عادت لازقة ببعض: حالتها، «محلي فقط» و«قبل ما نبلّش» كل وحدة بمكانها متل باقي الصفحات.
+- كل مزوّد صار سطر واحد مرتّب: رقمو، اسمو، المفتاح، وأسهم صغيرة لفوق/لتحت؛ وتحتو طلبات اليوم.
+- أسماء النماذج والروابط والمفاتيح بتنكتب من الشمال لليمين، كاملة وما بتنقصّ من أولها.
+- «مزوّد مخصّص (متقدّم)» صار مطوي لحتى تفتحو. و«جرّب عقلي» ما بيطلع إلا لما يكون في مفتاح.
+- الشريط الجانبي صار يساع بالشباك العادي، فما بيطلع غير شريط تمرير واحد.
 
 شو الجديد بـ 0.17.0 — عقل أونلاين للحكي 🌐
 -------------------------------------------
@@ -50,7 +58,7 @@
 هالنسخة بتجمع كل شي اشتغلنا عليه من بعد 0.11: المثبّت والتحديثات، برنامج «إعداداتي»، «النشاطات»، و«عقلها».
 
 📦 المثبّت والتحديثات
-- صار في مثبّت: Sahar-Setup-0.17.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
+- صار في مثبّت: Sahar-Setup-0.17.1.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
   بيحطها بـ %LocalAppData%\Programs\Sahar، وبيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
   بيثبّت معها برنامج الإعدادات وعقلها (Sahar.Mind.exe وملفات llama.cpp: Vulkan والمعالج). النموذج ما بيجي بالمثبّت:
   بتنزّلو من جوّاها لما تقلها (تحت).
@@ -84,7 +92,7 @@
 - السجل (engine.log و mind.log و settings.log) بيكتب أنواع وأرقام وأوقات بس — أبداً شو كتبت ولا اسم أغنية ولا ملف.
 
 جرّب بإيدك:
-  ١. ثبّتها من Sahar-Setup-0.17.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
+  ١. ثبّتها من Sahar-Setup-0.17.1.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
   ٢. افتح «إعداداتي» وغيّر حجمها؛ وبعدين شغّل المثبّت مرة تانية والنافذة مفتوحة (لازم تتسكّر هي وسحر وترجع سحر، وإعداداتك متل ما هي).
   ٣. شغّل أغنية؛ افلت ملف عليها؛ اربط Claude Code وخلّيه يسألك إذن.
   ٤. افتح «النماذج» وكبّس «نزّليه» (≈ ٥ غيغا)؛ وقّفه وكمّله؛ لما يخلص كبّس «جرّبيه» وصوّرلنا الأرقام.
@@ -240,7 +248,7 @@
 
 كيف تثبّتها
 -----------
-1. نزّل Sahar-Setup-0.17.0.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
+1. نزّل Sahar-Setup-0.17.1.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
 2. الويندوز رح يقلك «Windows protected your PC» (هاد SmartScreen) لأن النسخة مش موقّعة لسا. طبيعي:
    كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
    هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
@@ -315,7 +323,7 @@ What's new in 0.17.0 — an online brain for words 🌐
 What's new in 0.14.0 — the installer, her settings, her activities and her brain 🌙
 -----------------------------------------------
 Everything since 0.11 in one build:
-- Installer: Sahar-Setup-0.17.0.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
+- Installer: Sahar-Setup-0.17.1.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
   Windows (ticked). It installs the settings app and her brain (Sahar.Mind.exe and the pinned llama.cpp runtime, Vulkan
   and CPU) beside her; no model is bundled — she downloads one in the app when you say yes.
 - Updates: she asks in her bubble (yes / later) and never updates without a yes; the setup is checked against a signed
@@ -475,7 +483,7 @@ Still here from 0.2.0
 
 Install it
 ----------
-1. Download Sahar-Setup-0.17.0.exe from the release page ("test-build") on GitHub and run it.
+1. Download Sahar-Setup-0.17.1.exe from the release page ("test-build") on GitHub and run it.
 2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
    click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
 3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.

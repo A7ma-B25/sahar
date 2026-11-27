@@ -3991,6 +3991,16 @@ function Stop-SettingsApp {
     Settings-Procs | ForEach-Object { try { $_.Kill() } catch { } }
 }
 
+# 0.17.1: resizes a window (the settings app's smallest size: its own minimum wins).
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win017 {
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int hh, uint flags);
+    public static bool Size(IntPtr h, int w, int hh) { return SetWindowPos(h, IntPtr.Zero, 0, 0, w, hh, 0x0002 | 0x0004 | 0x0010); }   // NOMOVE NOZORDER NOACTIVATE
+}
+"@
+
 function Stage-Settings {
     $kept = Settings-Json
     Step 'she starts at her saved size' {
@@ -4298,6 +4308,60 @@ function Stage-Settings {
         $a = Js "document.getElementById('float').getAttribute('transform')"
         Start-Sleep -Milliseconds 700
         if ($a -eq (Js "document.getElementById('float').getAttribute('transform')")) { throw 'the preview does not float' }
+    }
+    # 0.17.1 (owner: «التصميم كتير متداخل»): «العقل أونلاين» set up, light and dark, then at the smallest window — the
+    # blocks apart, one header per provider, ids left-to-right, «مخصّص» folded, nothing wider than the page, and the
+    # sidebar fitting the window's own height (one scroll area: the page's).
+    Step '«العقل أونلاين» set up: spaced, one header per provider, nothing overflows' {
+        $kept017 = Settings-Json
+        Write-Settings '{ "helloDone": true, "mindOnlineConsent": true, "mindOnlineKeys": ["groq"], "mindOpenRouterModel": "google/gemma-4-31b-it:free" }'
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('window.sahar.reload(); true')) + '"}')
+        Start-Sleep -Milliseconds 500
+        SNav 'online'
+        Wait-Until { (Js "document.querySelectorAll('.on-row').length") -eq 3 } 5000 'the three providers are not on the page'
+        $layout = "(() => { const m = document.querySelector('.main'), n = document.querySelector('.nav'), p = document.getElementById('page').getBoundingClientRect();" +
+            " const wide = [...document.querySelectorAll('#page *')].filter((e) => { const r = e.getBoundingClientRect(); return r.width && (r.left < p.left - 1 || r.right > p.right + 1); }).map((e) => e.id || e.className).slice(0, 5);" +
+            " const heads = [...document.querySelectorAll('.on-row')].map((r) => { const h = r.querySelector('.on-head').getBoundingClientRect(); const b = r.querySelector('.on-move').getBoundingClientRect(); return Math.abs((h.top + h.bottom) / 2 - (b.top + b.bottom) / 2) < 2; });" +
+            " return JSON.stringify({ mainX: m.scrollWidth - m.clientWidth, docX: document.documentElement.scrollWidth - document.documentElement.clientWidth, navX: n.scrollHeight - n.clientHeight, wide, heads," +
+            " dirs: ['on-model-groq', 'on-model-openrouter', 'on-key-groq'].map((id) => getComputedStyle(document.getElementById(id)).direction).join(','), folded: document.getElementById('on-custom-body').hidden," +
+            " gap: Math.round(document.getElementById('on-localonly').getBoundingClientRect().top - document.querySelector('.on-status').getBoundingClientRect().bottom) }); })()"
+        foreach ($theme in 'light', 'dark') {
+            SOk 'emulate' ('{"theme":"' + $theme + '"}')
+            Wait-Until { (SKv 'state').theme -eq $theme } 3000 "the page is not $theme"
+            Wait-Until { (Js "document.querySelectorAll('.on-row').length") -eq 3 } 5000 'the providers are not on the page after a re-render'
+            Start-Sleep -Milliseconds 400
+            $l = (Js $layout) | ConvertFrom-Json
+            Write-Host "    $theme`: mainX=$($l.mainX) docX=$($l.docX) navX=$($l.navX) dirs=$($l.dirs) folded=$($l.folded) gap=$($l.gap) heads=$($l.heads -join ',') wide=$($l.wide -join ',')"
+            if ($l.mainX -gt 0 -or $l.docX -gt 0 -or @($l.wide).Count) { throw "something is wider than the page: $($l.wide -join ', ')" }
+            if ($l.navX -gt 0) { throw "the sidebar scrolls at the window's own size ($($l.navX) px too tall)" }
+            if ($l.dirs -ne 'ltr,ltr,ltr') { throw "model ids / keys are not left-to-right: $($l.dirs)" }
+            if (-not $l.folded) { throw '«مزوّد مخصّص (متقدّم)» is not folded' }
+            if ($l.gap -lt 8) { throw "the status card and «محلي فقط» touch (gap $($l.gap) px)" }
+            if (@($l.heads) -contains $false) { throw 'up/down are not on their provider''s header line' }
+            Capture "app-online-providers-$theme"
+        }
+        SOk 'emulate' '{"theme":"light"}'
+        SClick '#on-custom-toggle'
+        Wait-Until { (Js "document.getElementById('on-custom-body').hidden") -eq $false } 2000 'the custom provider did not unfold'
+        Start-Sleep -Milliseconds 300
+        Capture 'app-online-custom-light'
+        # The smallest window (720×520 DIP): the page still fits its width.
+        $hwnd = $script:settingsApp.MainWindowHandle
+        [Win017]::Size($hwnd, 200, 200) | Out-Null   # the window's own minimum wins
+        Start-Sleep -Milliseconds 700
+        $st = SKv 'state'
+        Write-Host "    smallest: client $($st.clientW)x$($st.clientH) at dpi $($st.dpi)"
+        $l = (Js $layout) | ConvertFrom-Json
+        Write-Host "    smallest: mainX=$($l.mainX) docX=$($l.docX) navX=$($l.navX) wide=$($l.wide -join ',')"
+        if ($l.mainX -gt 0 -or $l.docX -gt 0 -or @($l.wide).Count) { throw "at the smallest window something is wider than the page: $($l.wide -join ', ')" }
+        Capture 'app-online-min-light'
+        $dpi = [double]$st.dpi
+        [Win017]::Size($hwnd, [int](960 * $dpi), [int](680 * $dpi)) | Out-Null
+        Start-Sleep -Milliseconds 500
+        SOk 'emulate' '{"theme":""}'
+        if ($kept017) { Write-Settings $kept017 }
+        SOk 'eval' ('{"code64":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('window.sahar.reload(); true')) + '"}')
+        Start-Sleep -Milliseconds 500
     }
     Step 'keyboard reach' {
         SNav 'sahar'

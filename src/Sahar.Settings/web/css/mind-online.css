@@ -1,0 +1,57 @@
+/* 0.17.1 «العقل أونلاين» (owner: «التصميم كتير متداخل»): the page's own rules on the shared Mind parts (mind.css) and
+   the Porcelain tokens only. Logical properties throughout, so English stays a pure mirror. */
+
+/* The top: her status line, then «محلي فقط» a step below it (as «شو فهمت عنك»'s cards), never touching. */
+.on-status .mr-status { flex-wrap: nowrap; gap: 14px; }
+.on-globe { color: var(--accent-ink); background: var(--accent-soft); }
+.on-local { margin-block-start: 12px; }
+
+/* «قبل ما نبلّش» and «جرّب عقلي»: plain lines in one card, the action on the start side under them. */
+.on-consent-line { margin: 0; font-size: 14px; line-height: 1.7; color: var(--text-2); max-inline-size: 64ch; }
+.on-consent-actions { padding-block-start: 4px; }
+
+/* The providers, in his order: one card each, 8px apart. */
+.on-list { display: flex; flex-direction: column; gap: 8px; }
+.on-row { gap: 14px; }
+.on-headwrap { display: flex; flex-direction: column; gap: 2px; }
+.on-head { display: flex; align-items: center; gap: 12px; min-block-size: 34px; }
+.on-num {
+  flex: none; inline-size: 26px; block-size: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 13px; font-weight: 600; line-height: 1; background: var(--accent-soft); color: var(--accent-ink);
+}
+.on-title { flex: 1 1 auto; min-inline-size: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.on-name { line-height: 1.4; }
+.on-move { flex: none; display: grid; grid-template-columns: 34px 34px; gap: 2px; }
+.on-move > [id^=on-up-] { grid-column: 1; }
+.on-move > [id^=on-down-] { grid-column: 2; }
+.on-move-btn:hover { color: var(--ink); }
+/* The quota line sits under the name (past the order badge), and takes no room when there is nothing to say. */
+.on-quota { padding-inline-start: 38px; }
+.on-quota:empty { display: none; }
+
+/* «مزوّد مخصّص (متقدّم)»: the name is the disclosure. */
+.on-disclose {
+  display: inline-flex; align-items: center; gap: 6px; min-block-size: 34px; margin-inline-start: -8px; padding: 0 8px; border: 0;
+  border-radius: 10px; background: transparent; color: var(--ink); text-align: start;
+}
+.on-disclose .label { line-height: 1.4; }
+.on-chev { display: grid; place-items: center; color: var(--text-2); transition: transform .18s cubic-bezier(.3, .7, .2, 1); }
+.on-disclose[aria-expanded=true] .on-chev { transform: rotate(180deg); }
+
+/* The fields: a label column and a field column, aligned across the rows. */
+.on-body { display: flex; flex-direction: column; gap: 10px; }
+.on-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: 12px 20px; }
+.on-flabel { line-height: 1.4; padding-block-start: 9px; }   /* centred on the 40px field's first line */
+.on-fctl { min-inline-size: 0; display: flex; flex-direction: column; gap: 6px; }
+.on-fctl > .input { inline-size: 100%; max-inline-size: 420px; }
+.on-keyline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.on-keyline > .input { flex: 1 1 180px; inline-size: auto; max-inline-size: 420px; min-inline-size: 0; }
+.on-result { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.on-result:empty { display: none; }
+
+/* Model ids, URLs and keys are left-to-right in any page direction: they start at their beginning (no clipped
+   «joogle/…»), the long ones end in an ellipsis. Only the Arabic placeholder of the key reads right-to-left. */
+.on-ltr { direction: ltr; text-align: left; text-overflow: ellipsis; }
+:root[dir=rtl] .on-ar-ph:placeholder-shown { direction: rtl; text-align: right; }
+
+@media (prefers-reduced-motion: reduce) { .on-chev { transition: none; } }

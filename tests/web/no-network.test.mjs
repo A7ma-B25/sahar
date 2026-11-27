@@ -23,6 +23,8 @@ test('no-network: no page file names an address outside https://sahar.settings, 
     for (const u of urls) {
       // SVG namespaces are names, not requests.
       if (u.startsWith('http://www.w3.org/')) continue;
+      // 0.17.1: a pattern with no host (the custom URL's placeholder «https://…/v1», «https://» in a hint) is no request.
+      if (!/^https?:\/\/[\p{L}\p{N}]/u.test(u)) continue;
       assert.ok(u.startsWith('https://sahar.settings'), `${p}: ${u}`);
     }
     assert.doesNotMatch(text, /@import\s+url\(/, p);
