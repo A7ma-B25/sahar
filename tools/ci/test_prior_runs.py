@@ -64,6 +64,7 @@ class PriorRunsTests(unittest.TestCase):
                                              9: [{"name": "plan", "conclusion": "success"},
                                                  {"name": "mind-eval / eval", "conclusion": "success"}]}))
         self.assertIsNone(mindeval_passed({8: [{"name": "mind-eval / eval", "conclusion": "skipped"}]}))
+        self.assertEqual(8, mindeval_passed({8: [{"name": "mind-eval / eval", "status": "in_progress", "conclusion": None}]}))
         self.assertIsNone(mindeval_passed({}))
 
     def test_ui_test_names_a_full_run_the_way_test_build_looks_for_it(self):

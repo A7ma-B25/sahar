@@ -5,7 +5,8 @@
         not count): prints run=<id>, or run= when there is none. While one is still running (or re-running) on SHA
         it waits for it, up to --wait-minutes, then decides.
     python -I tools/ci/prior_runs.py mindeval --repo OWNER/NAME --sha SHA
-        A mind-eval that succeeded on SHA (a ui-test or test-build run whose mind-eval job passed): prints run=<id> or run=.
+        A mind-eval that succeeded, or is still going, on SHA (a ui-test or test-build run's mind-eval job): prints
+        run=<id> or run=.
 
 With GITHUB_OUTPUT set, the line is also appended there.
 """
@@ -41,10 +42,12 @@ def decide_ui(runs, jobs_by_run):
 
 
 def mindeval_passed(jobs_by_run):
-    """{run id: [jobs]}: the first run whose mind-eval job (the reusable workflow's "mind-eval / eval") succeeded."""
+    """{run id: [jobs]}: the first run whose mind-eval job (the reusable workflow's "mind-eval / eval") succeeded or is
+    still going (a test-build started beside a ui-test that runs it does not run it twice)."""
     for run_id, jobs in jobs_by_run.items():
         for j in jobs:
-            if j.get("name", "").startswith("mind-eval") and j.get("conclusion") == "success":
+            if j.get("name", "").startswith("mind-eval") and (
+                    j.get("conclusion") == "success" or j.get("status") in ACTIVE):
                 return run_id
     return None
 
@@ -91,10 +94,10 @@ def mindeval(repo, sha):
     jobs = {}
     for workflow in ("ui-test.yml", "test-build.yml"):
         for r in runs_on(repo, workflow, sha):
-            if r.get("status") == "completed":
+            if r["id"] != int(os.environ.get("GITHUB_RUN_ID", "0")):   # never this run's own
                 jobs[r["id"]] = jobs_of(repo, r["id"])
     run = mindeval_passed(jobs)
-    print(f"mind-eval on {sha}: " + (f"passed in run {run}" if run else "none yet"), file=sys.stderr)
+    print(f"mind-eval on {sha}: " + (f"passed or going in run {run}" if run else "none yet"), file=sys.stderr)
     emit(f"run={run or ''}")
 
 
