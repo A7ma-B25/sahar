@@ -1,5 +1,12 @@
-سَحَر · Sahar — نسخة تجريبية 0.17.1 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.17.2 (ويندوز)
 =============================================
+
+شو الجديد بـ 0.17.2 — العقل أونلاين ما عاد بيستعجل يقول «ما في نت» 🔌
+-------------------------------------------------
+- أول طلب أونلاين بياخد وقتو (خصوصاً مع VPN): صارت تستنى أكتر قبل ما تقول إنو ما ردّ، ولما تفتح نافذة المحادثة بتفتح الاتصال من قبل (بلا ما تصرف من طلبات اليوم).
+- ما عادت تقول «ما في نت» إلا إذا ولا مزوّد قدرت توصلّو. إذا واحد بطّأ بتجرّب التاني، وبترجع للأونلاين لحالها بعد دقيقة.
+- OpenRouter: النموذج المجاني صار Gemma 4 26B، وإذا كان مزحوم بتجرّب نموذج مجاني تاني مرة وحدة. وفي نماذج مجانية جديدة بالقائمة.
+- القرآن: تشغيل السورة ما عاد يعلّق سحر ثواني.
 
 شو الجديد بـ 0.17.1 — صفحة «العقل أونلاين» مرتّبة 🧹
 -------------------------------------------------
@@ -58,7 +65,7 @@
 هالنسخة بتجمع كل شي اشتغلنا عليه من بعد 0.11: المثبّت والتحديثات، برنامج «إعداداتي»، «النشاطات»، و«عقلها».
 
 📦 المثبّت والتحديثات
-- صار في مثبّت: Sahar-Setup-0.17.1.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
+- صار في مثبّت: Sahar-Setup-0.17.2.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
   بيحطها بـ %LocalAppData%\Programs\Sahar، وبيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
   بيثبّت معها برنامج الإعدادات وعقلها (Sahar.Mind.exe وملفات llama.cpp: Vulkan والمعالج). النموذج ما بيجي بالمثبّت:
   بتنزّلو من جوّاها لما تقلها (تحت).
@@ -92,7 +99,7 @@
 - السجل (engine.log و mind.log و settings.log) بيكتب أنواع وأرقام وأوقات بس — أبداً شو كتبت ولا اسم أغنية ولا ملف.
 
 جرّب بإيدك:
-  ١. ثبّتها من Sahar-Setup-0.17.1.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
+  ١. ثبّتها من Sahar-Setup-0.17.2.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
   ٢. افتح «إعداداتي» وغيّر حجمها؛ وبعدين شغّل المثبّت مرة تانية والنافذة مفتوحة (لازم تتسكّر هي وسحر وترجع سحر، وإعداداتك متل ما هي).
   ٣. شغّل أغنية؛ افلت ملف عليها؛ اربط Claude Code وخلّيه يسألك إذن.
   ٤. افتح «النماذج» وكبّس «نزّليه» (≈ ٥ غيغا)؛ وقّفه وكمّله؛ لما يخلص كبّس «جرّبيه» وصوّرلنا الأرقام.
@@ -248,12 +255,12 @@
 
 كيف تثبّتها
 -----------
-1. نزّل Sahar-Setup-0.17.1.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
+1. نزّل Sahar-Setup-0.17.2.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
 2. الويندوز رح يقلك «Windows protected your PC» (هاد SmartScreen) لأن النسخة مش موقّعة لسا. طبيعي:
    كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
    هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
 3. اختار إذا بدك ياها تشتغل مع الويندوز ← «التالي» ← «إنهاء». سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.17.1-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
+   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.17.2-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
    (نفس تحذير SmartScreen؛ خلّي كل الملفات والمجلدات يلي جنبها سوا). إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
 4. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
    "إخفاء ساعة" بيخبّيها ساعة وبترجع لحالها.
@@ -308,8 +315,18 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.17.1 (Windows)
+Sahar — test build 0.17.2 (Windows)
 ==================================
+
+What's new in 0.17.2 — the online brain no longer says «no internet» too soon 🔌
+-----------------------------------------------
+- The first online request gets more time (connect 10 s, first byte 20 s; a VPN's cold start), and opening the chat
+  window warms the connection with a request that spends no chat quota (Groq GET models, OpenRouter GET key).
+- «ما في نت» only when no provider could be reached at all; a slow or unreachable provider alone waits a minute while the
+  others are tried; the rest is one minute (was three) and online comes back by itself.
+- OpenRouter's free default is now google/gemma-4-26b-a4b-it:free; a 429 on a free model takes its one retry on another
+  free model (gemma-4-31b); Nemotron 3.5 Super VL and ERNIE 5.5 Flash are in the list (their Arabic is not verified).
+- Quran: the player runs on its own thread, so starting a surah no longer freezes her for seconds.
 
 What's new in 0.17.1 — the «العقل أونلاين» page, tidied 🧹
 -----------------------------------------------
@@ -331,7 +348,7 @@ What's new in 0.17.0 — an online brain for words 🌐
 What's new in 0.14.0 — the installer, her settings, her activities and her brain 🌙
 -----------------------------------------------
 Everything since 0.11 in one build:
-- Installer: Sahar-Setup-0.17.1.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
+- Installer: Sahar-Setup-0.17.2.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
   Windows (ticked). It installs the settings app and her brain (Sahar.Mind.exe and the pinned llama.cpp runtime, Vulkan
   and CPU) beside her; no model is bundled — she downloads one in the app when you say yes.
 - Updates: she asks in her bubble (yes / later) and never updates without a yes; the setup is checked against a signed
@@ -491,11 +508,11 @@ Still here from 0.2.0
 
 Install it
 ----------
-1. Download Sahar-Setup-0.17.1.exe from the release page ("test-build") on GitHub and run it.
+1. Download Sahar-Setup-0.17.2.exe from the release page ("test-build") on GitHub and run it.
 2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
    click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
 3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.
-   Portable instead: unzip Sahar-0.17.1-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
+   Portable instead: unzip Sahar-0.17.2-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
    keep the files and folders beside it together). Running her from the zip: the installer closes her for you;
    delete the old folder afterwards.
 4. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
