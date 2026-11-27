@@ -23,11 +23,13 @@ internal sealed class Panel(SurfaceClient client, Func<RectF> body)
     /// <summary>A panel is about to show (its mode): an ask bubble above her clears her speech bubble first.</summary>
     public event Action<string>? Opening;
 
-    public void Show(PanelSpec spec, Action<SurfaceEvent> handler, string mode = "beside", System.Numerics.Vector2? anchor = null)
+    /// <param name="activate">False for an ask she starts herself (review I2): shown without his focus, answered by a
+    /// click only, after a short guard.</param>
+    public void Show(PanelSpec spec, Action<SurfaceEvent> handler, string mode = "beside", System.Numerics.Vector2? anchor = null, bool activate = true)
     {
         Opening?.Invoke(mode);
         int seq = 0;
-        seq = client.Show(Surface, spec.Name, mode, spec.ToModel(), body(), e => Event(seq, e), anchor);   // the last one hears "closed" first
+        seq = client.Show(Surface, spec.Name, mode, spec.ToModel(), body(), e => Event(seq, e), anchor, activate);   // the last one hears "closed" first
         _seq = seq;
         bool was = IsOpen;
         _spec = spec;

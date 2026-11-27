@@ -132,10 +132,12 @@ internal static class Cards
         });
     }
 
-    /// <summary>A yes/no question in a bubble above her (V15Lists «عقلها بيسأل»): 1 / Enter = yes, 2 / Esc / closing = no.</summary>
     /// <summary>The chat window is open: a yes/no goes into it inline (never a bubble over it); false when it is closed.</summary>
     public static Func<string, Action<bool>, string, string, bool>? InChat { get; set; }
 
+    /// <summary>A yes/no question in a bubble above her (V15Lists «عقلها بيسأل»): she asks it herself (an update, her
+    /// brain, the model download), so it never takes his focus and no key answers it (review I2) — a click on «إي» after
+    /// a short guard is yes; «لا», a click away or closing is no.</summary>
     public static void Ask(Panel panel, string name, string question, string yes, string no, Action<bool> answer, string? yesIcon = null)
     {
         if (InChat?.Invoke(question, answer, yes, no) == true) return;
@@ -149,6 +151,6 @@ internal static class Cards
             done = true;
             if (e.Kind == "pick") panel.Done();
             answer(e.Kind == "pick" && e.Value == "yes");
-        }, mode: "above");
+        }, mode: "above", activate: false);
     }
 }

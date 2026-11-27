@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fold, matches } from '../../src/Sahar.Settings/web/surfaces/fold.js';
 import { text, find, findAll, has } from '../../src/Sahar.Settings/web/surfaces/h.js';
-import { listView, inputView, askView, trayView, drawerView, visibleRows } from '../../src/Sahar.Settings/web/surfaces/views.js';
+import { listView, inputView, askView, trayView, drawerView, visibleRows, askAccepts, ASK_GUARD_MS } from '../../src/Sahar.Settings/web/surfaces/views.js';
 import { chatView, afterRender } from '../../src/Sahar.Settings/web/surfaces/chatviews.js';
 import { PATHS } from '../../src/Sahar.Settings/web/surfaces/icons.js';
 
@@ -176,4 +176,15 @@ test('chat scroll: scrolled up and a line arrives shows «جديد» once, and t
   a = afterRender(st, { atBottom: false, n: 6, lastCount: 6 });
   assert.equal(a.toBottom, true);
   assert.equal(st.jump, false);
+});
+
+// Review I2: an ask she starts herself (update, her brain, the model download) never takes a key, and a click counts
+// only after a short guard — his typing or a click meant for the window under it never says «إي».
+test('ask guard: a quiet ask takes no key and no click in its first 800 ms', () => {
+  assert.equal(askAccepts({ quiet: true, shownAt: 1000 }, 'key', 5000), false);
+  assert.equal(askAccepts({ quiet: true, shownAt: 1000 }, 'click', 1500), false);
+  assert.equal(askAccepts({ quiet: true, shownAt: 1000 }, 'click', 1800), true);
+  assert.equal(askAccepts({ quiet: true, shownAt: undefined }, 'click', 99999), false, 'not placed yet');
+  assert.equal(askAccepts({ quiet: false, shownAt: 1000 }, 'key', 1001), true, 'an ask he opened answers at once');
+  assert.equal(ASK_GUARD_MS, 800);
 });

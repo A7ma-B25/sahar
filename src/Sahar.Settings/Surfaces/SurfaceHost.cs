@@ -221,6 +221,7 @@ internal sealed class SurfaceHost
             if (includeModel && m.Model is { Length: > 0 } model) { w.WritePropertyName("model"); w.WriteRawValue(model, skipInputValidation: false); }
             w.WriteBoolean("dark", m.Dark);
             w.WriteBoolean("still", m.Still);
+            if (m.Quiet) w.WriteBoolean("quiet", true);
             if (t == "show")
             {
                 w.WriteStartObject("margin");
@@ -317,7 +318,7 @@ internal sealed class SurfaceHost
         int x = (int)MathF.Round(card.X - ML * dpi), y = (int)MathF.Round(card.Y - MT * dpi);
         int w = (int)MathF.Ceiling(card.Width + (ML + MR) * dpi), h = (int)MathF.Ceiling(card.Height + (MT + MB) * dpi);
         s.Card = ((int)card.X, (int)card.Y, (int)card.Width, (int)card.Height);
-        s.Win.Place(x, y, w, h, dpi, show: true, activate: !again);
+        s.Win.Place(x, y, w, h, dpi, show: true, activate: !again && !m.Quiet);   // review I2: a quiet ask never takes his focus
         Post(s, $$"""{"t":"place","seq":{{m.Seq}},"left":{{(left ? "true" : "false")}},"claspY":{{claspY.ToString(System.Globalization.CultureInfo.InvariantCulture)}},"mode":"{{m.Mode ?? "beside"}}","again":{{(again ? "true" : "false")}}}""");
     }
 
@@ -365,6 +366,7 @@ internal sealed class SurfaceHost
                 w.WriteNumber("x", s.Card.X); w.WriteNumber("y", s.Card.Y); w.WriteNumber("w", s.Card.W); w.WriteNumber("h", s.Card.H);
                 w.WriteBoolean("dark", s.Showing?.Dark ?? false);
                 w.WriteBoolean("excluded", !(s.Showing?.Capturable ?? true));
+                w.WriteBoolean("foreground", SN.GetForegroundWindow() == s.Win.Hwnd);
                 w.WriteEndObject();
             }
             w.WriteEndObject();

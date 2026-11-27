@@ -239,6 +239,19 @@ function Stage-Look {
         if ([int](Kv 'debug-speech').clicks -ne $c0) { throw "the menu opening counted as a click ($c0 → $((Kv 'debug-speech').clicks))" }
         Close-Panel
     }
+    Step "look: an ask she starts never takes his focus and no key answers it (review I2)" {
+        Send '{"type":"cmd","name":"mind-offer"}' | Out-Null
+        $s = Wait-Surface 'panel'
+        if ($s.panel.kind -ne 'mind-download') { throw "not her download question: $($s.panel.kind)" }
+        if ($s.panel.foreground) { throw 'her own question took the foreground (his typing would answer it)' }
+        foreach ($k in 'Enter', '1') { Send ('{"type":"cmd","name":"panel-key","args":{"key":"' + $k + '"}}') | Out-Null }
+        Start-Sleep -Milliseconds 900   # past the click guard too
+        if ((Kv 'debug-panel').open -ne 'true') { throw 'a key answered her question' }
+        Send '{"type":"cmd","name":"panel-click","args":{"id":"no"}}' | Out-Null
+        Wait-Until { (Kv 'debug-panel').open -eq 'false' } 3000 'a click on «بعدين» did not answer it'
+        $log = Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') -Raw -Encoding UTF8
+        if ($log -notmatch 'download question answered \(later\)') { throw 'the answer was not «بعدين»' }
+    }
     Step "look: the host gone — started again once; gone twice, the tray falls back to a plain menu with quit, a card says a calm line (review C2)" {
         Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class MenuWin { [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h); [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t); }' -ErrorAction SilentlyContinue
         $l = Kv 'surface-link'

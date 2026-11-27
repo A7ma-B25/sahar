@@ -142,3 +142,12 @@ export function drawerView(m, st, emit) {
 }
 
 export const VIEWS = { list: listView, input: inputView, ask: askView, choose: askView, tray: trayView, drawer: drawerView };
+
+/** Review I2: an ask she opened herself (quiet: shown without his focus) is answered by a click only, and only once it
+ * has been on screen for ASK_GUARD_MS; an ask he opened answers keys and clicks at once. */
+export const ASK_GUARD_MS = 800;
+export function askAccepts(cur, how, now) {
+  if (!cur.quiet) return true;
+  if (how !== 'click') return false;
+  return cur.shownAt !== undefined && now - cur.shownAt >= ASK_GUARD_MS;
+}

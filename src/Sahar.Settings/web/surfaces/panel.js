@@ -1,7 +1,7 @@
 // The panel page: one warm WebView2 for pickers, input cards, ask bubbles, the tray menu and «الدرج». The host sends
 // {t:'show'|'update'|'place'|'hide'|'theme'}; the page answers {t:'ready'|'measured'|'shown'|'event'|'hidden'}.
 import { mount } from './h.js';
-import { VIEWS, visibleRows } from './views.js';
+import { VIEWS, visibleRows, askAccepts } from './views.js';
 
 const web = window.chrome && window.chrome.webview;
 // The focus ring only for keyboard use (a programmatic focus on open shows none).
@@ -18,6 +18,7 @@ function emit(kind, value) {
   if (!cur) return;
   if (kind === 'submit' || kind === 'pick') clearTimeout(liveTimer);   // a late search never overtakes his Enter
   const st = cur.st;
+  if (kind === 'pick' && cur.model.kind === 'ask' && !askAccepts(cur, 'click', performance.now())) return;   // review I2
   if (kind === 'confirm') { st.confirm = true; render(); return; }
   if (kind === 'confirm-no') { st.confirm = false; render(); return; }
   post({ t: 'event', seq: cur.seq, kind, value: value == null ? null : String(value) });
@@ -46,7 +47,7 @@ function render(first = false) {
       if (caret) field.setSelectionRange(caret[0], caret[1]);
       else field.setSelectionRange(field.value.length, field.value.length);
     }
-  } else if (first) {
+  } else if (first && !cur.quiet) {   // a quiet ask never takes the focus (review I2)
     (el.querySelector('.row.sel, .opt, .btn.pri, .item, button') || el).focus?.();
   }
   const sel = el.querySelector('[aria-selected=true]');
@@ -89,6 +90,7 @@ document.addEventListener('keydown', (e) => {
   const field = document.activeElement && document.activeElement.matches && document.activeElement.matches('input,textarea') ? document.activeElement : null;
   if (e.key === 'Escape') { e.preventDefault(); if (st.confirm) { st.confirm = false; render(); } else emit('close'); return; }
   if (composing || e.isComposing) return;
+  if (m.kind === 'ask' && !askAccepts(cur, 'key', performance.now())) return;   // review I2: no key answers a quiet ask
   const list = choices();
   if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && list.length) {
     e.preventDefault();
@@ -122,7 +124,7 @@ function show(msg) {
   document.documentElement.classList.remove('kb');   // a new card starts without the keyboard ring
   document.documentElement.dataset.theme = msg.dark ? 'dark' : 'light';
   document.documentElement.classList.toggle('still', !!msg.still);
-  cur = { seq: msg.seq, model: msg.model, st: {}, margin: msg.margin || { l: 24, t: 20 }, place: null };
+  cur = { seq: msg.seq, model: msg.model, st: {}, margin: msg.margin || { l: 24, t: 20 }, place: null, quiet: !!msg.quiet, shownAt: undefined };
   render(true);
   const card = stage.firstElementChild;
   card.classList.remove('pop');
@@ -155,7 +157,7 @@ if (web) {
     } else if (msg.t === 'place' && cur && msg.seq === cur.seq) {
       cur.place = msg;
       render(true);
-      requestAnimationFrame(() => requestAnimationFrame(() => post({ t: 'shown', seq: cur.seq })));
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (cur) cur.shownAt = performance.now(); post({ t: 'shown', seq: cur && cur.seq }); }));
     } else if (msg.t === 'hide') {
       const card = stage.firstElementChild;
       const gone = cur && cur.seq;
