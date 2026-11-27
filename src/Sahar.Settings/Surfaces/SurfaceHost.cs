@@ -31,6 +31,7 @@ internal sealed class SurfaceHost
         public SurfaceMsg? Queued;         // a show that came before the page was ready
         public bool Open;
         public bool Placing;
+        public bool Measured;
         public readonly Stopwatch Clock = new();
         public double LastMs;
         public (int X, int Y, int W, int H) Card;
@@ -206,6 +207,16 @@ internal sealed class SurfaceHost
         s.Open = true;
         s.Win.SetCaptureExcluded(!m.Capturable);
         s.Win.Wake();
+        s.Measured = false;
+        // Review minor: a page that never answers (hung, crashed renderer) never leaves the panel "placing" forever: placed
+        // but not confirmed counts as shown; never measured closes it (the engine hears "closed").
+        int seq = m.Seq;
+        _ = Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ => Ui!.Post(__ =>
+        {
+            if (!s.Open || !s.Placing || s.Showing?.Seq != seq || !s.Ready) return;   // a page still warming is not hung
+            SettingsLog.Write($"surfaces: {s.Name} {(s.Measured ? "shown unconfirmed" : "never placed")}");
+            if (s.Measured) s.Placing = false; else Close(s, "closed");
+        }, null));
         if (!s.Ready) { s.Queued = m; return; }
         PostRaw(s, "show", m, includeModel: true);
     }
@@ -258,6 +269,7 @@ internal sealed class SurfaceHost
                 else if (!s.Open) s.Win.Rest();   // warm and quiet until asked
                 break;
             case "measured" when s.Showing is { } m && m.Seq == seq:
+                s.Measured = true;
                 Placed(s, m, r.GetProperty("w").GetSingle(), r.GetProperty("h").GetSingle(),
                     again: r.TryGetProperty("again", out var ag) && ag.ValueKind == JsonValueKind.True);
                 break;

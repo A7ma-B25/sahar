@@ -210,19 +210,31 @@ internal sealed class ChatHub
     public static Func<string, bool> Clipboard { get; set; } = _ => false;
 
     /// <summary>An ask while the window is open goes inline (not to the bubble); false when it is closed.</summary>
-    public bool Ask(string question, Action<bool> answer, string yes = "إي", string no = "لا")
+    /// <param name="timeout">Review minor: an ask nobody else times out (the update and download questions) ends as «لا»
+    /// after this, so its caller is never left waiting.</param>
+    public bool Ask(string question, Action<bool> answer, string yes = "إي", string no = "لا", TimeSpan? timeout = null)
     {
         if (!_open) return false;
         _askLabels = (yes, no);
         _conv = _store.Append(_conv, new ChatEntry(_now(), ChatWho.Her, ChatLine.Ask, question));
-        _ask = (_conv, _store.Load(_conv).Count - 1, answer);
+        var ask = (_conv, _store.Load(_conv).Count - 1, answer);
+        _ask = ask;
         Push();
+        if (timeout is { } after)
+        {
+            var t = _ui.CreateTimer();
+            t.IsRepeating = false;
+            t.Interval = after;
+            t.Tick += (_, _) => { if (_ask == ask) { AskEnded(timedOut: true); answer(false); } };
+            t.Start();
+        }
         return true;
     }
 
     private void AnswerAsk(string value)
     {
-        if (_ask is not { } a || value.Split(':') is not [var mid, var ans] || mid != "m" + a.Index.ToString(CultureInfo.InvariantCulture)) return;
+        // review minor: only the ask that is live, in the conversation shown (an old one in another chat never answers it)
+        if (_ask is not { } a || a.Conv != _conv || value.Split(':') is not [var mid, var ans] || mid != "m" + a.Index.ToString(CultureInfo.InvariantCulture)) return;
         bool yes = ans == "yes";
         _ask = null;
         _store.ReplaceAt(a.Conv, a.Index, m => m with { Answer = yes ? "yes" : "no", At = m.At });
@@ -388,8 +400,11 @@ internal sealed class ChatHub
                     .S("note", Address.ToYou("ما ببعتها لحدا، إنت بتلصقها")).T("copied", _copied.Contains(i)).End();
                 break;
             case ChatLine.Ask:
-                j.S("kind", "ask").S("text", m.Text).O("ask").S("yes", _askLabels.Yes).S("no", _askLabels.No).T("answered", m.Answer is not null).End();
-                if (m.Answer is { } a)
+                // review minor: an ask that is no longer live (her restart, another one since) shows as unanswered, inactive
+                bool live = _ask is { } la && la.Conv == _conv && la.Index == i;
+                var answer = m.Answer ?? (live ? null : "timeout");
+                j.S("kind", "ask").S("text", m.Text).O("ask").S("yes", _askLabels.Yes).S("no", _askLabels.No).T("answered", answer is not null).End();
+                if (answer is { } a)
                     j.O("receipt").S("icon", a == "yes" ? "check" : "x").S("text", a switch
                     {
                         "yes" => Address.ToYou("سمحتلها") + " · " + Clock(m.At, false),

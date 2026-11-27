@@ -81,6 +81,7 @@ internal sealed partial class MindEngine
             TimedOutInChat = t => Chat?.AskEnded(t),
         };
         OfferDownload ??= OfferDownloadQuestion;
+        Surfaces.ChatHub.Clipboard = Copy;   // review minor: an older draft (no copy of its own) copies too
         ChatHandler = OnChat;
         Received += OnMind;
         Menu.ChatTyped += () => { if (Ready()) WarmUp(); };

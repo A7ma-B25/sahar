@@ -97,7 +97,11 @@ public sealed partial class PersonaFile(string path)
         try
         {
             if (!File.Exists(path)) return null;
-            var t = Normalise(File.ReadAllText(path, Encoding.UTF8));
+            // Review minor (0.16): a huge file (put there by hand) is never read whole; only its start can be used.
+            using var reader = new StreamReader(path, Encoding.UTF8);
+            var buffer = new char[MaxChars * 4];
+            int n = reader.ReadBlock(buffer, 0, buffer.Length);
+            var t = Normalise(new string(buffer, 0, n));
             return t.Length == 0 ? null : t;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)

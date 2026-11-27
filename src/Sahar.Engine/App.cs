@@ -704,7 +704,7 @@ internal sealed unsafe class App
         }
         menu.ChatSent += text => Safe(() => ChatLine(text, window: false));
         chat.Send = text => Safe(() => ChatLine(text, window: true));
-        Sahar.Engine.Surfaces.Cards.InChat = (q, a, yes, no) => chat.Ask(q, a, yes, no);   // a yes/no while the chat is open goes into it
+        Sahar.Engine.Surfaces.Cards.InChat = (q, a, yes, no) => chat.Ask(q, a, yes, no, TimeSpan.FromMinutes(2));   // a yes/no while the chat is open goes into it (unanswered: «لا»)
         // A long bubble's «كمّل بالمحادثة»: the chat opens on that line (her words go into it).
         speech.ContinueChat += text => Safe(() => { chat.Open(); chat.Said(text); });
         menu.ChatContinue += text => Safe(() =>
