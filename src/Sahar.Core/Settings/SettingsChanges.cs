@@ -32,7 +32,10 @@ public static class SettingsChanges
             || a.MindSelfActions != b.MindSelfActions || a.MindVoice != b.MindVoice || a.MindBackend != b.MindBackend
             || a.MindUseGpu != b.MindUseGpu || a.MindLearnChats != b.MindLearnChats || a.MindLearnImports != b.MindLearnImports
             || a.MindLearnExamples != b.MindLearnExamples || a.MindLearnMusic != b.MindLearnMusic
-            || a.MindEpisodeDays != b.MindEpisodeDays) list.Add("mind");
+            || a.MindEpisodeDays != b.MindEpisodeDays || a.MindLocalOnly != b.MindLocalOnly || a.MindOnlineConsent != b.MindOnlineConsent
+            || !SameItems(a.MindOnlineChain, b.MindOnlineChain) || a.MindGroqModel != b.MindGroqModel || a.MindOpenRouterModel != b.MindOpenRouterModel
+            || a.MindCustomUrl != b.MindCustomUrl || a.MindCustomModel != b.MindCustomModel || a.MindChatBrain != b.MindChatBrain
+            || !SameItems(a.MindOnlineKeys, b.MindOnlineKeys)) list.Add("mind");
         if (a.AllowCapture != b.AllowCapture) list.Add("capture");
         return list;
     }

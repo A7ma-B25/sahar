@@ -31,8 +31,9 @@ public sealed class SettingsStoreTests : IDisposable
         };
         SettingsStore.Save(PathOf, s);
         var back = SettingsStore.Load(PathOf);
-        Assert.Equal(s with { BlockedApps = [] }, back with { BlockedApps = [] });
+        Assert.Equal(s with { BlockedApps = [], MindOnlineChain = [], MindOnlineKeys = [] }, back with { BlockedApps = [], MindOnlineChain = [], MindOnlineKeys = [] });
         Assert.Equal(s.BlockedApps, back.BlockedApps);
+        Assert.Equal(s.MindOnlineChain, back.MindOnlineChain);   // 0.17: lists compare by reference in a record
     }
 
     [Fact]

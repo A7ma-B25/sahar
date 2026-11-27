@@ -63,7 +63,43 @@ public class SettingsPatchTests
         ("mindLearnMusic", "true"),
         ("mindEpisodeDays", "7"),
         ("allowCapture", "true"),
+        ("mindLocalOnly", "true"),
+        ("mindOnlineConsent", "true"),
+        ("mindOnlineChain", "[\"openrouter\",\"groq\"]"),
+        ("mindGroqModel", "\"llama-3.3-70b-versatile\""),
+        ("mindOpenRouterModel", "\"openrouter/free\""),
+        ("mindCustomUrl", "\"https://api.example.com/v1\""),
+        ("mindCustomModel", "\"gpt-5-mini\""),
+        ("mindChatBrain", "\"local\""),
     ];
+
+    [Theory]
+    [InlineData("mindOnlineChain", "[\"groq\",\"nope\"]")]
+    [InlineData("mindOnlineChain", "\"groq\"")]
+    [InlineData("mindGroqModel", "\"bad id!\"")]
+    [InlineData("mindCustomUrl", "\"http://api.example.com/v1\"")]
+    [InlineData("mindChatBrain", "\"cloud\"")]
+    [InlineData("mindOnlineKeys", "[\"groq\"]")]
+    public void Online_BadValues_Refused(string key, string json)
+    {
+        var from = new SaharSettings();
+        var s = Apply(key, json, out var error, from);
+        Assert.NotNull(error);
+        Assert.Equal(SettingsStore.ToJson(from), SettingsStore.ToJson(s));
+    }
+
+    [Fact]
+    public void Online_Defaults_AndChainDropsDuplicates()
+    {
+        var d = new SaharSettings();
+        Assert.Equal(["groq", "openrouter", "custom"], d.MindOnlineChain);
+        Assert.False(d.MindLocalOnly);
+        Assert.False(d.MindOnlineConsent);
+        Assert.Equal("online", d.MindChatBrain);
+        Assert.Equal(["openrouter", "groq"], Apply("mindOnlineChain", "[\"openrouter\",\"groq\",\"openrouter\"]", out _).MindOnlineChain);
+        Assert.Equal("", Apply("mindCustomUrl", "\"\"", out var e).MindCustomUrl ?? "");
+        Assert.Null(e);
+    }
 
     public static TheoryData<string, string> Valid
     {

@@ -123,4 +123,22 @@ public sealed record SaharSettings
     public int MindEpisodeDays { get; set; } = 30;
     /// <summary>0.15 «اسمح بتصويرها»: her windows show in screen recordings and screenshots (off: Windows leaves them out).</summary>
     public bool AllowCapture { get; set; }
+    /// <summary>0.17 «محلي فقط»: nothing leaves the laptop (no online brain, no key test, no quota read).</summary>
+    public bool MindLocalOnly { get; set; }
+    /// <summary>0.17: he read what goes online (and that free models may keep it) and said «موافق», once.</summary>
+    public bool MindOnlineConsent { get; set; }
+    /// <summary>0.17: the online providers in the order they are tried; her local brain is always last.</summary>
+    public IReadOnlyList<string> MindOnlineChain { get; set; } = DefaultChain;
+    /// <summary>One shared instance: two default settings stay equal (records compare lists by reference).</summary>
+    public static readonly IReadOnlyList<string> DefaultChain = ["groq", "openrouter", "custom"];
+    public string? MindGroqModel { get; set; }
+    public string? MindOpenRouterModel { get; set; }
+    /// <summary>0.17 «مخصّص»: any OpenAI-compatible endpoint (https, or his own loopback server) and its model id.</summary>
+    public string? MindCustomUrl { get; set; }
+    public string? MindCustomModel { get; set; }
+    /// <summary>0.17: the chat window's brain chip (online | local).</summary>
+    public string MindChatBrain { get; set; } = "online";
+    /// <summary>0.17: which providers have a key sealed in her box (flags only, written by the engine from the Mind's
+    /// status; never the keys themselves).</summary>
+    public IReadOnlyList<string> MindOnlineKeys { get; set; } = [];
 }

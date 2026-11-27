@@ -28,6 +28,7 @@ public static class SettingsPatch
         "mindEnabled", "mindUnloadMinutes", "mindInitiative", "mindSelfActions", "mindVoice", "mindBackend", "mindUseGpu",
         "mindLearnChats", "mindLearnImports", "mindLearnExamples", "mindLearnMusic", "mindEpisodeDays",
         "allowCapture",
+        "mindLocalOnly", "mindOnlineConsent", "mindOnlineChain", "mindGroqModel", "mindOpenRouterModel", "mindCustomUrl", "mindCustomModel", "mindChatBrain",
     ];
 
     /// <summary>«فرّغي عقلي بعد» choices, and how long chat episodes are kept (spec §8, §7.3).</summary>
@@ -88,6 +89,15 @@ public static class SettingsPatch
             "mindLearnMusic" => Bool(value) is { } m7 ? s with { MindLearnMusic = m7 } : null,
             "mindEpisodeDays" => Int(value) is { } ed && EpisodeDays.Contains(ed) ? s with { MindEpisodeDays = ed } : null,
             "allowCapture" => Bool(value) is { } c1 ? s with { AllowCapture = c1 } : null,
+            "mindLocalOnly" => Bool(value) is { } o1 ? s with { MindLocalOnly = o1 } : null,
+            "mindOnlineConsent" => Bool(value) is { } o2 ? s with { MindOnlineConsent = o2 } : null,
+            "mindOnlineChain" => Chain(value) is { } chain ? s with { MindOnlineChain = chain } : null,
+            "mindGroqModel" => ModelId(value) is { } gm ? s with { MindGroqModel = gm.Length == 0 ? null : gm } : null,
+            "mindOpenRouterModel" => ModelId(value) is { } om ? s with { MindOpenRouterModel = om.Length == 0 ? null : om } : null,
+            "mindCustomModel" => ModelId(value) is { } cm ? s with { MindCustomModel = cm.Length == 0 ? null : cm } : null,
+            "mindCustomUrl" => value.ValueKind == JsonValueKind.String && value.GetString()!.Trim() is var cu
+                && (cu.Length == 0 || Sahar.Core.Mind.Online.ProviderProfiles.IsAllowedUrl(cu)) ? s with { MindCustomUrl = cu.Length == 0 ? null : cu } : null,
+            "mindChatBrain" => value.ValueKind == JsonValueKind.String && value.GetString() is "online" or "local" ? s with { MindChatBrain = value.GetString()! } : null,
             _ => Unknown(out error),
         };
         if (next is null)
@@ -117,6 +127,23 @@ public static class SettingsPatch
         error = check.Ok ? null : check.Reason;
         return check.Ok ? s with { MenuShortcut = check.Value.ToString() } : s;
     }
+
+    /// <summary>The online chain: known provider ids, each once, in his order.</summary>
+    private static IReadOnlyList<string>? Chain(JsonElement v)
+    {
+        if (v.ValueKind != JsonValueKind.Array) return null;
+        var list = new List<string>();
+        foreach (var e in v.EnumerateArray())
+        {
+            if (e.ValueKind != JsonValueKind.String || !Sahar.Core.Mind.Online.ProviderProfiles.OnlineIds.Contains(e.GetString()!)) return null;
+            if (!list.Contains(e.GetString()!)) list.Add(e.GetString()!);
+        }
+        return list;
+    }
+
+    /// <summary>A model id ("" clears it to the provider's default).</summary>
+    private static string? ModelId(JsonElement v) =>
+        v.ValueKind == JsonValueKind.String && v.GetString()!.Trim() is var m && (m.Length == 0 || Sahar.Core.Mind.Online.ProviderProfiles.IsModelId(m)) ? m : null;
 
     private static int? Int(JsonElement v) => v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
 
