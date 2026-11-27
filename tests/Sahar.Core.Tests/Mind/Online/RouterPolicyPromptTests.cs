@@ -154,7 +154,8 @@ public sealed class RouterPolicyPromptTests
             .Persona(MindVoice.Complementary, new MindAddress(Gender.Male, null));
         Assert.DoesNotContain("برنامج صغير", p);
         Assert.Contains("مش إنسانة", p);
-        Assert.Contains("تكتبي أو تشرحي", p);
+        Assert.DoesNotContain("تكتبي أو تشرحي", p);   // the help line is online-only (mind-eval: it changed the local brain's answers)
+        Assert.Contains("ما تقولي إنك ما بتقدري لأنك برنامج", OnlinePrompt.Rules);
     }
 
     private sealed class FakeStore : IMindStore

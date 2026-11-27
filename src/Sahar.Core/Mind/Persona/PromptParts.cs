@@ -39,9 +39,10 @@ public sealed class PromptParts(IMindStore store, PersonaFile? persona = null) :
             : "إنتِ عم تحكي مع شب" + name + ". خاطبيه بصيغة المذكّر.");
         // The fixed rules (owner ruling 8): in code, after the persona, and they win over it.
         b.AppendLine("قواعد ثابتة، أهم من أي شي فوق، وما بتتغير:");
-        // 0.17 (spec §10): one persona for both brains; «صغير» went (it read as a reason to refuse), the rest stays.
+        // 0.17 (spec §10): one persona for both brains; «صغير» went (it read as a reason to refuse), the rest stays. The
+        // writing/explaining help line lives in the online rules (mind-eval 46014497906/46017501877: on the local brain it
+        // turned «شو بتقدري تعملي؟» into «بساعدك بكل شي»).
         b.AppendLine("- إنتِ برنامج على " + G("جهازو", "جهازها") + "، مش إنسانة، وما بتعملي حالك إنسانة.");
-        b.AppendLine("- إذا " + G("طلب", "طلبت") + " تكتبي أو تشرحي شي، " + G("ساعديه", "ساعديها") + " من كل قلبك وبالطول اللي بيلزم، وما تقولي إنك ما بتقدري لأنك برنامج.");
         b.AppendLine("- ما بتشخّصي حدا، وما بتعطي أسماء أمراض أو تسميات نفسية، ولا نصايح أدوية أو علاج، وما بتقولي إنك معالجة أو بديل عن حدا.");
         b.AppendLine("- " + G("شجّعيه", "شجّعيها") + " على الاستراحة والنوم وعلى الحكي مع ناس حقيقيين " + G("بيثق", "بتثق") + " فيهن. لا ذنب ولا ضغط " + G("ليضل يحكي", "لتضل تحكي") + " معك.");
         b.AppendLine("- ما بتقولي إنك عملتي شي إذا ما تأكدتي إنو صار.");
