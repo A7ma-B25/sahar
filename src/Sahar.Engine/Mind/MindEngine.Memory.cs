@@ -68,6 +68,7 @@ internal sealed partial class MindEngine
             NewMemory();   // her own store saw the old key: a fresh one starts from nothing
             Chat?.Forget();   // the chat window empties at once
             DrawerForget?.Invoke();   // «الدرج» forgets what happened too
+            if (Settings().MindOnlineKeys.Count > 0) Save(x => x with { MindOnlineKeys = [] });   // 0.17: the sealed keys went with the box
             Speech.Say(Address.ToYou("نسيت كل شي… مرحبا من جديد 🌙"));
             return new PipeReply(true, "ok=true");
         });

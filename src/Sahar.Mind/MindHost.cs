@@ -127,7 +127,7 @@ internal sealed class MindHost : ITurnIO
             case "warm": _ = Warm(); break;
             case "unload": _ = Unload(); break;
             case "quit": _quit.Cancel(); break;
-            case "store-changed": _store = null; _runner = null; _online.Reset(); break;
+            case "store-changed": _store = null; _runner = null; _online.Reset(); _online.SendStatus(); break;   // 0.17: a forget takes the keys too: the chip hides
             case "download": Download(m); break;
             case "bench": _ = Bench(m.Model == "quick"); break;
             case "model": Model(m); break;
