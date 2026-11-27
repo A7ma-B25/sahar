@@ -7,6 +7,7 @@ using Sahar.Core.Mind.Bench;
 using Sahar.Core.Mind.Download;
 using Sahar.Core.Mind.Memory;
 using Sahar.Core.Mind.Models;
+using Sahar.Core.Mind.Online;
 using Sahar.Core.Mind.Protocol;
 using Sahar.Core.Mind.Runtime;
 using Sahar.Core.Mind.Turn;
@@ -36,12 +37,14 @@ internal sealed class MindHost : ITurnIO
     private IMindStore? _store;
     private ITurnRunner? _runner;
     private int _busy;   // a bench running: never unloaded under it
+    private readonly OnlineHost _online;
 
     public MindHost(NamedPipeClientStream pipe, string? script)
     {
         _pipe = pipe;
         _out = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
         _runtime = script is null ? new RuntimeHost(_registry, Settings) : new ScriptRuntime(script);
+        _online = new OnlineHost(Settings, Send);
     }
 
     private static SaharSettings Settings()
@@ -110,7 +113,12 @@ internal sealed class MindHost : ITurnIO
     {
         switch (m.T)
         {
-            case "hello": _hello = m; Send(Models()); break;
+            case "hello":
+                _hello = m;
+                Send(Models());
+                _ = Task.Run(async () => { try { await _online.HandleAsync(new MindMsg { T = "online", Op = "status" }, _quit.Token); } catch (Exception e) when (e is not OperationCanceledException) { MindLog.Write($"online: status failed ({e.GetType().Name})"); } catch (OperationCanceledException) { } });
+                break;
+            case "online": Online(m); break;
             case "turn": StartTurn(m); break;
             case "tool-result" or "answer" when m.Id is { } id && m.Call is { } call:
                 _replies.GetOrAdd((id, call), _ => new TaskCompletionSource<MindMsg>(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult(m);
@@ -119,7 +127,7 @@ internal sealed class MindHost : ITurnIO
             case "warm": _ = Warm(); break;
             case "unload": _ = Unload(); break;
             case "quit": _quit.Cancel(); break;
-            case "store-changed": _store = null; _runner = null; break;
+            case "store-changed": _store = null; _runner = null; _online.Reset(); break;
             case "download": Download(m); break;
             case "bench": _ = Bench(m.Model == "quick"); break;
             case "model": Model(m); break;
@@ -146,6 +154,26 @@ internal sealed class MindHost : ITurnIO
             var sw = Stopwatch.StartNew();
             try
             {
+                // 0.17: the chat window's free words may go online (spec §5); everything else stays local, untouched.
+                if (source == "chat" && turn.Window == true)
+                {
+                    var s = Settings();
+                    var chain = _online.Chain();
+                    var (brain, reason) = BrainRouter.Decide(new RouteInput(source, true, turn.Brain, s.MindLocalOnly, s.MindOnlineConsent, turn.Text ?? "", _online.AnyUsable(chain)));
+                    MindLog.Write($"turn: route {(brain == BrainChoice.Online ? "online" : "local")} ({reason})");
+                    if (brain == BrainChoice.Online)
+                    {
+                        var o = await _online.Turn(MindParts.PromptParts(Store), Store).RunAsync(turn with { Id = id }, _hello, chain, this, cts.Token);
+                        MindLog.Write(o.Answered
+                            ? FormattableString.Invariant($"turn: online {o.Provider ?? "fixed"} first={o.FirstMs}ms total={o.TotalMs}ms out={o.OutTokens}")
+                            : $"turn: online fell through ({o.LastError ?? "none"}){(o.Tell ? ", told" : "")}");
+                        _online.SendStatus();
+                        if (o.Provider == ProviderProfiles.OpenRouterId) _ = _online.RefreshOpenRouterAsync(_quit.Token).ContinueWith(_ => _online.SendStatus(), TaskScheduler.Default);
+                        if (o.Answered) return;
+                        // Every online provider is out for today: she says so once, then her local brain answers.
+                        if (o.Tell) Send(new MindMsg { T = "say", Id = id, Text = OnlineTurn.ToldLine, Final = false, Kind = "note", Brain = "local" });
+                    }
+                }
                 if (!_runtime.Loaded)
                 {
                     Send(new MindMsg { T = "state", Id = id, Phase = "loading" });
@@ -171,6 +199,7 @@ internal sealed class MindHost : ITurnIO
                     // 0.14.1: every reason a reply does not reach him is logged as a kind.
                     _runner ??= new TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store)
                     {
+                        History = _online.History,   // 0.17: she remembers the last turns after a restart
                         ChatBudget = EvalBudget() ?? TimeSpan.FromSeconds(20),
                         Dropped = kind => MindLog.Write($"turn: dropped {kind}"),
                         Timed = t => _timing = t,   // 0.15.0: where the time went, on the turn's own line
@@ -189,6 +218,18 @@ internal sealed class MindHost : ITurnIO
                 _lastUse = DateTimeOffset.UtcNow;
                 Send(new MindMsg { T = "state", Id = id, Phase = "idle" });   // always: the header's «عم فكّر…» ends
             }
+        });
+    }
+
+    /// <summary>0.17: the page's key, test, status and bench (one at a time is enough; each ends with an online-status).</summary>
+    private void Online(MindMsg m)
+    {
+        _lastUse = DateTimeOffset.UtcNow;
+        _ = Task.Run(async () =>
+        {
+            try { await _online.HandleAsync(m, _quit.Token); }
+            catch (OperationCanceledException) { }
+            catch (Exception e) { MindLog.Write($"online: {m.Op} failed ({e.GetType().Name})"); _online.SendStatus(); }
         });
     }
 
