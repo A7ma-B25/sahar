@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { fold, matches } from '../../src/Sahar.Settings/web/surfaces/fold.js';
 import { text, find, findAll, has } from '../../src/Sahar.Settings/web/surfaces/h.js';
 import { listView, inputView, askView, trayView, drawerView, visibleRows } from '../../src/Sahar.Settings/web/surfaces/views.js';
-import { chatView } from '../../src/Sahar.Settings/web/surfaces/chatviews.js';
+import { chatView, afterRender } from '../../src/Sahar.Settings/web/surfaces/chatviews.js';
 import { PATHS } from '../../src/Sahar.Settings/web/surfaces/icons.js';
 
 const SURAHS = ['الفاتحة', 'البقرة', 'آل عمران'];
@@ -156,4 +156,24 @@ test('drawer: a section the engine sent without rows (an empty list is left out 
   assert.match(text(t), /خلص المؤقت/);
   const none = drawerView({ kind: 'drawer', title: 'الدرج', sections: [{ title: 'a' }], empty: { title: 'ما في شي هلق' }, foot: {} }, {}, noop);
   assert.match(text(none), /ما في شي هلق/);
+});
+
+// Review C1 (0.16): scrolled up, a new line used to re-render forever (lastCount was never moved before the re-render).
+test('chat scroll: scrolled up and a line arrives shows «جديد» once, and the next render is quiet', () => {
+  const st = { newBelow: false };
+  let a = afterRender(st, { atBottom: false, n: 5, lastCount: 4 });
+  assert.equal(a.toBottom, false);
+  assert.equal(st.newBelow, true);
+  assert.equal(a.lastCount, 5);
+  assert.equal(a.again, false, 'never asks for another render (it recursed forever)');
+  a = afterRender(st, { atBottom: false, n: 5, lastCount: a.lastCount });
+  assert.equal(st.newBelow, true);
+  assert.equal(a.again, false);
+  a = afterRender(st, { atBottom: true, n: 6, lastCount: 5 });
+  assert.equal(a.toBottom, true);
+  assert.equal(st.newBelow, false);
+  st.jump = true;
+  a = afterRender(st, { atBottom: false, n: 6, lastCount: 6 });
+  assert.equal(a.toBottom, true);
+  assert.equal(st.jump, false);
 });

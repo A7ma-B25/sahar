@@ -1,7 +1,7 @@
 // The chat window page (V15Chat): the engine sends the whole model on every change; the page keeps only what he is
 // typing, the scroll position and the list's little menus. Nothing here is logged or sent anywhere but the host.
 import { mount } from './h.js';
-import { chatView } from './chatviews.js';
+import { chatView, afterRender } from './chatviews.js';
 
 const web = window.chrome && window.chrome.webview;
 // The focus ring only for keyboard use (a programmatic focus on open shows none).
@@ -47,17 +47,14 @@ function render() {
   const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.id;
   const old = stage.querySelector('[data-id=composer]');
   const caret = old ? [old.selectionStart, old.selectionEnd] : null;
+  const where = afterRender(st, { atBottom, n: count(model), lastCount });   // review C1: decided first, one render
+  lastCount = where.lastCount;
   const el = mount(chatView(model, st, emit));
   el.style.left = margin.l + 'px';
   el.style.top = margin.t + 'px';
   stage.replaceChildren(el);
   const t = thread();
-  const n = count(model);
-  if (t) {
-    if (atBottom || st.jump) { t.scrollTop = t.scrollHeight; st.newBelow = false; st.jump = false; }
-    else { t.scrollTop = top; if (n > lastCount) { st.newBelow = true; render(); return; } }
-  }
-  lastCount = n;
+  if (t) t.scrollTop = where.toBottom ? t.scrollHeight : top;
   const box = stage.querySelector('[data-id=composer]');
   if (box) {
     grow(box);

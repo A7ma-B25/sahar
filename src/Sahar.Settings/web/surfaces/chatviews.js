@@ -85,3 +85,12 @@ export function chatView(m, st, emit) {
   const body = m.view === 'empty' ? emptyView(m, st, emit) : threadView(m, st, emit);
   return h('div', { cls: 'card chat', role: 'dialog', 'aria-label': m.labels.dialog }, header(m, emit), body, composer(m, st, emit));
 }
+
+/** Review C1: where the thread goes after a render, decided before it is built (so «جديد» is in the same render and
+ * nothing renders twice). He at the bottom, or a conversation opening (st.jump): the latest line. Scrolled up and a
+ * line arrived: his place stays and «جديد» shows. Changes st.newBelow / st.jump; returns the new count. */
+export function afterRender(st, { atBottom, n, lastCount }) {
+  if (atBottom || st.jump) { st.newBelow = false; st.jump = false; return { toBottom: true, lastCount: n, again: false }; }
+  if (n > lastCount) st.newBelow = true;
+  return { toBottom: false, lastCount: n, again: false };
+}
