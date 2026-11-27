@@ -18,13 +18,23 @@ public static class ServerArgs
             "--api-key", apiKey, "--no-webui", "--jinja", "-c", plan.Context.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "-ngl", plan.Offload == Offload.None ? "0" : "999",
             "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
-            "-t", threads.ToString(System.Globalization.CultureInfo.InvariantCulture), "--parallel", "1",
+            "-t", Cpu(plan, threads), "-tb", Cpu(plan, threads), "--parallel", "1",
+            // 0.17.2 (other apps lagged): no busy-wait between jobs and low priority (b12207 common/arg.cpp: --poll 0 = no
+            // polling, default 50; --prio -1 = low).
+            "--poll", "0", "--prio", "-1",
             "--reasoning", "off", "--reasoning-budget", "0",   // 0.14.1: Gemma 4 still opened a thought now and then
         };
         if (plan.Offload == Offload.Fit) a.AddRange(["--fit", "on"]);
         if (device is { Length: > 0 } && plan.Backend != Backend.Cpu && plan.Offload != Offload.None) a.AddRange(["--device", device]);
         return a;
     }
+
+    /// <summary>0.17.2: with every layer on the GPU the CPU only feeds it: 4 threads at most (his 24 logical CPUs gave
+    /// 10, spinning beside Explorer). On the CPU (or a partial fit) the computed count stays.</summary>
+    public const int GpuThreads = 4;
+
+    private static string Cpu(TierPlan plan, int threads) =>
+        (plan.Offload == Offload.All && plan.Backend != Backend.Cpu ? Math.Min(threads, GpuThreads) : threads).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Physical cores − 2, at least 2 (without a physical count: half the logical ones).</summary>
     public static int Threads(int logical, int physical) => Math.Max(2, (physical > 0 ? physical : logical / 2) - 2);

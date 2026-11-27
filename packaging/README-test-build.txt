@@ -7,6 +7,9 @@
 - ما عادت تقول «ما في نت» إلا إذا ولا مزوّد قدرت توصلّو. إذا واحد بطّأ بتجرّب التاني، وبترجع للأونلاين لحالها بعد دقيقة.
 - OpenRouter: النموذج المجاني صار Gemma 4 26B، وإذا كان مزحوم بتجرّب نموذج مجاني تاني مرة وحدة. وفي نماذج مجانية جديدة بالقائمة.
 - القرآن: تشغيل السورة ما عاد يعلّق سحر ثواني.
+- ما عادت تبطّئ البرامج التانية (خصوصاً مستكشف الملفات): شلنا مراقبة كانت تتفرّج على كل شباك بيطلع بالجهاز، وصارت حواسها أخف.
+- «خبّيني ساعة» صارت توقّف حواسها وعقلها المحلي لحتى ترجع، وكل نشاط بتطفيه من الإعدادات بيوقف حاسّتو كمان.
+- «ابعت سجلّي» صار فيه perf.txt: أرقام بس (قديش علّقت، وكلفة كل حاسة) لحتى نعرف إذا ضل في بطء.
 
 شو الجديد بـ 0.17.1 — صفحة «العقل أونلاين» مرتّبة 🧹
 -------------------------------------------------
@@ -327,6 +330,12 @@ What's new in 0.17.2 — the online brain no longer says «no internet» too soo
 - OpenRouter's free default is now google/gemma-4-26b-a4b-it:free; a 429 on a free model takes its one retry on another
   free model (gemma-4-31b); Nemotron 3.5 Super VL and ERNIE 5.5 Flash are in the list (their Arabic is not verified).
 - Quran: the player runs on its own thread, so starting a surah no longer freezes her for seconds.
+- Other apps (File Explorer most) no longer lag because of her: the global window-show hook is gone (the copy dialog is
+  found by a 2 s poll for a visible window, only with «النسخ» on), the 2 s media-session poll on her UI thread is gone
+  (one media manager, events, 1 s debounce), and the fullscreen check runs on focus changes plus once a second.
+- «خبّيني ساعة» rests her sensors and unloads her brain until she is back; each activity toggle stops its own sensor.
+  llama-server: 4 CPU threads with every layer on the GPU, --poll 0, --prio -1; the GPUs are listed once per Mind run.
+- «ابعت سجلّي» adds perf.txt (numbers only): UI-thread stalls (p95, max), each sensor's cost and rate, process threads.
 
 What's new in 0.17.1 — the «العقل أونلاين» page, tidied 🧹
 -----------------------------------------------

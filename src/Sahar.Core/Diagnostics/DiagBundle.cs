@@ -17,6 +17,8 @@ public sealed record DiagSources
     public string? MindLog { get; init; }
     public string? SettingsLog { get; init; }
     public string? SettingsJson { get; init; }
+    /// <summary>0.17.2: the engine's perf.txt (numbers only: UI-thread stalls, each sensor's cost and rate).</summary>
+    public string? Perf { get; init; }
     public IReadOnlyList<KeyValuePair<string, string>> Versions { get; init; } = [];
     public IReadOnlyList<string> Private { get; init; } = [];
 }
@@ -68,6 +70,7 @@ public static partial class DiagBundle
         for (int i = 0; i < Logs.Length; i++)
             if (texts[i] is { } t) list.Add(new(Logs[i], Scrub(t, names)));
         if (s.SettingsJson is { } json) list.Add(new("settings.json", SafeSettings(json, names)));
+        if (s.Perf is { } perf) list.Add(new(PerfCounters.File, Scrub(perf, names)));
         return list;
     }
 
@@ -311,6 +314,7 @@ public static partial class DiagBundle
         MindLog = Tail(Path.Combine(logFolder, Logs[1])),
         SettingsLog = Tail(Path.Combine(logFolder, Logs[2])),
         SettingsJson = Tail(settingsPath),
+        Perf = Tail(Path.Combine(logFolder, PerfCounters.File)),
         Versions = versions,
         Private = privateNames,
     };

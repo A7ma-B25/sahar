@@ -44,23 +44,36 @@ internal sealed class MediaSource
         _lyricsDir = lyricsDir;
         hub.Pressed += (id, a) => Safe(() => { if (a?.Id == "music" || id.StartsWith("music-", StringComparison.Ordinal) || id.StartsWith("lyrics", StringComparison.Ordinal)) Press(id); });
         hub.CoverOf = a => a.Id == "music" && _song is { } s ? (s.Cover, s.Colour) : (null, null);
-        var t = ui.CreateTimer();
-        t.Interval = TimeSpan.FromSeconds(1);
-        t.Tick += (_, _) => Safe(Tick);
-        t.Start();
-        try
+        _tick = ui.CreateTimer();
+        _tick.Interval = TimeSpan.FromSeconds(1);
+        _tick.Tick += (_, _) => Safe(Tick);
+        // 0.17.2: the one media manager (Senses.MediaSessions) for her music sense too.
+        Senses.MediaSessions.Manager.ContinueWith(task =>
         {
-            GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask().ContinueWith(task =>
-            {
-                if (!task.IsCompletedSuccessfully) { Log.Write("music: media controls unavailable"); return; }
-                _manager = task.Result;
-                _manager.SessionsChanged += (_, _) => Changed();
-                _manager.CurrentSessionChanged += (_, _) => Changed();
-                Changed();
-            }, TaskScheduler.Default);
-        }
-        catch (Exception e) { Log.Write($"music: media controls unavailable ({e.GetType().Name})"); }
+            if (task.Result is not { } m) { Log.Write("music: media controls unavailable"); return; }
+            _manager = m;
+            _manager.SessionsChanged += (_, _) => Changed();
+            _manager.CurrentSessionChanged += (_, _) => Changed();
+            Changed();
+        }, TaskScheduler.Default);
     }
+
+    private readonly DispatcherQueueTimer _tick;
+    private volatile bool _listening, _tagOn;
+
+    /// <summary>0.17.2: her music sense runs (sessions' events read) unless he hid her; the tag, its 1 s redraw and the
+    /// cover only with «الموسيقى» on. <see cref="SessionsSeen"/> (music, video, browser) feeds her dance and quiet.</summary>
+    public void Run(bool listening, bool tagOn)
+    {
+        bool was = _listening;
+        _listening = listening;
+        _tagOn = tagOn && listening;
+        if (_tagOn) _tick.Start(); else { _tick.Stop(); Hide(); }
+        if (listening && !was) Changed();
+    }
+
+    /// <summary>On the UI thread after each refresh: is music, a video, or a browser playing (no names).</summary>
+    public event Action<bool, bool, bool>? SessionsSeen;
 
     /// <summary>Music is playing now (her headphones and sway, 0.13 §1.5).</summary>
     public bool Playing => _song is { Playing: true };
@@ -68,11 +81,14 @@ internal sealed class MediaSource
     public Rgba? Colour => _song?.Colour;
     public event Action? PlayingChanged;
 
-    /// <summary>Timeline events come many times a second while seeking: one refresh per 300 ms quiet spell.</summary>
+    /// <summary>Events come many times a second while media plays: one refresh per 1 s quiet spell (0.17.2: was 300 ms),
+    /// none while he hid her.</summary>
     private void Changed()
     {
+        if (!_listening) return;
+        Perf.Count("media.event");
         int n = Interlocked.Increment(ref _changes);
-        Task.Delay(300).ContinueWith(_ => { if (Volatile.Read(ref _changes) == n) _ = RefreshAsync(); }, TaskScheduler.Default);
+        Task.Delay(1000).ContinueWith(_ => { if (Volatile.Read(ref _changes) == n) _ = RefreshAsync(); }, TaskScheduler.Default);
     }
 
     private int _changes;
@@ -81,9 +97,10 @@ internal sealed class MediaSource
     private async Task RefreshAsync()
     {
         int gen = Interlocked.Increment(ref _refreshGen);
+        long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            if (_manager is null) return;
+            if (_manager is null || !_listening) return;
             var sessions = _manager.GetSessions().ToList();
             var infos = new List<SessionInfo>();
             var now = DateTimeOffset.Now;
@@ -98,6 +115,9 @@ internal sealed class MediaSource
                 lock (_lastPlaying) last = _lastPlaying.GetValueOrDefault(app, DateTimeOffset.MinValue);
                 infos.Add(new SessionInfo(app, playing, info?.PlaybackType == Windows.Media.MediaPlaybackType.Video, MediaEdges.IsBrowser(app), last));
             }
+            bool anyMusic = infos.Any(i => i.Playing && !i.Video && !i.Browser), anyVideo = infos.Any(i => i.Playing && i.Video && !i.Browser),
+                anyBrowser = infos.Any(i => i.Playing && i.Browser);
+            _ui.TryEnqueue(() => Safe(() => SessionsSeen?.Invoke(anyMusic, anyVideo, anyBrowser)));
             int pick = MediaNow.Pick(infos);
             if (pick < 0) { _ui.TryEnqueue(() => Safe(() => Apply(null, null))); return; }
             var session = sessions[pick];
@@ -107,7 +127,7 @@ internal sealed class MediaSource
             string key = $"{infos[pick].App}\n{artist}\n{title}";
             Pixels? cover = _song?.Key == key ? _song.Cover : null;
             Rgba? colour = _song?.Key == key ? _song.Colour : null;
-            if (cover is null && props?.Thumbnail is { } thumb)
+            if (cover is null && _tagOn && props?.Thumbnail is { } thumb)
             {
                 try
                 {
@@ -129,6 +149,7 @@ internal sealed class MediaSource
             _ui.TryEnqueue(() => Safe(() => Apply(session, song)));
         }
         catch (Exception e) { Log.Write($"music: refresh failed ({e.GetType().Name})"); }
+        finally { Perf.Counters.Time("media.refresh", System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds); }
     }
 
     private void Hook(GlobalSystemMediaTransportControlsSession s)
@@ -139,7 +160,7 @@ internal sealed class MediaSource
         }
         s.MediaPropertiesChanged += (_, _) => Changed();
         s.PlaybackInfoChanged += (_, _) => Changed();
-        s.TimelinePropertiesChanged += (_, _) => Changed();
+        s.TimelinePropertiesChanged += (_, _) => { if (_lyricsView == LyricsView.Lines) Changed(); };   // 0.17.2: only for the lyrics' place
     }
 
     private void Apply(GlobalSystemMediaTransportControlsSession? session, Song? song)
@@ -159,7 +180,7 @@ internal sealed class MediaSource
 
     private void Show()
     {
-        if (_song is not { } s) { Hide(); return; }
+        if (_song is not { } s || !_tagOn) { Hide(); return; }
         var now = DateTimeOffset.Now;
         if (!s.Playing && s.PausedAt is { } at && !MediaNow.KeepPaused(at, now, _settings().MusicPausedKeep)) { Hide(); return; }
         var pos = MediaNow.Position(s.Position, s.Updated, now, s.Playing, s.End);

@@ -58,6 +58,8 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         finally { _gate.Release(); }
     }
 
+    private readonly Dictionary<string, IReadOnlyList<LlamaDevice>> _devices = [];
+
     private async Task<RuntimeReady> StartAsync(ModelEntry model, string path, TierPlan plan, Gpu? gpu, CancellationToken ct)
     {
         var appDir = AppContext.BaseDirectory;
@@ -75,7 +77,9 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         LlamaDevice? device = null;
         if (plan.Backend != Backend.Cpu && plan.Offload != Offload.None)
         {
-            before = await ListDevicesAsync(exe, dir, plan.Backend, ct);
+            // 0.17.2: listed once per Mind process (each listing started Vulkan on both his GPUs).
+            if (!_devices.TryGetValue(exe, out var listed) || listed.Count == 0) _devices[exe] = listed = await ListDevicesAsync(exe, dir, plan.Backend, ct);
+            before = listed;
             device = Devices.Pick(before, gpu);
             MindLog.Write($"runtime: devices {(before.Count == 0 ? "none" : string.Join(", ", before.Select(d => $"{d.Id} {d.Name} {d.TotalMB}MB")))}; using {device?.Id ?? "llama.cpp's choice"}");
         }
@@ -86,7 +90,11 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = dir,
             RedirectStandardError = true, RedirectStandardOutput = true,
         };
-        foreach (var a in ServerArgs.For(plan, path, port, key, ServerArgs.Threads(Environment.ProcessorCount, 0), device?.Id)) psi.ArgumentList.Add(a);
+        var args = ServerArgs.For(plan, path, port, key, ServerArgs.Threads(Environment.ProcessorCount, 0), device?.Id);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        // 0.17.2: the CPU side as launched (numbers only), for «ابعت سجلّي».
+        string Flag(string f) => args.ToList().IndexOf(f) is var i && i >= 0 && i + 1 < args.Count ? args[i + 1] : "-";
+        MindLog.Write($"runtime: server -t {Flag("-t")} -tb {Flag("-tb")} --poll {Flag("--poll")} --prio {Flag("--prio")} (cpus {Environment.ProcessorCount})");
         if (plan.Backend == Backend.Cuda) psi.Environment["PATH"] = CudaPath();
         _vramMB = 0;
         _bufferMB = 0;

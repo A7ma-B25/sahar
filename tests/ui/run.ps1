@@ -1001,10 +1001,22 @@ function Stage-Events {
         $r = Send '{"type":"cmd","name":"hide","args":{"minutes":"60"}}'
         if (-not $r.ok) { throw "hide not ok: $($r.error)" }
         Wait-State { param($st) $st.hidden } 1000 'hidden by hide' | Out-Null
-        try { Wait-Overlay 'false' 2000 'overlay still visible after hide' }
+        try {
+            Wait-Overlay 'false' 2000 'overlay still visible after hide'
+            # 0.17.2 (owner: other apps lagged while she was hidden): «خبّيني ساعة» rests her sensors.
+            $s = Kv 'debug-sensors'
+            if ($s.askedHidden -ne 'true' -or $s.copy -ne 'false' -or $s.system -ne 'false' -or $s.cammic -ne 'false') { throw "sensors while hidden: copy=$($s.copy) system=$($s.system) cammic=$($s.cammic) asked=$($s.askedHidden)" }
+        }
         finally { $r = Send '{"type":"cmd","name":"show"}' }
         if (-not $r.ok) { throw "show not ok: $($r.error)" }
         Wait-State { param($st) -not $st.hidden } 1000 'shown by show' | Out-Null
+        $s = Kv 'debug-sensors'
+        if ($s.askedHidden -ne 'false' -or $s.copy -ne 'true' -or $s.system -ne 'true' -or $s.cammic -ne 'true') { throw "sensors after show: copy=$($s.copy) system=$($s.system) cammic=$($s.cammic) asked=$($s.askedHidden)" }
+        $perf = Join-Path $env:LOCALAPPDATA 'Sahar\perf.txt'
+        if (-not (Test-Path $perf)) { throw 'no perf.txt beside her logs' }
+        $pt = Get-Content $perf -Raw -Encoding utf8
+        Write-Host "    perf.txt:`n$pt"
+        if ($pt -notmatch 'ui stalls: samples=\d+') { throw 'perf.txt has no UI-thread stall line' }
     }
     Step 'a maximized window does not hide her' {
         $script:win = Start-TestWindow 'maximized'
@@ -4714,7 +4726,8 @@ function Stage-Diag {
         if ($said -ne "حطّيتلك سجلّي عالديسكتوب: $($zips[0].Name)") { throw "her line: $said" }
         $t = Zip-Texts $zips[0].FullName
         Write-Host "    entries: $($t.Keys -join ', ')"
-        foreach ($n in 'about.txt', 'engine.log', 'settings.json') { if (-not $t.Contains($n)) { throw "no $n in the zip" } }
+        foreach ($n in 'about.txt', 'engine.log', 'settings.json', 'perf.txt') { if (-not $t.Contains($n)) { throw "no $n in the zip" } }
+        if ($t['perf.txt'] -notmatch 'ui stalls: samples=\d+' -or $t['perf.txt'] -notmatch 'engine threads: \d+') { throw "perf.txt: $($t['perf.txt'])" }   # 0.17.2
         $all = ($t.Values -join "`n")
         foreach ($bad in 'Lina', 'Aleppo', 'secret.txt', 'Inbox', 'C:\Users') { if ($all.Contains($bad)) { throw "the zip holds '$bad'" } }
         if ($t['settings.json'] -match '36\.2|37\.16') { throw 'settings.json holds his place' }

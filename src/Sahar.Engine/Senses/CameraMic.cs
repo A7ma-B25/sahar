@@ -21,11 +21,26 @@ internal sealed class CameraMic
     public string? MicApp { get; private set; }
     public event Action<bool>? Changed;
 
+    private readonly DispatcherQueueTimer _timer;
+
+    /// <summary>0.17.2: read only with «الكاميرا والمايك» on and while she is not hidden by him (off: nobody is known
+    /// to use them, so she is not kept quiet by an old reading).</summary>
+    public bool Enabled
+    {
+        get => _timer.IsRunning;
+        set
+        {
+            if (value == _timer.IsRunning) return;
+            if (value) _timer.Start();
+            else { _timer.Stop(); if (_simulated is null) { CameraApp = MicApp = null; Set(false); } }
+        }
+    }
+
     public CameraMic(DispatcherQueue ui)
     {
-        var t = ui.CreateTimer();
+        var t = _timer = ui.CreateTimer();
         t.Interval = TimeSpan.FromSeconds(5);
-        t.Tick += (_, _) =>
+        t.Tick += (_, _) => Diagnostics.Perf.Measure("cammic", () =>
         {
             try
             {
@@ -36,7 +51,7 @@ internal sealed class CameraMic
                 Set(Read());
             }
             catch (Exception e) { Log.Write($"camera/mic error: {e.GetType().Name}"); }
-        };
+        });
         t.Start();
     }
 

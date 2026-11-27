@@ -24,7 +24,7 @@ public sealed class RuntimeTests
         Assert.Equal("999", Val("-ngl"));
         Assert.Equal("q8_0", Val("--cache-type-k"));
         Assert.Equal("q8_0", Val("--cache-type-v"));
-        Assert.Equal("6", Val("-t"));
+        Assert.Equal("4", Val("-t"));   // 0.17.2: every layer on the GPU: 4 CPU threads at most
         Assert.Contains("--no-webui", a);
         Assert.Contains("--jinja", a);
         Assert.DoesNotContain("--sleep-idle-seconds", a);   // we kill the process instead (spec §3.1)

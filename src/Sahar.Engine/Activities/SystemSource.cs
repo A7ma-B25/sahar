@@ -30,11 +30,25 @@ internal sealed unsafe class SystemSource
     {
         _hub = hub;
         _cameraMic = cameraMic;
-        var t = ui.CreateTimer();
+        var t = _timer = ui.CreateTimer();
         t.Interval = TimeSpan.FromMilliseconds(500);
-        t.Tick += (_, _) => Safe(ReadVolume);
+        t.Tick += (_, _) => Safe(() => Perf.Measure("system.volume", ReadVolume));
         t.Start();
         cameraMic.Changed += _ => Safe(ShowCameraMic);
+    }
+
+    private readonly DispatcherQueueTimer _timer;
+
+    /// <summary>0.17.2: the volume is read only with «الجهاز» on and while she is not hidden by him.</summary>
+    public bool Enabled
+    {
+        get => _timer.IsRunning;
+        set
+        {
+            if (value == _timer.IsRunning) return;
+            if (value) _timer.Start();
+            else { _timer.Stop(); Com.Release(ref _volume); _level = null; _muted = null; }
+        }
     }
 
     public int? Volume => _level;

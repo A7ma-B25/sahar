@@ -7,63 +7,63 @@ namespace Sahar.Engine.Activities;
 
 /// <summary>
 /// File copies (spec 0.13 §2, an approved extra): Explorer's own copy dialog (<c>OperationStatusWindow</c>), read-only.
-/// A window-show hook wakes the reader; while the dialog exists its title's percentage is read once a second (with
-/// InternalGetWindowText, which sends the dialog nothing, so a busy Explorer never blocks her); the time left is our
-/// own smoothed pace. When it closes after progress, «خلص النسخ» is a moment. Nothing about the files is read.
+/// 0.17.2 (owner: other apps lagged, Explorer worst): no global window-show hook any more (every object shown in every
+/// process was queued to her busy UI thread). While «النسخ» is on, a FindWindow every 2 s (the kernel walks the
+/// top-level windows; nothing is sent to Explorer) looks for a VISIBLE dialog; its title's percentage is read with
+/// InternalGetWindowText (sends nothing); the time left is our own smoothed pace. Hidden again = closed. When it closes
+/// after progress, «خلص النسخ» is a moment. Nothing about the files is read.
 /// </summary>
 internal sealed unsafe class CopySource
 {
     private const string Class = "OperationStatusWindow";
-    private static CopySource? _instance;
     private readonly ActivityHub _hub;
     private readonly DispatcherQueueTimer _timer;
-    private nint _hook;
     private readonly CopyWatch _watch = new();
+    private bool _enabled;
 
     public CopySource(DispatcherQueue ui, ActivityHub hub)
     {
         _hub = hub;
-        _instance = this;
         _timer = ui.CreateTimer();
-        _timer.Interval = TimeSpan.FromSeconds(1);
-        _timer.Tick += (_, _) => Safe(Read);
-        _hook = Native.SetWinEventHook(ActNative.EVENT_OBJECT_SHOW, ActNative.EVENT_OBJECT_SHOW, 0, &OnShow, 0, 0, 2 /* skip own process */);
+        _timer.Interval = CopyWatch.PollEvery;
+        _timer.Tick += (_, _) => Safe(() => Perf.Measure("copy.poll", Poll));
         hub.Pressed += (id, _) => { if (id == "copy-show") Safe(ShowDialog); };
-        Find();
     }
 
-    [UnmanagedCallersOnly]
-    private static void OnShow(nint hook, uint ev, nint hwnd, int idObject, int idChild, uint thread, uint time)
+    /// <summary>«النسخ» on and she is not hidden by him: the poll runs; off: it stops and a shown copy goes.</summary>
+    public bool Enabled
     {
-        try
+        get => _enabled;
+        set
         {
-            if (idObject != 0 || _instance is not { } me || me._watch.Window != 0) return;
-            if (ActNative.ClassOf(hwnd) == Class) me.Start(hwnd);
-        }
-        catch (Exception) { }
-    }
-
-    private void Find()
-    {
-        fixed (char* c = Class)
-        {
-            var w = ActNative.FindWindow(c, null);
-            if (w != 0) Start(w);
+            if (value == _enabled) return;
+            _enabled = value;
+            if (value) { _timer.Start(); Safe(Poll); }
+            else
+            {
+                _timer.Stop();
+                if (_watch.Window != 0) { _watch.Tick(false, "", DateTimeOffset.Now); _hub.Remove("copy"); }
+            }
         }
     }
 
-    /// <summary>A dialog to watch (one at a time; an ended one never again): the timer reads it, never this call.</summary>
-    private void Start(nint window)
+    private void Poll()
     {
-        if (!_watch.Accept(window)) return;
-        Log.Write("copy: started");
-        _timer.Start();
+        if (_watch.Window == 0)
+        {
+            nint w;
+            fixed (char* c = Class) w = ActNative.FindWindow(c, null);
+            bool visible = w != 0 && Native.IsWindowVisible(w) != 0;
+            if (!_watch.Accept(w, visible)) return;
+            Log.Write("copy: started");
+        }
+        Read();
     }
 
     private void Read()
     {
-        if (_watch.Window is var w && w == 0) { _timer.Stop(); return; }
-        bool exists = Native.IsWindow(w) != 0;
+        if (_watch.Window is var w && w == 0) return;
+        bool exists = Native.IsWindow(w) != 0 && Native.IsWindowVisible(w) != 0;   // hidden again = closed
         var u = _watch.Tick(exists, exists ? ActCom.Title(w) : "", DateTimeOffset.Now);
         switch (u.Step)
         {
@@ -71,7 +71,6 @@ internal sealed unsafe class CopySource
                 _hub.Set(new Activity("copy", ActivityKind.Copy, ActivityText.Copying, ActivityText.Percent(u.Percent), "copy", (float)(u.Percent / 100)), Card);
                 break;
             case CopyStep.Done or CopyStep.Closed:
-                _timer.Stop();
                 _hub.Remove("copy");
                 Log.Write(u.Step == CopyStep.Done ? "copy: done" : "copy: closed");
                 if (u.Step == CopyStep.Done) _hub.Moment(new Activity("copy-done", ActivityKind.CopyDone, ActivityText.CopyDone, null, "check"), Card);

@@ -9,7 +9,9 @@ namespace Sahar.Engine.Host;
 /// <summary>
 /// Ties senses to the brain and the brain to what she shows. Ticks every 250 ms and on every event;
 /// plays the brain's expression when it changes and hides her when something is fullscreen on her monitor (0.10.1:
-/// fullscreen on another monitor keeps her shown, only quiet).
+/// fullscreen on another monitor keeps her shown, only quiet). 0.17.2 (owner: other apps lagged): the fullscreen check
+/// (SHQueryUserNotificationState and the foreground window's shape) runs on a foreground change and once a second
+/// (every 250 ms only while a fullscreen is being confirmed), never while he hid her himself.
 /// </summary>
 internal sealed class Director
 {
@@ -17,7 +19,8 @@ internal sealed class Director
     private readonly FullscreenDebounce _debounce = new();
     private readonly Action<string> _express;
     private readonly Action<bool> _setHidden;
-    private readonly DispatcherQueueTimer _timer;
+    private readonly DispatcherQueueTimer _timer, _fsTimer;
+    private bool _fsPending, _askedHidden;
     private string _lastKey = "idle";
     private readonly Func<nint, int> _monitorIndex;
     private readonly Func<int> _herMonitor;
@@ -36,10 +39,19 @@ internal sealed class Director
         _timer = ui.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.IsRepeating = true;
-        _timer.Tick += (_, _) => Safe(() => { CheckFullscreen(); Tick(); });
+        _timer.Tick += (_, _) => Safe(Tick);
         _timer.Start();
-        Foreground.Changed += () => Safe(() => { CheckFullscreen(); Tick(); });
+        _fsTimer = ui.CreateTimer();
+        _fsTimer.Interval = TimeSpan.FromSeconds(1);
+        _fsTimer.IsRepeating = true;
+        _fsTimer.Tick += (_, _) => Safe(() => { CheckFullscreen(); Tick(); });
+        _fsTimer.Start();
+        Foreground.Changed += () => Safe(() => { Perf.Count("hook.foreground"); CheckFullscreen(); Tick(); });
     }
+
+    /// <summary>0.17.2: «خبّيني ساعة» is on (he hid her; not a fullscreen app): her sensors rest and her brain unloads.</summary>
+    public bool AskedHidden => _askedHidden;
+    public event Action<bool>? AskedHiddenChanged;
 
     public bool Hidden => _hidden;
     /// <summary>Where the fullscreen app is, seen from her (0.13: the knock), and its monitor's handle.</summary>
@@ -124,9 +136,14 @@ internal sealed class Director
 
     private void CheckFullscreen()
     {
-        nint monitor = FullscreenWatcher.CheckMonitor();
+        if (_askedHidden) return;   // he hid her: nothing to hide from
+        nint monitor = 0;
+        Perf.Measure("director.fullscreen", () => monitor = FullscreenWatcher.CheckMonitor());
         if (monitor != 0) FullscreenMonitor = monitor;
         bool any = _debounce.Update(monitor != 0, DateTimeOffset.UtcNow);
+        // A fullscreen seen but not yet confirmed (750 ms): look again soon, then back to once a second.
+        bool pending = monitor != 0 && !any;
+        if (pending != _fsPending) { _fsPending = pending; _fsTimer.Interval = TimeSpan.FromMilliseconds(pending ? 250 : 1000); }
         int index = any ? _monitorIndex(monitor) : FullscreenScope.NoMonitor, her = _herMonitor();
         // Re-checked every tick: moved onto the fullscreen app's monitor, she hides; when it ends she comes back.
         var where = FullscreenScope.Where(index, her);
@@ -155,6 +172,13 @@ internal sealed class Director
             _lastKey = key;
             _express(key);
             if (Sahar.Core.Life.AttentionPacer.NeedsYou(key)) NeedsYou?.Invoke();
+        }
+        bool asked = now < _hiddenUntil;
+        if (asked != _askedHidden)
+        {
+            _askedHidden = asked;
+            Log.Write($"hidden by him: {(asked ? "on (sensors rest, brain unloads)" : "off")}");
+            AskedHiddenChanged?.Invoke(asked);
         }
         bool hidden = output.Hidden || now < _hiddenUntil;
         if (hidden != _hidden)

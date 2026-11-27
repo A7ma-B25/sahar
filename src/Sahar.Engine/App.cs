@@ -542,6 +542,22 @@ internal sealed unsafe class App
         acts.Welcomed += () => Safe(() => { if (!soul.Hop(1f)) soul.HappyFace(); });
         var systemSource = new SystemSource(ui, acts, cameraMic);
         var copySource = new CopySource(ui, acts);
+        mediaSource.SessionsSeen += (music, video, browser) => Safe(() => media.Feed(music, video, browser));   // 0.17.2: one media manager, no UI-thread poll
+        // 0.17.2 (owner: other apps lagged, hiding did not help): each activity toggle starts and stops its sensor, and
+        // «خبّيني ساعة» rests them all and unloads her brain (llama-server stops) until she is back.
+        Sahar.Engine.Mind.MindEngine? mind = null;
+        void ApplySensors()
+        {
+            var plan = Sahar.Core.Activities.SensorPlan.For(settings, director.AskedHidden);
+            copySource.Enabled = plan.Copy;
+            mediaSource.Run(listening: plan.Fullscreen, tagOn: plan.Music);
+            systemSource.Enabled = plan.System;
+            cameraMic.Enabled = plan.CameraMic;
+            if (plan.UnloadMind && mind?.SendIfRunning(new Sahar.Core.Mind.Protocol.MindMsg { T = "unload" }) == true) Log.Write("mind: unloaded (hidden by him)");
+        }
+        director.AskedHiddenChanged += _ => Safe(ApplySensors);
+        ApplySensors();
+        Perf.Start(ui);
         // Her own timer is a thing you wait for (rank 3): «المؤقت» with the time left; a click opens her menu.
         var timerTag = ui.CreateTimer();
         timerTag.Interval = TimeSpan.FromSeconds(1);
@@ -664,7 +680,7 @@ internal sealed unsafe class App
             try { if (!soul.Hop(1f)) soul.HappyFace(); }
             finally { chatHop = false; }
         }
-        Sahar.Engine.Mind.MindEngine? mind = null;   // 0.14: her brain (built once the pipe exists)
+        // 0.14: her brain (built once the pipe exists); declared above with the sensors (0.17.2: unloaded on «خبّيني ساعة»)
         // 0.16: the chat window. A line he sends there runs like the card's chat row; her answer comes back to it.
         var chat = new Sahar.Engine.Surfaces.ChatHub(ui, surfaces, () => motion.Body, () => settings)
         {
@@ -845,7 +861,7 @@ internal sealed unsafe class App
                         break;
                     case "weather": ApplyWeather(next); break;
                     case "shortcut": hk = TryShortcut(next.MenuShortcut, out _); break;
-                    case "activities": acts.SettingsChanged(); Expressions(); break;
+                    case "activities": acts.SettingsChanged(); Expressions(); ApplySensors(); break;
                     case "mind": mind?.RaiseSettings(next); break;
                     case "capture": Win.AllowCapture(next.AllowCapture); tray.AllowCapture = next.AllowCapture; surfaces.Capture(); break;
                 }
@@ -1067,6 +1083,12 @@ internal sealed unsafe class App
             pipe.Register("debug-throw-in-tick", _ => { motion.ArmThrow(); return new PipeReply(true); });
             pipe.Register("hide", r => { director.HideFor(TimeSpan.FromMinutes(Arg(r, "minutes"))); return new PipeReply(true, State: _state.Snapshot()); });
             pipe.Register("show", _ => { director.HideFor(TimeSpan.Zero); return new PipeReply(true, State: _state.Snapshot()); });
+            // 0.17.2: which sensors run (each toggle, and «خبّيني ساعة» rests them all), and perf.txt written now.
+            pipe.Register("debug-sensors", _ =>
+            {
+                Perf.Write();
+                return new PipeReply(true, $"copy={(copySource.Enabled ? "true" : "false")} system={(systemSource.Enabled ? "true" : "false")} cammic={(cameraMic.Enabled ? "true" : "false")} askedHidden={(director.AskedHidden ? "true" : "false")}");
+            });
             pipe.Register("debug-media", r =>
             {
                 bool On(string key) => r.Args?.TryGetValue(key, out var v) == true && v == "true";

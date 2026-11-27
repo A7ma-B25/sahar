@@ -14,6 +14,21 @@ internal static unsafe class FullscreenWatcher
     private const long WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000;
     private const int QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4;
 
+    private static long _qunsAt;
+    private static int _quns = -1;
+
+    /// <summary>0.17.2: Windows' fullscreen state at most once a second (a shell call; the check runs on every focus change).</summary>
+    private static int Quns()
+    {
+        long now = Environment.TickCount64;
+        if (_qunsAt != 0 && now - _qunsAt < 1000) return _quns;
+        int state = 0;
+        _quns = Native.SHQueryUserNotificationState(&state) == 0 ? state : -1;
+        _qunsAt = now;
+        Diagnostics.Perf.Count("quns");
+        return _quns;
+    }
+
     /// <summary>What the check sees, for test diagnostics.</summary>
     public static string Describe()
     {
@@ -50,8 +65,8 @@ internal static unsafe class FullscreenWatcher
     public static nint CheckMonitor()
     {
         nint fg = Native.GetForegroundWindow();
-        int state = 0;
-        if (Native.SHQueryUserNotificationState(&state) == 0 && state is QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE)
+        int state = Quns();
+        if (state is QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE)
             return fg == 0 || Win.Own.Contains(fg) ? Monitors.Primary.Handle : Native.MonitorFromWindow(fg, Native.MONITOR_DEFAULTTONEAREST);
 
         if (fg == 0 || fg == Native.GetShellWindow() || Win.Own.Contains(fg)) return 0;

@@ -6,17 +6,36 @@ using Windows.System;
 
 namespace Sahar.Engine.Senses;
 
+/// <summary>0.17.2: Windows' media session manager, asked for once and shared (her music sense and this one had two).</summary>
+internal static class MediaSessions
+{
+    public static readonly Task<GlobalSystemMediaTransportControlsSessionManager?> Manager = Request();
+
+    private static async Task<GlobalSystemMediaTransportControlsSessionManager?> Request()
+    {
+        try { return await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask().ConfigureAwait(false); }
+        catch (Exception e)
+        {
+            Log.Write($"media controls unavailable: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
+            return null;
+        }
+    }
+}
+
 /// <summary>
-/// Is music or a video playing (any app that reports to Windows' media controls)? Polled every 2 s on the
-/// UI thread; music start/stop go to the brain, video only tells her to keep still.
+/// Is music or a video playing (any app that reports to Windows' media controls)? 0.17.2 (owner: other apps lagged):
+/// no poll on her UI thread any more (GetSessions + GetPlaybackInfo every 2 s were synchronous cross-process calls);
+/// the flags come from her music sense's event-driven refresh (off the UI thread, <see cref="Feed"/>), and «the
+/// browser in front» is looked at again when the foreground changes. Music start/stop go to the brain, video only
+/// tells her to keep still.
 /// </summary>
 internal sealed class Media
 {
     private readonly MediaEdges _edges = new();
     private readonly Action<EventKind> _post;
-    private readonly DispatcherQueueTimer _timer;
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
     private bool _simulated;
+    private (bool Music, bool Video, bool Browser) _seen;
     private (bool, bool, bool, bool) _lastLogged;
 
     public bool VideoPlaying => _edges.VideoPlaying;
@@ -25,45 +44,22 @@ internal sealed class Media
     public Media(DispatcherQueue ui, Action<EventKind> post)
     {
         _post = post;
-        _timer = ui.CreateTimer();
-        _timer.Interval = TimeSpan.FromSeconds(2);
-        _timer.Tick += (_, _) => Poll();
-        try
-        {
-            GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask().ContinueWith(t =>
-            {
-                if (t.IsCompletedSuccessfully) ui.TryEnqueue(() => { _manager = t.Result; _timer.Start(); });
-                else Log.Write($"media controls unavailable: {(t.Exception?.GetBaseException() is { } be ? Sahar.Core.Diagnostics.LogRules.Kind(be) : "?")}");
-            });
-        }
-        catch (Exception e)
-        {
-            Log.Write($"media controls unavailable: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
-        }
+        MediaSessions.Manager.ContinueWith(t => { if (t.Result is { } m) ui.TryEnqueue(() => _manager = m); }, TaskScheduler.Default);
+        Foreground.Changed += () => { if (!_simulated && _seen.Browser) Safe(() => Apply(_seen.Music, _seen.Video, true, BrowserInFront())); };
     }
 
-    /// <summary>Looks at every media session (not just Windows' "current" one). App ids stay in memory only.</summary>
-    private void Poll()
+    /// <summary>On the UI thread: what the sessions say now (from MediaSource's refresh). App ids never reach here.</summary>
+    public void Feed(bool music, bool video, bool browser)
     {
         if (_simulated) return;
-        bool music = false, video = false, browser = false;
-        try
-        {
-            if (_manager != null)
-                foreach (var session in _manager.GetSessions())
-                {
-                    var info = session.GetPlaybackInfo();
-                    if (info?.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing) continue;
-                    if (MediaEdges.IsBrowser(session.SourceAppUserModelId ?? "")) browser = true;
-                    else if (info.PlaybackType == Windows.Media.MediaPlaybackType.Video) video = true;
-                    else music = true;
-                }
-        }
-        catch (Exception e)
-        {
-            Log.Write($"media poll failed: {Sahar.Core.Diagnostics.LogRules.Kind(e)}");
-        }
+        _seen = (music, video, browser);
         Apply(music, video, browser, browser && BrowserInFront());
+    }
+
+    private static void Safe(Action a)
+    {
+        try { a(); }
+        catch (Exception e) { Log.Write($"media error: {Sahar.Core.Diagnostics.LogRules.Kind(e)}"); }
     }
 
     /// <summary>The session the 🎵 controls act on: one that is playing, else Windows' current one.</summary>
@@ -121,10 +117,17 @@ internal sealed class Media
         }
     }
 
-    /// <summary>Pauses every playing session (before the Quran starts).</summary>
-    public async Task PauseAllAsync()
+    /// <summary>Pauses every playing session (before the Quran starts). 0.17.2: off her UI thread (GetSessions and
+    /// GetPlaybackInfo are synchronous cross-process calls).</summary>
+    public Task PauseAllAsync()
     {
-        if (_manager is null || _simulated) return;
+        var manager = _manager;
+        if (manager is null || _simulated) return Task.CompletedTask;
+        return Task.Run(() => PauseAll(manager));
+    }
+
+    private static async Task PauseAll(GlobalSystemMediaTransportControlsSessionManager _manager)
+    {
         try
         {
             foreach (var session in _manager.GetSessions())

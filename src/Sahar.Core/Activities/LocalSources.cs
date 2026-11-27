@@ -385,8 +385,15 @@ public sealed class CopyWatch
     public nint Window => _window;
     public CopyPace? Pace => _pace;
 
-    public bool Accept(nint window)
+    /// <summary>0.17.2: how often the engine looks for the dialog (no global window-show hook any more).</summary>
+    public static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(2);
+
+    /// <summary>A dialog to watch: only a VISIBLE one (0.17.2: Explorer keeps a hidden OperationStatusWindow alive and
+    /// reuses it; latching onto it read it forever and missed real copies). An ended window is refused while it still
+    /// shows, and accepted again once it was seen hidden (the next copy in the same window).</summary>
+    public bool Accept(nint window, bool visible = true)
     {
+        if (!visible) { if (window != 0 && window == _ended) _ended = 0; return false; }
         if (window == 0 || window == _ended || _window != 0) return false;
         _window = window;
         _pace = new CopyPace();

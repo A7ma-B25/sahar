@@ -18,6 +18,7 @@ internal static class DiagExport
             var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             bool onDesktop = desktop.Length > 0 && Directory.Exists(desktop);
             Log.Write("diag: making the bundle");   // first, so this run's line is in it
+            Perf.Write();   // 0.17.2: perf.txt (numbers only) fresh beside the logs
             var sources = DiagBundle.Read(Log.Folder, SettingsStore.DefaultPath, DiagBundle.Versions("engine"), DiagBundle.PrivateNames());
             var path = DiagBundle.Write(onDesktop ? desktop : Log.Folder, sources, DateTimeOffset.Now);
             Log.Write(onDesktop ? "diag: bundle on the desktop" : "diag: bundle in her folder (no desktop)");
