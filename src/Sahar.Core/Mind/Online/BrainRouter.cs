@@ -7,7 +7,7 @@ public enum BrainChoice { Local, Online }
 
 /// <summary>What the router reads (spec 0.17 §5). <see cref="Toggle"/>: the chat window's «أونلاين»/«محلي» (online | local;
 /// null = online). <see cref="AnyOnline"/>: a provider in the chain has a key and is not out for today.</summary>
-public sealed record RouteInput(string Source, bool Window, string? Toggle, bool LocalOnly, bool Consent, string Line, bool AnyOnline);
+public sealed record RouteInput(string Source, bool Window, string? Toggle, bool LocalOnly, bool Consent, string Line, bool AnyOnline, bool Distress = false);
 
 /// <summary>
 /// The deterministic router (spec 0.17 §5; research lesson 2: route before you think; no LLM routing). Everything
@@ -20,6 +20,8 @@ public static class BrainRouter
     {
         if (r.Source == "draft") return (BrainChoice.Local, "draft");
         if (r.Source != "chat") return (BrainChoice.Local, "background");
+        // Review I2: a distress cue gets the fixed reply from the local runner, which also keeps her quiet a day after.
+        if (r.Distress) return (BrainChoice.Local, "distress");
         if (r.LocalOnly) return (BrainChoice.Local, "local-only");
         if (!r.Consent) return (BrainChoice.Local, "no-consent");
         if (!r.Window) return (BrainChoice.Local, "card");
@@ -37,21 +39,24 @@ public static class BrainRouter
 /// </summary>
 public static class Intents
 {
+    // Strong: asking her to DO a thing (her tool verbs, and the objects only a tool makes: a timer, a reminder, a note).
     private static readonly string[] ActionWords = Phrases.FoldAll([
-        // her tools by name
         "مؤقت*", "موقت*", "تايمر", "منبه", "ذكريني*", "ذكرني*", "تذكير*", "نبهيني*", "فيقيني*", "صحيني*",
-        "موسيقى", "موسيقا", "غنيه", "اغنيه", "اغاني", "الغنيه", "صوت", "علي الصوت", "وطي الصوت",
-        "صلاه", "الصلاه", "اذان", "الاذان",
-        "طقس", "الطقس", "مطر", "شتي", "حراره", "قرآن", "قران", "سوره", "السوره", "تلاوه", "سمعيني*",
-        "ملاحظه*", "سجلي*", "احفظي*", "دوني*",
-        "العبي*", "نلعب", "لعبه", "غميضه", "الحقيني", "الحقني", "ارقصي", "نطي", "تمطي",
-        "اسكتي", "اسكت", "نامي", "اختفي", "تخبي*",
+        "ملاحظه*", "سجلي*", "احفظي*", "دوني*", "سمعيني*",
+        "العبي*", "نلعب", "غميضه", "الحقيني", "الحقني", "ارقصي", "نطي", "تمطي",
+        "اسكتي", "اسكت", "نامي", "اختفي", "تخبي*", "علي الصوت", "وطي الصوت",
         "شغلي*", "شغليلي*", "وقفي*", "وقفيلي*", "طفي*", "طفيلي*", "سكري*", "سكريلي*", "افتحي*", "افتحيلي*", "حطيلي*", "حطلي*",
-        "كمليلي", "رجعيلي", "الغي*", "امسحي*", "نسخ", "انسخي*", "الحافظه", "الكليب بورد", "بطاريه", "البطاريه",
-        // English
-        "timer", "remind*", "alarm", "music", "song", "volume", "next song", "prayer", "adhan", "weather", "quran", "surah",
-        "take a note", "save a note", "let's play", "play with me", "play some", "dance", "hush", "be quiet", "go to sleep",
-        "open the", "open my", "turn on", "turn off", "set a", "clipboard", "battery",
+        "كمليلي", "رجعيلي", "الغي*", "امسحي*", "انسخي*",
+        "timer", "remind*", "alarm", "take a note", "save a note", "let's play", "play with me", "play some", "dance", "hush",
+        "be quiet", "go to sleep", "open the", "open my", "turn on", "turn off", "set a", "volume", "next song",
+    ]);
+
+    // Weak: a topic her tools also cover (the weather, music, prayer, the Quran…): an action unless he asks her to write
+    // or explain about it (review: «اكتبلي شعر عن المطر» is words, not the weather card).
+    private static readonly string[] TopicWords = Phrases.FoldAll([
+        "موسيقى", "موسيقا", "غنيه", "اغنيه", "اغاني", "صوت", "صلاه", "اذان", "طقس", "مطر", "شتي", "حراره", "قرآن", "قران", "سوره",
+        "تلاوه", "لعبه", "نسخ", "الحافظه", "الكليب بورد", "بطاريه",
+        "music", "song", "prayer", "adhan", "weather", "quran", "surah", "clipboard", "battery",
     ]);
 
     private static readonly string[] WritingWords = Phrases.FoldAll([
@@ -66,7 +71,9 @@ public static class Intents
     public static bool Action(string? line)
     {
         var f = Phrases.Fold(line);
-        return f.Length > 0 && Phrases.Any(f, ActionWords);
+        if (f.Length == 0) return false;
+        if (Phrases.Any(f, ActionWords)) return true;
+        return Phrases.Any(f, TopicWords) && !Phrases.Any(f, WritingWords);
     }
 
     public static bool Writing(string? line)

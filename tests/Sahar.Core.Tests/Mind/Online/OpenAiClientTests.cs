@@ -72,7 +72,8 @@ public sealed class OpenAiClientTests
     [InlineData(500, "server")]
     [InlineData(502, "server")]
     [InlineData(503, "server")]
-    [InlineData(404, "bad-output")]
+    [InlineData(404, "model-bad")]
+    [InlineData(400, "bad-output")]
     public async Task Online_StatusMapsToOwnCode_BodyNeverInTheError(int status, string code)
     {
         var f = new FakeProvider(FakeProvider.Status(status));

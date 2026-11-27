@@ -86,7 +86,8 @@ public sealed class OnlineTurnTests
         var r = await Turn().RunAsync(Line("سؤال"), Hello, Chain("groq", "openrouter"), io, default);
         Assert.Equal("openrouter", r.Provider);
         Assert.Equal(2, State.Usage("groq").Used);
-        Assert.True(State.Exhausted("groq"));
+        Assert.False(State.Exhausted("groq"));   // review C1: a 429 is a cooldown, not the day's end
+        Assert.True(State.Cooling("groq"));
         Assert.Equal([TimeSpan.FromSeconds(3)], _waits);   // Retry-After 30 s capped at 3 s
     }
 
@@ -134,7 +135,7 @@ public sealed class OnlineTurnTests
         var io = new FakeIO();
         var r = await Turn().RunAsync(Line("سؤال"), Hello, Chain("groq", "openrouter"), io, default);
         Assert.False(r.Answered);
-        Assert.False(r.Tell);   // offline is not "the quota is out"
+        Assert.Equal(OnlineTurn.OfflineLine, r.Note);   // offline is not "the quota is out" (review I5: said once)
         Assert.Empty(io.Of("say"));
         Assert.Empty(History.Recent());
     }
@@ -143,13 +144,12 @@ public sealed class OnlineTurnTests
     public async Task AllExhausted_TellsOncePerDay()
     {
         State.Exhaust("groq");
-        Fail("openrouter", "quota");
-        Fail("openrouter", "quota");
+        State.SetRemote("openrouter", 50, 50);
         var r1 = await Turn().RunAsync(Line("a"), Hello, Chain("groq", "openrouter"), new FakeIO(), default);
-        Assert.True(r1.Tell);
+        Assert.Equal(OnlineTurn.ToldLine, r1.Note);
         var r2 = await Turn().RunAsync(Line("b"), Hello, Chain("groq", "openrouter"), new FakeIO(), default);
-        Assert.False(r2.Tell);
-        Assert.Equal(2, _asked.Count);   // one try and its retry; out providers are not asked again
+        Assert.Null(r2.Note);
+        Assert.Empty(_asked);   // out providers are never asked
     }
 
     [Fact]

@@ -9,24 +9,34 @@ public sealed record HistoryTurn(DateTimeOffset At, string User, string Her, str
 /// <summary>
 /// The last turns, kept so she remembers them after a restart (spec 0.17 §4): encrypted in her SecretBox
 /// (<c>turn-history</c>), at most <see cref="Max"/> pairs, older than MindEpisodeDays dropped, gone with «انسي كل شي»
-/// (the box key is shredded). Each brain reads its own budget from it (local: 6 turns / 800 tokens as before; online:
-/// up to the ~4 k prompt). A box that refuses keeps them in memory for this session. Never logs.
+/// (the box key is shredded). Each brain reads its own budget from it (local: 6 short turns / 800 tokens as before;
+/// online: only the online pairs — review I1 — up to its prompt cap). Read fresh each time (the engine clears the online
+/// pairs on «حكي جديد» through the same box); a box that cannot be read this moment is never written over. Never logs.
 /// </summary>
 public sealed class TurnHistory(ISecretBox box, Func<DateTimeOffset> now, Func<int> days)
 {
     public const string File = "turn-history";
     public const int Max = 40;
     private readonly object _gate = new();
-    private List<HistoryTurn>? _all;
 
     public void Add(string user, string her, string brain)
     {
         if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(her)) return;
         lock (_gate)
         {
-            var all = Load();
+            if (Load() is not { } all) return;
             all.Add(new HistoryTurn(now(), user, her, brain));
             if (all.Count > Max) all.RemoveRange(0, all.Count - Max);
+            Save(all);
+        }
+    }
+
+    /// <summary>Review I1: «حكي جديد» or a deleted conversation — the online pairs go (the local brain keeps its own).</summary>
+    public void Clear(string brain)
+    {
+        lock (_gate)
+        {
+            if (Load() is not { } all || all.RemoveAll(t => t.Brain == brain) == 0) return;
             Save(all);
         }
     }
@@ -36,17 +46,18 @@ public sealed class TurnHistory(ISecretBox box, Func<DateTimeOffset> now, Func<i
         lock (_gate)
         {
             var cut = now() - TimeSpan.FromDays(Math.Clamp(days(), 1, 3650));
-            return Load().Where(t => t.At >= cut).ToList();
+            return (Load() ?? []).Where(t => t.At >= cut).ToList();
         }
     }
 
-    private List<HistoryTurn> Load()
+    /// <summary>The kept turns, or null when the box cannot be read this moment.</summary>
+    private List<HistoryTurn>? Load()
     {
-        if (_all is not null) return _all;
         var list = new List<HistoryTurn>();
         try
         {
-            if (box.Read(File) is { Length: > 0 } bytes)
+            if (!box.TryRead(File, out var bytes)) return null;
+            if (bytes is { Length: > 0 })
             {
                 using var doc = JsonDocument.Parse(bytes);
                 foreach (var e in doc.RootElement.EnumerateArray())
@@ -59,7 +70,7 @@ public sealed class TurnHistory(ISecretBox box, Func<DateTimeOffset> now, Func<i
         }
         catch (JsonException) { list.Clear(); }
         catch (InvalidOperationException) { list.Clear(); }
-        return _all = list;
+        return list;
     }
 
     private void Save(List<HistoryTurn> all)

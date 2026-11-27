@@ -57,7 +57,7 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/openrouter/key":
             return self._json(200, {"data": {"label": "t", "is_free_tier": True, "free_model_daily_requests": {"used": 3, "limit": 50, "remaining": 47}}})
         if parts[-1] == "models":
-            return self._json(200, {"data": [{"id": "fake"}]})
+            return self._json(200, {"data": [{"id": "openai/gpt-oss-120b"}, {"id": "google/gemma-4-31b-it:free"}, {"id": "fake"}]})
         self._json(404, {})
 
     def do_POST(self):

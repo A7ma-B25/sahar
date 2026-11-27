@@ -5,7 +5,7 @@
 import { h } from './h.js';
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
-const NUMBER = /^\s*[0-9٠-٩]+[.)]\s+(.*)$/;
+const NUMBER = /^\s*([0-9٠-٩]+)[.)]\s+(.*)$/;
 const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/;
 const FENCE = /^\s*```/;
 
@@ -18,7 +18,7 @@ function inline(s) {
     if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) { out.push(h('code', null, part.slice(1, -1))); continue; }
     for (const b of plain(part).split(/(\*\*[^*\n]+\*\*)/)) {
       if (b.length > 4 && b.startsWith('**') && b.endsWith('**')) { out.push(h('strong', null, b.slice(2, -2))); continue; }
-      for (const i of b.split(/((?<![*\w])\*[^*\n]+\*(?![*\w]))/)) {
+      for (const i of b.split(/((?<![*\w])\*(?=\S)[^*\n]*?\S\*(?![*\w])|(?<![*\w])\*\S\*(?![*\w]))/)) {
         if (i.length > 2 && i.startsWith('*') && i.endsWith('*')) out.push(h('em', null, i.slice(1, -1)));
         else if (i) out.push(i);
       }
@@ -37,7 +37,11 @@ export function md(src) {
     if (para.length) blocks.push(h('p', null, para.flatMap((l, i) => (i ? ['\n', ...inline(l)] : inline(l)))));
     para = [];
   };
-  const flushList = () => { if (list) blocks.push(h(list.tag, null, list.items.map((it) => h('li', null, inline(it))))); list = null; };
+  const flushList = () => {
+    if (list) blocks.push(h(list.tag, list.tag === 'ol' && list.start !== 1 ? { start: String(list.start) } : null, list.items.map((it) => h('li', null, inline(it)))));
+    list = null;
+  };
+  const toInt = (t) => parseInt(String(t).replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)), 10) || 1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (FENCE.test(line)) {
@@ -56,8 +60,9 @@ export function md(src) {
       flushPara();
       const tag = bullet ? 'ul' : 'ol';
       if (list && list.tag !== tag) flushList();
-      list ??= { tag, items: [] };
-      list.items.push((bullet || number)[1]);
+      // a numbered list split by blank lines keeps counting from the number he sees (review)
+      list ??= { tag, items: [], start: number ? toInt(number[1]) : 1 };
+      list.items.push(bullet ? bullet[1] : number[2]);
       continue;
     }
     flushList();

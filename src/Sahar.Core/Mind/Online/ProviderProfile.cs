@@ -15,6 +15,9 @@ public sealed record ProviderProfile(
     IReadOnlyList<KeyValuePair<string, string>> Headers, string? ExtraBody = null)
 {
     public bool Online => Id != ProviderProfiles.LocalId;
+    /// <summary>Review C1: the prompt's cap in estimated tokens (Groq's free tier allows 8 K tokens a minute: a smaller
+    /// prompt leaves room for the answer and a second question).</summary>
+    public int PromptCap { get; init; } = 4000;
 }
 
 /// <summary>The profiles Sahar knows. Facts checked 2026-11-27 (Groq rate-limits and reasoning docs; OpenRouter limits
@@ -43,7 +46,7 @@ public static class ProviderProfiles
         var m = Model(model, GroqDefault);
         // gpt-oss on Groq thinks by default: low effort, and the reasoning kept out of the reply (Groq reasoning docs).
         string? extra = m.StartsWith("openai/gpt-oss", StringComparison.Ordinal) ? "\"include_reasoning\":false,\"reasoning_effort\":\"low\"" : null;
-        return new(GroqId, "Groq", Base("https://api.groq.com/openai/v1/", "groq"), m, false, true, QuotaKind.Headers, 1000, [], extra);
+        return new(GroqId, "Groq", Base("https://api.groq.com/openai/v1/", "groq"), m, false, true, QuotaKind.Headers, 1000, [], extra) { PromptCap = 2500 };
     }
 
     public static ProviderProfile OpenRouter(string? model = null) =>

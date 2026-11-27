@@ -7,28 +7,35 @@ using Sahar.Core.Mind.Runtime;
 namespace Sahar.Core.Mind.Online;
 
 /// <summary>
-/// Today's online requests per provider (spec 0.17 §7): every attempt counts (OpenRouter counts failed ones too), the
-/// provider's own numbers win when it gives them (Groq's headers, OpenRouter's key counter), a 429 after the retry marks
-/// it out for the day, and "she told him the online brain is out" happens once a day. Kept in her SecretBox
-/// (<c>online-state</c>; counts only, never words); a new local day starts empty. A box that refuses keeps counting in
-/// memory. Thread-safe (the Mind's turn and the page's status ask may meet).
+/// Today's online requests per provider (spec 0.17 §7): every attempt counts (OpenRouter counts failed ones too).
+/// Review C1: "out for the day" comes ONLY from the provider's own daily numbers (Groq's x-ratelimit-*-requests for
+/// <see cref="QuotaKind.Headers"/> providers; OpenRouter's key counter, whose day is UTC); any other 429 is a short
+/// cooldown (Retry-After, else 45 s) held in memory. Review I5: after every provider failed to connect, online rests for
+/// 3 minutes. "She told him" happens once a day. Counts live in her SecretBox (<c>online-state</c>; numbers only); a
+/// box that cannot be read now is never written over. Thread-safe.
 /// </summary>
 public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
 {
     public const string File = "online-state";
+    public static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(45), OfflineRest = TimeSpan.FromMinutes(3);
     private readonly object _gate = new();
     private string? _day;
     private bool _told;
     private readonly Dictionary<string, Entry> _p = [];
-    private bool _loaded;
+    private readonly Dictionary<string, DateTimeOffset> _cool = [];
+    private DateTimeOffset _offlineUntil = DateTimeOffset.MinValue;
+    private bool _loaded, _readable;
 
-    private sealed class Entry { public int Used; public int? Limit; public bool Out; }
+    private sealed class Entry { public string Day = ""; public int Used; public int? Limit; public bool Out; }
 
-    private string Today => now().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private string LocalDay => now().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    /// <summary>OpenRouter's free counter resets at midnight UTC; the others follow his day.</summary>
+    private string DayOf(string provider) => provider == ProviderProfiles.OpenRouterId
+        ? now().UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : LocalDay;
 
     public void Count(string provider) => Change(provider, e => e.Used++);
 
-    /// <summary>The provider's own rate numbers (Groq: x-ratelimit-*-requests).</summary>
+    /// <summary>A provider's daily request numbers (Groq: x-ratelimit-*-requests). Only for header-quota providers.</summary>
     public void Seen(string provider, RateInfo? rate)
     {
         if (rate is not { Limit: { } limit, Remaining: { } left }) return;
@@ -38,23 +45,42 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
     /// <summary>OpenRouter's free_model_daily_requests (used / limit).</summary>
     public void SetRemote(string provider, int used, int limit) => Change(provider, e => { e.Used = used; e.Limit = limit; });
 
+    /// <summary>The provider said its day is over (a test or bench that saw it).</summary>
     public void Exhaust(string provider) => Change(provider, e => e.Out = true);
+
+    /// <summary>A 429 that is not the day's end: skip this provider until <paramref name="retryAfter"/> (else 45 s).</summary>
+    public void Cool(string provider, double? retryAfter)
+    {
+        lock (_gate) _cool[provider] = now() + (retryAfter is { } s && s > 0 ? TimeSpan.FromSeconds(Math.Min(s, 600)) : DefaultCooldown);
+    }
+
+    public bool Cooling(string provider)
+    {
+        lock (_gate) return _cool.TryGetValue(provider, out var until) && now() < until;
+    }
+
+    /// <summary>Every provider failed to connect: online rests a few minutes (no 3 × 12 s wait before each answer).</summary>
+    public void GoOffline() { lock (_gate) _offlineUntil = now() + OfflineRest; }
+    public bool Offline { get { lock (_gate) return now() < _offlineUntil; } }
 
     public bool Exhausted(string provider)
     {
         lock (_gate)
         {
-            Fresh();
-            return _p.TryGetValue(provider, out var e) && (e.Out || e.Limit is { } l && e.Used >= l);
+            var e = Get(provider);
+            return e is not null && (e.Out || e.Limit is { } l && e.Used >= l);
         }
     }
+
+    /// <summary>Usable for a turn now: not out for the day, not cooling down, not resting offline.</summary>
+    public bool Usable(string provider) => !Offline && !Exhausted(provider) && !Cooling(provider);
 
     public (int Used, int? Limit) Usage(string provider)
     {
         lock (_gate)
         {
-            Fresh();
-            return _p.TryGetValue(provider, out var e) ? (e.Used, e.Limit) : (0, null);
+            var e = Get(provider);
+            return e is not null ? (e.Used, e.Limit) : (0, null);
         }
     }
 
@@ -71,12 +97,20 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
         }
     }
 
+    private Entry? Get(string provider)
+    {
+        Fresh();
+        if (!_p.TryGetValue(provider, out var e)) return null;
+        if (e.Day != DayOf(provider)) { _p.Remove(provider); return null; }
+        return e;
+    }
+
     private void Change(string provider, Action<Entry> change)
     {
         lock (_gate)
         {
-            Fresh();
-            if (!_p.TryGetValue(provider, out var e)) _p[provider] = e = new Entry();
+            var e = Get(provider);
+            if (e is null) _p[provider] = e = new Entry { Day = DayOf(provider) };
             change(e);
             Save();
         }
@@ -84,15 +118,17 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
 
     private void Fresh()
     {
-        if (!_loaded) { _loaded = true; Load(); }
-        if (_day != Today) { _day = Today; _told = false; _p.Clear(); }
+        if (!_loaded) Load();
+        if (_day != LocalDay) { _day = LocalDay; _told = false; }
     }
 
     private void Load()
     {
+        if (!box.TryRead(File, out var bytes)) return;   // busy or locked: try again next time; never written over meanwhile
+        _loaded = _readable = true;
+        if (bytes is not { Length: > 0 }) return;
         try
         {
-            if (box.Read(File) is not { Length: > 0 } bytes) return;
             using var doc = JsonDocument.Parse(bytes);
             var r = doc.RootElement;
             _day = r.TryGetProperty("day", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
@@ -101,6 +137,7 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
                 foreach (var x in p.EnumerateObject())
                     _p[x.Name] = new Entry
                     {
+                        Day = x.Value.TryGetProperty("day", out var pd) && pd.ValueKind == JsonValueKind.String ? pd.GetString()! : _day ?? "",
                         Used = x.Value.TryGetProperty("used", out var u) && u.TryGetInt32(out int n) ? n : 0,
                         Limit = x.Value.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number && l.TryGetInt32(out int m) ? m : null,
                         Out = x.Value.TryGetProperty("out", out var o) && o.ValueKind == JsonValueKind.True,
@@ -111,6 +148,7 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
 
     private void Save()
     {
+        if (!_readable) return;   // the box could not be read: counted in memory only, the file is kept
         using var ms = new MemoryStream();
         using (var w = new Utf8JsonWriter(ms))
         {
@@ -121,6 +159,7 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
             foreach (var (k, e) in _p)
             {
                 w.WriteStartObject(k);
+                w.WriteString("day", e.Day);
                 w.WriteNumber("used", e.Used);
                 if (e.Limit is { } l) w.WriteNumber("limit", l);
                 w.WriteBoolean("out", e.Out);
@@ -130,7 +169,7 @@ public sealed class OnlineState(ISecretBox box, Func<DateTimeOffset> now)
             w.WriteEndObject();
         }
         try { box.Write(File, ms.ToArray()); }
-        catch (IOException) { }   // locked or busy: counted in memory, written next time
+        catch (IOException) { }
     }
 }
 
@@ -149,27 +188,28 @@ public sealed class OnlineKeys(ISecretBox box)
         if (!ProviderProfiles.OnlineIds.Contains(provider)) return false;
         var k = key?.Trim() ?? "";
         if (k.Length == 0 || k.Length > MaxKey || k.Any(char.IsControl) || k.Contains(' ')) return false;
-        var all = Read();
+        if (Read() is not { } all) return false;   // review: a busy box is never written over with only this key
         all[provider] = k;
         return Write(all);
     }
 
-    public string? Get(string provider) => Read().GetValueOrDefault(provider);
+    public string? Get(string provider) => Read()?.GetValueOrDefault(provider);
 
     public void Remove(string provider)
     {
-        var all = Read();
-        if (all.Remove(provider)) Write(all);
+        if (Read() is { } all && all.Remove(provider)) Write(all);
     }
 
-    public IReadOnlyList<string> Providers() => [.. Read().Keys];
+    public IReadOnlyList<string> Providers() => Read() is { } all ? [.. all.Keys] : [];
 
-    private Dictionary<string, string> Read()
+    /// <summary>The keys, or null when the box cannot be read this moment (busy, locked).</summary>
+    private Dictionary<string, string>? Read()
     {
         var d = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            if (box.Read(File) is not { Length: > 0 } bytes) return d;
+            if (!box.TryRead(File, out var bytes)) return null;
+            if (bytes is not { Length: > 0 }) return d;
             using var doc = JsonDocument.Parse(bytes);
             foreach (var p in doc.RootElement.EnumerateObject())
                 if (p.Value.ValueKind == JsonValueKind.String && ProviderProfiles.OnlineIds.Contains(p.Name)) d[p.Name] = p.Value.GetString()!;
@@ -208,13 +248,32 @@ public static class KeyCheck
         try
         {
             using var r = await http.SendAsync(req, ct);
-            if (OnlineErrors.FromStatus((int)r.StatusCode) is { } code) return new KeyResult(code == OnlineErrors.BadOutput ? OnlineErrors.Server : code);
-            if (p.Quota != QuotaKind.OpenRouterKey) return new KeyResult(OnlineErrors.Ok);
+            if (OnlineErrors.FromStatus((int)r.StatusCode) is { } code) return new KeyResult(code is OnlineErrors.BadOutput or OnlineErrors.ModelBad ? OnlineErrors.Server : code);
+            if (p.Quota != QuotaKind.OpenRouterKey)
+                return new KeyResult(HasModel(await r.Content.ReadAsByteArrayAsync(ct), p.Model) == false ? OnlineErrors.ModelBad : OnlineErrors.Ok);
             var (used, limit) = OpenRouterCounter(await r.Content.ReadAsByteArrayAsync(ct));
+            // Review: the model id too (OpenRouter's model list is public; a failed read leaves the answer to the key).
+            using var models = new HttpRequestMessage(HttpMethod.Get, "models");
+            using (var m = await http.SendAsync(models, ct))
+                if (m.IsSuccessStatusCode && HasModel(await m.Content.ReadAsByteArrayAsync(ct), p.Model) == false) return new KeyResult(OnlineErrors.ModelBad, used, limit);
             return new KeyResult(used is { } u && limit is { } l && u >= l ? OnlineErrors.Quota : OnlineErrors.Ok, used, limit);
         }
         catch (HttpRequestException) { return new KeyResult(OnlineErrors.Offline); }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return new KeyResult(OnlineErrors.Timeout); }
+    }
+
+    /// <summary>Is <paramref name="model"/> in a models list (<c>data[].id</c>)? null when the body is not such a list.</summary>
+    public static bool? HasModel(byte[] body, string model)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("data", out var d) || d.ValueKind != JsonValueKind.Array || d.GetArrayLength() == 0) return null;
+            foreach (var e in d.EnumerateArray())
+                if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() == model) return true;
+            return false;
+        }
+        catch (JsonException) { return null; }
     }
 
     /// <summary><c>data.free_model_daily_requests.{used,limit}</c>, or nulls.</summary>

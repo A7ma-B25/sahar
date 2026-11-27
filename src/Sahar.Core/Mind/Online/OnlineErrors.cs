@@ -7,7 +7,7 @@ namespace Sahar.Core.Mind.Online;
 public static class OnlineErrors
 {
     public const string Ok = "ok", KeyBad = "key-bad", Blocked = "blocked", NoCredit = "no-credit", Quota = "quota", Server = "server",
-        Timeout = "timeout", Offline = "offline", StreamError = "stream-error", BadOutput = "bad-output", LocalOnly = "local-only", NoKey = "no-key";
+        Timeout = "timeout", Offline = "offline", StreamError = "stream-error", BadOutput = "bad-output", LocalOnly = "local-only", NoKey = "no-key", ModelBad = "model-bad", NoConsent = "no-consent";
 
     /// <summary>The status code → our code (null for a 2xx).</summary>
     public static string? FromStatus(int status) => status switch
@@ -16,6 +16,7 @@ public static class OnlineErrors
         401 => KeyBad,
         402 => NoCredit,
         403 => Blocked,
+        404 => ModelBad,   // review: a model id the provider does not have
         408 => Timeout,
         429 => Quota,
         >= 500 => Server,
@@ -35,6 +36,8 @@ public static class OnlineErrors
         Server => "المزوّد واقع هلق، جرّب بعدين",
         LocalOnly => "«محلي فقط» شغّال: ما بطلع شي برّا",
         NoKey => "ما في مفتاح محفوظ",
+        ModelBad => "اسم الموديل غلط",
+        NoConsent => "وافق أول عالملاحظة فوق",
         _ => "محجوب أو ما في نت",
     };
 }

@@ -66,3 +66,11 @@ test('chat: no chip when online is not set up', () => {
   assert.equal(findAll(chatView(m, {}, () => {}), (n) => n.attrs['data-id'] === 'brain').length, 0);
   assert.equal(findAll(chatView({ ...m, brain: undefined }, {}, () => {}), (n) => n.attrs['data-id'] === 'brain').length, 0);
 });
+
+test('md (review): a numbered list keeps its numbers across blank lines; 2 * 3 * 4 is not italic', () => {
+  const t = tree('1. واحد\n\n2. اتنين\n\n3. تلاتة');
+  const ols = findAll(t, (n) => n.tag === 'ol');
+  assert.deepEqual(ols.map((o) => String(o.attrs.start ?? '1')), ['1', '2', '3']);
+  assert.equal(findAll(tree('الحاصل 2 * 3 * 4 = 24'), (n) => n.tag === 'em').length, 0);
+  assert.equal(findAll(tree('هاد *مهم* كتير'), (n) => n.tag === 'em').length, 1);
+});

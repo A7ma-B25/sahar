@@ -122,7 +122,7 @@ public sealed class OnlineStoreTests
     public async Task KeyCheck_OpenRouter_ReadsTheFreeDailyCounter()
     {
         var f = new FakeProvider(new FakeProvider.Answer(HttpStatusCode.OK,
-            """{"data":{"label":"x","is_free_tier":true,"free_model_daily_requests":{"used":12,"limit":50,"remaining":38}}}"""));
+            """{"data":{"label":"x","is_free_tier":true,"free_model_daily_requests":{"used":12,"limit":50,"remaining":38}}}"""), Models());
         var r = await KeyCheck.RunAsync(f, ProviderProfiles.OpenRouter(), "sk-or", default);
         Assert.Equal(new KeyResult("ok", 12, 50), r);
         Assert.EndsWith("/api/v1/key", f.Seen[0].Url);
@@ -131,9 +131,11 @@ public sealed class OnlineStoreTests
     [Fact]
     public async Task KeyCheck_OpenRouter_NoneLeftIsQuota()
     {
-        var f = new FakeProvider(new FakeProvider.Answer(HttpStatusCode.OK, """{"data":{"free_model_daily_requests":{"used":50,"limit":50,"remaining":0}}}"""));
+        var f = new FakeProvider(new FakeProvider.Answer(HttpStatusCode.OK, """{"data":{"free_model_daily_requests":{"used":50,"limit":50,"remaining":0}}}"""), Models());
         Assert.Equal("quota", (await KeyCheck.RunAsync(f, ProviderProfiles.OpenRouter(), "k", default)).Code);
     }
+
+    private static FakeProvider.Answer Models() => new(HttpStatusCode.OK, """{"data":[{"id":"google/gemma-4-31b-it:free"},{"id":"openai/gpt-oss-120b"}]}""");
 
     [Theory]
     [InlineData(200, "ok")]
@@ -142,7 +144,7 @@ public sealed class OnlineStoreTests
     [InlineData(429, "quota")]
     public async Task KeyCheck_Groq_ModelsEndpoint(int status, string code)
     {
-        var f = new FakeProvider(new FakeProvider.Answer((HttpStatusCode)status, "{\"data\":[]}"));
+        var f = new FakeProvider(new FakeProvider.Answer((HttpStatusCode)status, """{"data":[{"id":"openai/gpt-oss-120b"}]}"""));
         Assert.Equal(code, (await KeyCheck.RunAsync(f, ProviderProfiles.Groq(), "k", default)).Code);
         Assert.EndsWith("/openai/v1/models", f.Seen[0].Url);
         Assert.Equal("Bearer k", f.Seen[0].Req.Headers.Authorization!.ToString());
