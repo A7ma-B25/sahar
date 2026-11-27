@@ -178,4 +178,15 @@ public sealed class OnlineTurnTests
         await Turn().RunAsync(Line("x"), Hello, Chain("groq"), new FakeIO(), default);
         Assert.Equal((100, (int?)1000), State.Usage("groq"));
     }
+
+    [Fact]
+    public async Task TransportErrorOutsideTheClient_IsOffline_NextProvider()
+    {
+        Q("groq").Enqueue(_ => throw new HttpRequestException(HttpRequestError.ConnectionError, "reset"));
+        Q("openrouter").Enqueue(_ => throw new IOException("reset"));
+        var io = new FakeIO();
+        var r = await Turn().RunAsync(Line("x"), Hello, Chain("groq", "openrouter"), io, default);
+        Assert.False(r.Answered);
+        Assert.Equal("offline", r.LastError);
+    }
 }

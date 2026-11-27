@@ -181,7 +181,7 @@ internal sealed partial class MindEngine
                 if (ReferenceEquals(_outbox, outbox)) { _outbox = null; _mindPipe = null; }
             }
             try { pipe.Dispose(); } catch (Exception) { }
-            Ui.TryEnqueue(() => { _phase = "none"; Log.Write("mind: gone"); });
+            Ui.TryEnqueue(() => { _phase = "none"; ThinkingFace(false); Log.Write("mind: gone"); });   // 0.17: her focus face never outlives the Mind
         });
     }
 

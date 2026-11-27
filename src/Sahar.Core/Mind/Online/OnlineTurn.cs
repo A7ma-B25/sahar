@@ -75,6 +75,14 @@ public sealed class OnlineTurn(Func<ProviderProfile, string, ILlm> client, IProm
                     history.Add(line, said, "online");
                     return new(true, p.Id, null, false, first < 0 ? (int)sw.ElapsedMilliseconds : first, (int)sw.ElapsedMilliseconds, reply.OutputTokens);
                 }
+                catch (Exception x) when (x is HttpRequestException or IOException)
+                {
+                    // Review: a transport failure the client did not map (the body stream, a reset): offline, next provider.
+                    last = OnlineErrors.Offline;
+                    Log?.Invoke($"{p.Id} offline {x.GetType().Name} (attempt {attempt})");
+                    if (spoke) { io.Send(new MindMsg { T = "partial", Id = id, Text = "", Brain = "online" }); spoke = false; }
+                    break;
+                }
                 catch (MindRuntimeException e)
                 {
                     last = e.Code;
