@@ -2172,20 +2172,29 @@ function Stage-Senses {
         if ($log -match 'secret-123') { throw 'the private text reached the log' }
     }
     Step 'thirty quick copies keep twenty and one face' {
-        # 150 ms apart: still far quicker than a person copies, and a busy runner's clipboard chain keeps up.
-        foreach ($i in 1..30) { Set-Clipboard -Value "item $i"; Start-Sleep -Milliseconds 150 }
-        $deadline = (Get-Date).AddSeconds(3)
-        while ((Clip-Count) -ne 20 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        # Each copy is in her history before the next: still far quicker than a person copies. (Copies made faster than
+        # a busy runner's clipboard chain delivers them reach her as one — run 45887095062 kept 15 of 30 at 150 ms
+        # apart — and a history still filling moved the item the next step picks: run 45879305217.)
+        foreach ($i in 1..30) {
+            Set-Clipboard -Value "item $i"
+            $deadline = (Get-Date).AddSeconds(3)
+            while ((Text64 (Kv 'debug-clipboard').first) -ne "item $i") {
+                if ((Get-Date) -gt $deadline) { throw "'item $i' never reached her history (count $(Clip-Count))" }
+                Start-Sleep -Milliseconds 50
+            }
+        }
         if ((Clip-Count) -ne 20) { throw "history count $(Clip-Count)" }
         $faces = @(Get-Content (Join-Path $env:LOCALAPPDATA 'Sahar\engine.log') | Where-Object { $_ -match 'clipboard: copied face' }).Count
         if ($faces -gt 2) { throw "$faces copied faces" }
     }
     Step 'picking an item puts it back on the clipboard' {
-        # The fourth item as she kept it (a slow runner may drop a quick copy, so never a fixed name).
+        # The fourth item as she kept it (read from her, never a fixed name), and the clipboard waited for, not slept on.
         $want = ((Text64 (Kv 'debug-clipboard').items64) -split "`n")[3]
         Send '{"type":"cmd","name":"clipboard-pick","args":{"index":"3"}}' | Out-Null
-        Start-Sleep -Milliseconds 500
+        $deadline = (Get-Date).AddSeconds(3)
+        while ((Get-Clipboard) -ne $want -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
         if ((Get-Clipboard) -ne $want) { throw "clipboard holds '$(Get-Clipboard)', not '$want'" }
+        Start-Sleep -Milliseconds 300   # her own put-back must not come back as a new copy
         if ((Clip-Count) -ne 20) { throw 'picking added a new item' }
     }
     Step 'the menu has the clipboard button and its list' {
@@ -2885,6 +2894,8 @@ public static class SeekWin2 {
         SetWindowPos(h, IntPtr.Zero, r.L + dx, r.T + dy, 0, 0, 0x0001 | 0x0004 | 0x0010);
         GetWindowRect(h, out r); return r.L;
     }
+    /// The window's handle (0 when there is none): game-start's "window" arg asks her to hide behind it.
+    public static long Handle(string title) { return (long)FindWindow(null, title); }
     /// The window's left and right (GetWindowRect: a few px of invisible border on each side), or null.
     public static int[] Span(string title) {
         var h = FindWindow(null, title); RECT r;
@@ -3012,11 +3023,13 @@ function Stage-Games {
         try {
             $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
             [Mouse]::Move($work.Right - 20, $work.Top + 20)
-            # Window spots are picked at random among every window (the runner's terminals too): play until she is
-            # behind the test window, the one this step moves.
+            # Window spots are picked at random among every window (the runner's terminals too): the test window, the one
+            # this step moves, is asked for by its handle (a random pick played up to eight games and once never found
+            # it: run 45958700392). A try again stays for a spot too near the pointer.
             $span = [SeekWin2]::Span('Sahar test seek')
+            $hwnd = [SeekWin2]::Handle('Sahar test seek')
             for ($try = 1; ; $try++) {
-                Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
+                Send "{`"type`":`"cmd`",`"name`":`"game-start`",`"args`":{`"kind`":`"HideSeek`",`"spot`":`"Window`",`"window`":`"$hwnd`"}}" | Out-Null
                 $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden behind the window'
                 if ($g.spot -ne 'Window' -or $g.clip -ne 'on') { throw "spot $($g.spot) clip $($g.clip)" }
                 if ([Math]::Abs([int]$g.bx - $span[0]) -le 12 -and [Math]::Abs([int]$g.bx + [int]$g.bw - $span[1]) -le 12) { break }
@@ -3024,11 +3037,17 @@ function Stage-Games {
                 if ($try -ge 8) { throw 'she never hid behind the test window in 8 games' }
                 Send '{"type":"cmd","name":"game-stop"}' | Out-Null
             }
+            # The pointer goes to rest in the screen corner farthest from where she peeks at once: the first whisper
+            # (5 s after she hid, for a pointer at rest) is then about that place, whatever the checks below take
+            # (a whisper for the start corner came first, and the next only 3 s later: run 45876790889).
+            $vx = [int]$g.vx; $vy = [int]$g.vy; $vw = [int]$g.vw; $vh = [int]$g.vh
+            $fx = if ($vx + $vw / 2 -lt $work.Left + $work.Width / 2) { $work.Left + $work.Width - 8 } else { $work.Left + 8 }
+            $fy = if ($vy + $vh / 2 -lt $work.Top + $work.Height / 2) { $work.Top + $work.Height - 8 } else { $work.Top + 8 }
+            [Mouse]::Move([int]$fx, [int]$fy)
             Start-Sleep -Milliseconds 300
             $shot = Screenshot 'game-hide-window.png'
             # Clipped: just inside the window's edge, where her hidden half is, the window still shows (#0F0E12);
             # just outside it, what shows of her is drawn.
-            $vx = [int]$g.vx; $vy = [int]$g.vy; $vw = [int]$g.vw; $vh = [int]$g.vh
             $edge = if ($g.side -eq '2') { $vx } else { $vx + $vw }
             $in = if ($g.side -eq '2') { $edge - 14 } else { $edge + 14 }
             $behind = Pixel $shot $in ($vy + [int]($vh / 2))
@@ -3039,11 +3058,8 @@ function Stage-Games {
             if ($her.R + $her.G + $her.B -lt 360) { throw "nothing of her shows past the edge at ${past}: $her" }
             Assert-NoCover 'hide-and-seek'
             # Warmer or colder: nothing in the first 5 s; then the resting pointer, far away, gets «برد…» beside it.
-            if ((Game).whisper -ne 'none') { throw 'a whisper in the first 5 s' }
-            # The pointer rests in the screen corner farthest from where she peeks (a step before may have left it near).
-            $fx = if ($vx + $vw / 2 -lt $work.Left + $work.Width / 2) { $work.Left + $work.Width - 8 } else { $work.Left + 8 }
-            $fy = if ($vy + $vh / 2 -lt $work.Top + $work.Height / 2) { $work.Top + $work.Height - 8 } else { $work.Top + 8 }
-            [Mouse]::Move([int]$fx, [int]$fy)
+            $g1 = Game
+            if ($g1.whisper -ne 'none' -and [double]$g1.hidden -lt 5) { throw "a whisper after only $($g1.hidden) s" }
             $g2 = Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper'
             if ([double]$g2.hidden -lt 5) { throw "a whisper after only $($g2.hidden) s" }
             Start-Sleep -Milliseconds 200
@@ -3096,6 +3112,10 @@ function Stage-Games {
             [Mouse]::Move($work.Right - 20, $work.Top + 20)
             Send '{"type":"cmd","name":"game-start","args":{"kind":"HideSeek","spot":"Window"}}' | Out-Null
             $g = Wait-Game { param($g) $g.state -eq 'hidden-1' } 6000 'hidden (dark)'
+            # As above: the pointer rests far from her at once (a spot is only 300 DIP from where it started; «برد…» is 450+).
+            $fx = if ([int]$g.vx + [int]$g.vw / 2 -lt $work.Left + $work.Width / 2) { $work.Left + $work.Width - 8 } else { $work.Left + 8 }
+            $fy = if ([int]$g.vy + [int]$g.vh / 2 -lt $work.Top + $work.Height / 2) { $work.Top + $work.Height - 8 } else { $work.Top + 8 }
+            [Mouse]::Move([int]$fx, [int]$fy)
             Screenshot 'game-hide-window-dark.png' | Out-Null
             Wait-Game { param($g) $g.whisper -in 'Cold', 'Far' } 7000 'a cold whisper (dark)' | Out-Null
             Start-Sleep -Milliseconds 200
@@ -3657,8 +3677,13 @@ function Save-Frames($frames, [string]$dir, [int]$every, [int]$max) {
 }
 function Dispose-Frames($frames) { }
 
-# Smooth motion: each body position must lie where its neighbours put it (time-interpolated), within 3 px plus a quarter
-# of the move across the three frames: a frame drawn at a stale window/content place is off by a whole step and back.
+# Smooth motion: each body position must lie where its neighbours put it, within 3 px plus a quarter of the move across
+# the three frames: a frame drawn at a stale window/content place is off by a whole step and back.
+# "Where its neighbours put it" is read two ways, and a frame that fits either is smooth: by time (her motion runs on
+# a clock), or halfway (the grab's own timestamp is when BitBlt returned, not when DWM composed that picture: after a
+# stalled grab on a slow runner the next picture is one composition later than its time says — and a drag moves the
+# pointer one step per grab, not per ms). A stale frame (a step off and back) misses both by the same whole step.
+# Seen on CI: a drag frame 6.8 px off by time with a 10 px move (run 45969673666), 4 px off halfway (limit 5.5).
 function Assert-Smooth($frames, [string]$what) {
     $pts = @(foreach ($f in $frames) { $c = ([FaceProbe]::Centroid($f.Px, $f.W, $f.H)) -split ','; [pscustomobject]@{ t = $f.Ms; x = [double]$c[0]; y = [double]$c[1]; n = [int]$c[2] } })
     $bad = @(); $path = @()
@@ -3667,7 +3692,9 @@ function Assert-Smooth($frames, [string]$what) {
         if ($a.n -lt 200 -or $b.n -lt 200 -or $c.n -lt 200 -or $c.t -eq $a.t) { continue }
         $k = ($b.t - $a.t) / ($c.t - $a.t)
         $px = $a.x + ($c.x - $a.x) * $k; $py = $a.y + ($c.y - $a.y) * $k
-        $dev = [math]::Sqrt([math]::Pow($b.x - $px, 2) + [math]::Pow($b.y - $py, 2))
+        $byTime = [math]::Sqrt([math]::Pow($b.x - $px, 2) + [math]::Pow($b.y - $py, 2))
+        $halfway = [math]::Sqrt([math]::Pow($b.x - ($a.x + $c.x) / 2, 2) + [math]::Pow($b.y - ($a.y + $c.y) / 2, 2))
+        $dev = [math]::Min($byTime, $halfway)
         $span = [math]::Sqrt([math]::Pow($c.x - $a.x, 2) + [math]::Pow($c.y - $a.y, 2))
         $path += ('{0}:{1:0},{2:0}' -f $b.t, $b.x, $b.y)
         if ($dev -gt 3 + 0.25 * $span) { $bad += ('{0}: frame at +{1} ms is {2:0.0} px off its path (move {3:0.0} px)' -f $what, $b.t, $dev, $span) }
@@ -3712,7 +3739,14 @@ function Stage-Face {
         Contact-Sheet $tiles 6 240 (Join-Path $Out 'tap-strip.png')
         Dispose-Frames $frames
         Write-Host "    $n frames ($fps fps); baseline faint $base; t:faint/edgesAB = $($report -join ' ')"
-        if ($fps -lt 18) { $bad += "only $fps fps" }
+        # The grab rate is the runner's (BitBlt: 16–24 fps on CI), not hers: what this step needs is the ~1 s cross-fade
+        # seen closely — 15+ frames in the 1.5 s after the tap, none more than 200 ms apart (CI: 23–36 frames, gaps
+        # ≤ 156 ms; the old "18 fps" average failed 5 of 40 runs at 16–17 fps with 23–25 frames in the fade).
+        $seen = @($frames | Where-Object { $_.Ms -ge 0 -and $_.Ms -le 1500 })
+        $gap = 0
+        for ($i = 1; $i -lt $seen.Count; $i++) { $gap = [math]::Max($gap, $seen[$i].Ms - $seen[$i - 1].Ms) }
+        Write-Host "    the fade: $($seen.Count) frames in 1.5 s, largest gap $gap ms"
+        if ($seen.Count -lt 15 -or $gap -gt 200) { $bad += "too few frames to see the fade: $($seen.Count) in 1.5 s, largest gap $gap ms" }
         Send '{"type":"cmd","name":"debug-size","args":{"dip":"80"}}' | Out-Null
         if ($bad.Count) { throw ($bad -join '; ') }
     }
@@ -3792,6 +3826,9 @@ function Stage-Face {
         Start-Sleep -Seconds 1
         $deadline = (Get-Date).AddSeconds(15)   # the game's last line goes first (a white bubble moves the centroid)
         while ((Kv 'debug-comment').showing -eq 'true' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 200 }
+        # "showing=false" comes as the bubble starts its 150 ms fade: the first grab still had it (run 45963289158,
+        # frame +27 ms: «ولا مرة مسكتني» over her, the centroid 63 px off). Its fade and the compositor's next frames go first.
+        Start-Sleep -Milliseconds 500
         # Below the test window's white title bar (the centroid counts white pixels).
         $gx = [math]::Max(0, $Work.Left); $gy = $Work.Top + 40; $gw = $Work.Width; $gh = $Work.Height - 40
         $burst = [Burst]::Start($gx, $gy, $gw, $gh, 2500)

@@ -1160,6 +1160,7 @@ internal sealed unsafe class App
             {
                 if (r.Args?.TryGetValue("kind", out var k) != true || !Enum.TryParse<GameKind>(k, true, out var kind)) return new PipeReply(false, "game-start needs kind");
                 games.SeekPrefer = r.Args.TryGetValue("spot", out var sp) && Enum.TryParse<SpotKind>(sp, true, out var spot) ? spot : null;   // test: show each hiding spot
+                games.SeekPreferWindow = r.Args.TryGetValue("window", out var w) && long.TryParse(w, out var hwnd) ? hwnd : null;   // test: behind this window when she can
                 games.Start(kind, r.Args.ContainsKey("seconds") ? Arg(r, "seconds") : null);
                 return new PipeReply(true, games.Describe());
             });

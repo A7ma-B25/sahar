@@ -317,6 +317,9 @@ internal sealed class GamePlayer : IDisposable
 
     /// <summary>Test mode: the kind of spot she prefers when one is free (the ui harness shows each kind).</summary>
     public SpotKind? SeekPrefer { get; set; }
+    /// <summary>Test mode: the window (its handle) she hides behind when it has a free spot — the ui harness moves that
+    /// window, and a random pick among the runner's other windows made the step play up to eight games.</summary>
+    public long? SeekPreferWindow { get; set; }
 
     private int Found => _results.Count(x => x);
 
@@ -398,6 +401,7 @@ internal sealed class GamePlayer : IDisposable
         var world = SeekScene.World(Monitor, Size);
         var spots = HideSeek.Spots(world, _pointer, _rng, _used);
         if (SeekPrefer is { } prefer) spots = [.. spots.Where(x => x.Kind == prefer), .. spots.Where(x => x.Kind != prefer)];
+        if (SeekPreferWindow is { } window) spots = [.. spots.Where(x => x.WindowId == window), .. spots.Where(x => x.WindowId != window)];
         if (spots.Count == 0)
         {
             // Nowhere far enough from the pointer (or a full-screen app): she keeps her eyes covered and looks again.

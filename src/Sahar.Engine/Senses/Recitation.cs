@@ -103,11 +103,17 @@ internal sealed class MediaRecitation : IRecitation
     public TimeSpan? Duration { get { lock (_gate) return _dur; } }
     public bool CanSeek { get { lock (_gate) return _canSeek; } }
 
+    /// <summary>Closed from a worker, like a seek (review I6): a stream that failed or hangs can hold Pause, Source and
+    /// Dispose for seconds — on her UI thread that froze her (CI: «no network» with a refused port, her pipe silent
+    /// past 5 s, runs 44771580600 and 45882237735). Its late events find a newer generation and are dropped.</summary>
     public void Dispose()
     {
-        _player.Pause();
-        _player.Source = null;
-        _player.Dispose();
+        var p = _player;
+        _ = Task.Run(() =>
+        {
+            try { p.Pause(); p.Source = null; p.Dispose(); }
+            catch (Exception) { }   // closing: nothing left to tell
+        });
     }
 }
 
