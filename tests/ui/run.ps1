@@ -1996,6 +1996,11 @@ function Stage-Menu {
         # No settings app for this one engine start: then the card has no settings button (hidden, not greyed out).
         $app = Join-Path (Split-Path $Exe) 'Sahar.Settings'
         $aside = "$app.aside"
+        # 0.16: her surface host runs from that folder (and is started again once if it dies): she quits first, and
+        # the host with her, before the folder moves.
+        Stop-Engine
+        $deadline = (Get-Date).AddSeconds(20)
+        while ((Get-Process Sahar.Settings -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$app\*" }) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
         # Retried: a scanner can hold the freshly downloaded folder for a moment (run 43609662178: access denied).
         if (Test-Path $app) { Retry-Rename $app $aside }
         try {
