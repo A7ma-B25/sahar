@@ -89,7 +89,7 @@ function Stage-MindOnline {
             Wait-Until { (Kv 'debug-chat').lastBrain -eq 'online' } 30000 "no online answer (routes: $((Routes) -join ', '))"
             Write-Host "    answered online in $($sw.ElapsedMilliseconds) ms; $(([regex]::Matches((MindLog), 'turn: online [^\r\n]*') | Select-Object -Last 1).Value)"
             if ((Fake-Count '/groq/chat/completions') -ne $n + 1) { throw 'groq was not asked exactly once' }
-            $her = Chat-Her
+            $her = @(Chat-Her)
             if (($her[-1]) -notmatch 'جواب أونلاين') { throw "her line: $($her[-1])" }
             if ((Routes)[-1] -ne 'online:chat') { throw "route: $((Routes)[-1])" }
             $hits = (Fake '/_stats').hits
@@ -100,7 +100,7 @@ function Stage-MindOnline {
             $before = Fake-Total
             Window-Line 'ذكريني بعد شوي إشرب مي'
             Wait-Until { (Routes)[-1] -eq 'local:action' } 15000 "route: $((Routes)[-1])"
-            Wait-Until { (Kv 'debug-chat').lastBrain -eq 'local' } 15000 'no local answer'
+            Wait-Until { $k = Kv 'debug-chat'; $k.lastBrain -eq 'local' -and $k.typing -eq 'false' } 15000 'no local answer'
             if ((Fake-Total) -ne $before) { throw 'an action line reached the online provider' }
         }
         Step 'online: a background turn never goes online' {
@@ -118,8 +118,9 @@ function Stage-MindOnline {
             Fake '/_mode?p=openrouter&mode=429' 'POST' | Out-Null
             Window-Line 'وشو بتحبي تعملي بالعطلة؟'
             Wait-Until { (MindLog) -match 'fell through \(quota\), told' } 30000 'not told that online is out'
-            Wait-Until { (Kv 'debug-chat').lastBrain -eq 'local' } 15000 'no local answer after online ran out'
-            $her = Chat-Her
+            # the «out for today» line is hers too (local): wait for the local answer itself to end the turn
+            Wait-Until { $k = Kv 'debug-chat'; $k.lastBrain -eq 'local' -and $k.typing -eq 'false' } 15000 'no local answer after online ran out'
+            $her = @(Chat-Her)
             if (-not ($her | Where-Object { $_ -match 'خلّصت طلبات الأونلاين' })) { throw 'her «out for today» line is not in the chat' }
             $before = Fake-Total
             Window-Line 'سؤال تاني'
