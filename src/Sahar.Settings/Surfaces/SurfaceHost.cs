@@ -222,6 +222,7 @@ internal sealed class SurfaceHost
             w.WriteBoolean("dark", m.Dark);
             w.WriteBoolean("still", m.Still);
             if (m.Quiet) w.WriteBoolean("quiet", true);
+            if (t == "update" && m.Mode is { } mode) w.WriteString("mode", mode);
             if (t == "show")
             {
                 w.WriteStartObject("margin");

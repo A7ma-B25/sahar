@@ -59,6 +59,9 @@ internal sealed class ChatHub
         _prune.Interval = TimeSpan.FromHours(6);
         _prune.Tick += (_, _) => Prune();
         _prune.Start();
+        _partialTimer = ui.CreateTimer();
+        _partialTimer.IsRepeating = false;
+        _partialTimer.Tick += (_, _) => { if (_partialGate.Take(_now())) SendPartial(); };
     }
 
     private readonly DispatcherQueueTimer _prune;
@@ -133,15 +136,32 @@ internal sealed class ChatHub
     public void Thinking(bool on)
     {
         _typing = on;
-        if (!on) _partial = null;
+        if (!on) { _partial = null; _partialTimer.Stop(); }
         if (_open) Push();
     }
 
+    /// <summary>Her words so far. Review I8: only the words go (never the whole model, no store reads), at most ~10 a
+    /// second; the last one always arrives (a trailing send).</summary>
     public void Partial(string words)
     {
+        bool first = !_typing || _partial is null;
         _partial = words;
         _typing = true;
-        if (_open) Push();
+        if (!_open) return;
+        if (first) { _partialGate.Take(_now()); Push(); return; }   // the typing row appears with the full model
+        if (_partialGate.Take(_now())) { SendPartial(); return; }
+        if (_partialTimer.IsRunning) return;
+        _partialTimer.Interval = _partialGate.Wait(_now()) is var w && w > TimeSpan.Zero ? w : TimeSpan.FromMilliseconds(1);
+        _partialTimer.Start();
+    }
+
+    private readonly Throttle _partialGate = new(TimeSpan.FromMilliseconds(100));
+    private DispatcherQueueTimer _partialTimer = null!;
+
+    private void SendPartial()
+    {
+        if (!_open || _partial is null) return;
+        _client.Update(Surface, _seq, JModel.Of("chat-partial").S("partial", _partial).T("typing", _typing), mode: "partial");
     }
 
     /// <summary>Her answer to a line he sent here (or the fast path's reply), with an optional receipt line.</summary>
@@ -149,6 +169,7 @@ internal sealed class ChatHub
     {
         _typing = false;
         _partial = null;
+        _partialTimer.Stop();
         var m = new ChatEntry(_now(), ChatWho.Her, receipt is null ? ChatLine.Text : ChatLine.Receipt,
             receipt is null ? text : text + "\n" + receiptIcon + "\u0001" + receipt);
         _conv = _store.Append(_conv, m);

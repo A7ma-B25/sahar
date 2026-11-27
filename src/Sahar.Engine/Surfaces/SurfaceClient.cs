@@ -85,10 +85,11 @@ internal sealed class SurfaceClient : IDisposable
         return seq;
     }
 
-    public void Update(string surface, int seq, JModel model)
+    /// <param name="mode">"partial": only her streamed words (the page keeps the rest of the model).</param>
+    public void Update(string surface, int seq, JModel model, string? mode = null)
     {
         if (!_current.TryGetValue(surface, out var c) || c.Seq != seq) return;
-        Send(new SurfaceMsg { T = "update", Surface = surface, Seq = seq, Model = model.ToString(), Dark = Dark(), Still = Still() }, queueIfDown: false);
+        Send(new SurfaceMsg { T = "update", Surface = surface, Seq = seq, Model = model.ToString(), Dark = Dark(), Still = Still(), Mode = mode }, queueIfDown: false);
     }
 
     public void Hide(string surface)

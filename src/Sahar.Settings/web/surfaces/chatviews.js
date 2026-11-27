@@ -94,3 +94,8 @@ export function afterRender(st, { atBottom, n, lastCount }) {
   if (n > lastCount) st.newBelow = true;
   return { toBottom: false, lastCount: n, again: false };
 }
+
+/** Review I8: a streamed partial ({partial, typing}) on top of the last full model. */
+export function mergePartial(model, p) {
+  return { ...model, partial: p.partial ?? null, typing: !!p.typing };
+}

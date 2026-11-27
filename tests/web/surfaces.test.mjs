@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { fold, matches } from '../../src/Sahar.Settings/web/surfaces/fold.js';
 import { text, find, findAll, has } from '../../src/Sahar.Settings/web/surfaces/h.js';
 import { listView, inputView, askView, trayView, drawerView, visibleRows, askAccepts, ASK_GUARD_MS } from '../../src/Sahar.Settings/web/surfaces/views.js';
-import { chatView, afterRender } from '../../src/Sahar.Settings/web/surfaces/chatviews.js';
+import { chatView, afterRender, mergePartial } from '../../src/Sahar.Settings/web/surfaces/chatviews.js';
 import { PATHS } from '../../src/Sahar.Settings/web/surfaces/icons.js';
 
 const SURAHS = ['الفاتحة', 'البقرة', 'آل عمران'];
@@ -187,4 +187,14 @@ test('ask guard: a quiet ask takes no key and no click in its first 800 ms', () 
   assert.equal(askAccepts({ quiet: true, shownAt: undefined }, 'click', 99999), false, 'not placed yet');
   assert.equal(askAccepts({ quiet: false, shownAt: 1000 }, 'key', 1001), true, 'an ask he opened answers at once');
   assert.equal(ASK_GUARD_MS, 800);
+});
+
+// Review I8: a streamed partial carries only her words so far; the page keeps the rest of the model.
+test('chat partial: only the words and the typing flag change', () => {
+  const model = { view: 'thread', conv: 'a', days: [{ label: 'اليوم', groups: [] }], partial: null, typing: true, labels: { typing: 'عم تكتب…' } };
+  const next = mergePartial(model, { partial: 'يلا نركّز', typing: true });
+  assert.equal(next.partial, 'يلا نركّز');
+  assert.equal(next.days, model.days);
+  assert.equal(next.labels, model.labels);
+  assert.equal(model.partial, null, 'the old model is not changed');
 });

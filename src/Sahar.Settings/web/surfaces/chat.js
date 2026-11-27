@@ -1,7 +1,7 @@
 // The chat window page (V15Chat): the engine sends the whole model on every change; the page keeps only what he is
 // typing, the scroll position and the list's little menus. Nothing here is logged or sent anywhere but the host.
 import { mount } from './h.js';
-import { chatView, afterRender } from './chatviews.js';
+import { chatView, afterRender, mergePartial } from './chatviews.js';
 
 const web = window.chrome && window.chrome.webview;
 // The focus ring only for keyboard use (a programmatic focus on open shows none).
@@ -113,7 +113,9 @@ if (web) {
   web.addEventListener('message', (e) => {
     const msg = e.data;
     if (!msg || typeof msg !== 'object') return;
-    if (msg.t === 'show' || msg.t === 'update') {
+    if (msg.t === 'update' && msg.mode === 'partial') {   // review I8: her words so far, ~10 a second at most
+      if (model) { model = mergePartial(model, msg.model); render(); }
+    } else if (msg.t === 'show' || msg.t === 'update') {
       if (msg.dark !== undefined) document.documentElement.dataset.theme = msg.dark ? 'dark' : 'light';
       if (msg.still !== undefined) document.documentElement.classList.toggle('still', !!msg.still);
       if (msg.margin) margin = msg.margin;
