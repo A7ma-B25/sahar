@@ -11,8 +11,13 @@ public class ChatStoreTests
     {
         public readonly Dictionary<string, byte[]> Files = [];
         public bool Locked;
-        public byte[]? Read(string name) => Locked ? null : Files.TryGetValue(name, out var b) ? b : null;
-        public void Write(string name, ReadOnlySpan<byte> data) { if (Locked) throw new MindStoreException("locked"); Files[name] = data.ToArray(); }
+        /// <summary>Reads fail (the mutex is held elsewhere), writes still work: the review I5 case.</summary>
+        public bool Busy;
+        public readonly List<string> Writes = [];
+        public byte[]? Read(string name) => Locked || Busy ? null : Files.TryGetValue(name, out var b) ? b : null;
+        public bool TryRead(string name, out byte[]? data) { data = Read(name); return !Locked && !Busy; }
+        public IReadOnlyList<string> Names() => [.. Files.Keys];
+        public void Write(string name, ReadOnlySpan<byte> data) { if (Locked) throw new MindStoreException("locked"); Files[name] = data.ToArray(); Writes.Add(name); }
         public void Delete(string name) { if (Locked) throw new MindStoreException("locked"); Files.Remove(name); }
     }
 
@@ -118,6 +123,68 @@ public class ChatStoreTests
         Assert.Empty(s.List());
     }
 
+    // ---- review I5 ----
+
+    private static string IndexText(Box box) => Encoding.UTF8.GetString(box.Files[ChatStore.IndexName]);
+
+    [Fact]
+    public void BusyIndexRead_NeverWritesTheIndex_AndOlderChatsComeBackLater()
+    {
+        var box = new Box();
+        var old = Store(box).Append(null, Me("قديم"));
+        box.Busy = true;   // her other process holds the box this moment
+        var s = Store(box);
+        _now = _now.AddMinutes(1);
+        var fresh = s.Append(null, Me("جديد"));
+        Assert.False(s.Saving);
+        Assert.Contains(old, IndexText(box));   // the older chat is still in the index (it was orphaned)
+        Assert.DoesNotContain(fresh, IndexText(box));
+        box.Busy = false;
+        _now = _now.AddMinutes(2);
+        Assert.Equal([fresh, old], s.List().Select(c => c.Id));
+        Assert.True(s.Saving);
+        Assert.Contains(old, IndexText(box));
+        Assert.Contains(fresh, IndexText(box));
+        Assert.Single(Store(box).Load(fresh));
+    }
+
+    [Fact]
+    public void NewConversation_TheIndexIsWrittenBeforeItsFile()
+    {
+        var box = new Box();
+        var id = Store(box).Append(null, Me("هلا"));
+        Assert.True(box.Writes.IndexOf(ChatStore.IndexName) < box.Writes.IndexOf(ChatStore.FileName(id)));   // a crash between them leaves no orphan
+    }
+
+    [Fact]
+    public void Prune_DeletesOrphanFiles_AndRowsWithoutAFile()
+    {
+        var box = new Box();
+        var s = Store(box);
+        var kept = s.Append(null, Me("باقي"));
+        var gone = s.Append(null, Me("راح"));
+        box.Files.Remove(ChatStore.FileName(gone));          // a crash before its file
+        box.Files[ChatStore.FileName("orphan01")] = [1, 2];   // a file no index row names
+        box.Files["memory-facts"] = [3];                       // not hers: never touched
+        var t = Store(box);
+        t.Prune();
+        Assert.False(box.Files.ContainsKey(ChatStore.FileName("orphan01")));
+        Assert.True(box.Files.ContainsKey("memory-facts"));
+        Assert.DoesNotContain(gone, IndexText(box));
+        Assert.Contains(kept, IndexText(box));
+    }
+
+    [Fact]
+    public void Prune_WithTheIndexUnreadable_DeletesNothing()
+    {
+        var box = new Box();
+        var id = Store(box).Append(null, Me("هلا"));
+        box.Busy = true;
+        Store(box).Prune();
+        Assert.True(box.Files.ContainsKey(ChatStore.FileName(id)));
+        Assert.Contains(id, IndexText(box));
+    }
+
     [Fact]
     public void AskMessages_KeepTheirAnswer()
     {
@@ -148,5 +215,17 @@ public class ChatStoreRealBoxTests : IDisposable
         box.ForgetAll();
         Assert.Equal(SecretBox.KeyFile, order[0]);   // the key goes first (crypto-shred)
         Assert.Empty(new ChatStore(new SecretBox(_dir, new TestKeyWrap()), () => now).List());
+    }
+
+    [Fact]
+    public void RealBox_TryRead_MissingIsTrue_AndNamesListsItsFiles()
+    {
+        var box = new SecretBox(_dir, new TestKeyWrap());
+        Assert.True(((ISecretBox)box).TryRead("chat-none", out var none));
+        Assert.Null(none);
+        box.Write("chat-abc", [1, 2, 3]);
+        Assert.Contains("chat-abc", box.Names());
+        Assert.True(box.TryRead("chat-abc", out var data));
+        Assert.Equal([1, 2, 3], data);
     }
 }

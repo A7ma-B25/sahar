@@ -91,4 +91,15 @@ public interface ISecretBox
     byte[]? Read(string name);
     void Write(string name, ReadOnlySpan<byte> data);
     void Delete(string name);
+
+    /// <summary>Review I5 (0.16): like <see cref="Read"/>, but false when the box could not be read this moment (busy,
+    /// locked) — not the same as a file that is not there (true, null).</summary>
+    bool TryRead(string name, out byte[]? data)
+    {
+        data = Read(name);
+        return true;
+    }
+
+    /// <summary>The names in the box (for pruning files no index names); empty when it cannot say.</summary>
+    IReadOnlyList<string> Names() => [];
 }

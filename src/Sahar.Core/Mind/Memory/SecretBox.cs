@@ -147,6 +147,29 @@ public sealed class SecretBox(string folder, IKeyWrap wrap, TimeSpan? mutexWait 
         catch (MindStoreException) { return null; }
     }
 
+    /// <summary>Review I5: false when the box is busy or its key is locked (the caller must not take "nothing" for
+    /// "empty"); a missing or damaged file is true with null.</summary>
+    public bool TryRead(string name, out byte[]? data)
+    {
+        try
+        {
+            using var gate = Lock();
+            data = ReadLocked(name, out var state);
+            return state != ReadState.KeyLocked;
+        }
+        catch (MindStoreException) { data = null; return false; }
+    }
+
+    public IReadOnlyList<string> Names()
+    {
+        try
+        {
+            if (!Directory.Exists(Folder)) return [];
+            return [.. Directory.EnumerateFiles(Folder, "*.enc").Select(f => Path.GetFileNameWithoutExtension(f))];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return []; }
+    }
+
     /// <summary>Locked: a key is there and cannot be opened. Recovered: a damaged file was kept aside (*.bad).</summary>
     public StoreStatus Status()
     {

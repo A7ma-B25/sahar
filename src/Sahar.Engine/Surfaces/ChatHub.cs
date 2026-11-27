@@ -54,7 +54,14 @@ internal sealed class ChatHub
         _box = box ?? (() => MindParts.SecretBox(MindPaths.Personal));
         _store = NewStore();
         try { _store.Prune(); } catch (Exception e) { Log.Write($"chat: prune failed ({e.GetType().Name})"); }
+        // Review I5: past the days it goes while she runs for weeks too, not only at her start.
+        _prune = ui.CreateTimer();
+        _prune.Interval = TimeSpan.FromHours(6);
+        _prune.Tick += (_, _) => Prune();
+        _prune.Start();
     }
+
+    private readonly DispatcherQueueTimer _prune;
 
     private ChatStore NewStore() => new(_box(), _now, () => _settings().MindEpisodeDays);
 

@@ -27,10 +27,17 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
 {
     public const string IndexName = "chats-index";
     public const int TitleWords = 4;
+    private static readonly TimeSpan RetryRead = TimeSpan.FromMinutes(1);
     private Dictionary<string, Conversation>? _all;
+    /// <summary>Review I5: the index was read (or is not there). Until then nothing is written — an index written from
+    /// a failed read would orphan every older chat — and the read is tried again at most once a minute.</summary>
+    private bool _loaded;
+    private DateTimeOffset _lastTry = DateTimeOffset.MinValue;
+    private bool _saving = true;
 
-    /// <summary>False once the box refused a write this session (the list says «ما قدرت احفظ الحكي هلق»).</summary>
-    public bool Saving { get; private set; } = true;
+    /// <summary>False once the box refused a write this session, or while its index cannot be read (the list says
+    /// «ما قدرت احفظ الحكي هلق»).</summary>
+    public bool Saving { get { All(); return _saving && _loaded; } }
 
     public static string FileName(string id) => "chat-" + id;
 
@@ -48,13 +55,28 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
 
     private Dictionary<string, Conversation> All()
     {
-        if (_all is not null) return _all;
+        _all ??= [];
+        if (_loaded || now() - _lastTry < RetryRead) return _all;
+        _lastTry = now();
+        bool ok;
+        byte[]? data;
+        try { ok = box.TryRead(IndexName, out data); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { ok = false; data = null; }
+        if (!ok) return _all;
+        var index = Parse(data, ChatJson.Default.ListChatIndexRow) ?? [];
+        var session = _all.Values.ToList();   // what he said while the box could not be read
         _all = [];
-        var index = Parse(box.Read(IndexName), ChatJson.Default.ListChatIndexRow) ?? [];
         foreach (var row in index)
         {
             var messages = Parse(box.Read(FileName(row.Id)), ChatJson.Default.ListChatEntry) ?? [];
             _all[row.Id] = new Conversation { Id = row.Id, Title = row.Title, Named = row.Named, Created = row.Created, Messages = messages };
+        }
+        _loaded = true;
+        if (session.Count > 0)
+        {
+            foreach (var c in session) _all[c.Id] = c;
+            WriteIndex();
+            foreach (var c in session) Save(c, writeIndex: false);
         }
         return _all;
     }
@@ -87,17 +109,20 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
     public string Append(string? id, ChatEntry m)
     {
         var all = All();
+        bool fresh = false;
         if (id is null || !all.TryGetValue(id, out var c))
         {
             id = NewId();
             c = new Conversation { Id = id, Created = m.At };
             all[id] = c;
+            fresh = true;
         }
         c.Messages.Add(m);
         if (!c.Named && m.Who == ChatWho.Me && m.Kind == ChatLine.Text && c.Messages.Count(x => x.Who == ChatWho.Me) == 1)
             c.Title = Title(m.Text);
         if (c.Title.Length == 0 && m.Kind == ChatLine.Text) c.Title = Title(m.Text);
-        Save(c, writeIndex: true);
+        if (fresh) WriteIndex();   // review I5: the index first, so a crash before the file leaves no orphan (a row with no file is pruned)
+        Save(c, writeIndex: !fresh);
         return id;
     }
 
@@ -134,31 +159,38 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
         WriteIndex();
     }
 
-    /// <summary>At start and once a day: drops the old messages and empty conversations from the box.</summary>
+    /// <summary>At start and once a day: drops the old messages, empty conversations (a row whose file never got
+    /// written too) and her chat files no index row names. Nothing while the index cannot be read.</summary>
     public void Prune()
     {
+        var all = All();
+        if (!_loaded) return;
         var cut = Cut;
         bool changed = false;
-        foreach (var c in All().Values.ToList())
+        foreach (var c in all.Values.ToList())
         {
             int removed = c.Messages.RemoveAll(m => m.At < cut);
-            if (removed == 0) continue;
+            if (removed == 0 && c.Messages.Count > 0) continue;
             changed = true;
             if (c.Messages.Count == 0)
             {
-                _all!.Remove(c.Id);
+                all.Remove(c.Id);
                 Try(() => box.Delete(FileName(c.Id)));
             }
             else Save(c, writeIndex: false);
         }
         if (changed) WriteIndex();
+        foreach (var name in box.Names())
+            if (name.StartsWith("chat-", StringComparison.Ordinal) && !all.ContainsKey(name["chat-".Length..]))
+                Try(() => box.Delete(name));
     }
 
     /// <summary>«انسي كل شي» shredded the box: the session copy goes too.</summary>
     public void Forget()
     {
         _all = [];
-        Saving = true;
+        _loaded = true;
+        _saving = true;
     }
 
     private static string Title(string text)
@@ -186,9 +218,9 @@ public sealed class ChatStore(ISecretBox box, Func<DateTimeOffset> now, Func<int
 
     private void Try(Action write)
     {
-        if (!Saving) return;   // once refused, the session goes on in memory (no half-written history)
+        if (!_saving || !_loaded) return;   // once refused (or unread), the session goes on in memory (no half-written history)
         try { write(); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { Saving = false; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { _saving = false; }
     }
 }
 
