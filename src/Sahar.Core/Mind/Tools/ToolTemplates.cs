@@ -37,6 +37,35 @@ public static class ToolTemplates
         ["quranReciter"] = "القارئ", ["userName"] = "اسمك", ["userGender"] = "كيف بحكي معك",
     };
 
+    // ---- 0.19: MCP and media tools (her lines; never the tool's own words) ----
+    public const string VoiceTooLong = "الملف الصوتي بياخد ٢٠٠ حرف بس، بدّك قصّرلك الكلام؟";
+    public const string VoiceOut = "خلصت طلبات الصوت لليوم، بكرا منرجع.";
+    public const string ToolChanged = "هالأداة تغيّرت، بدها موافقتك من جديد بصفحة «الأدوات».";
+    public const string ToolTimeout = "الأداة ما ردّت بالوقت.";
+    public const string ToolFailed = "الأداة ما زبطت هلق.";
+    public const string NoInternet = "ما قدرت أوصل للخدمة هلق.";
+    public static string ImageWait(int seconds) => $"Pollinations بدها نستنى {Num(seconds)} ثانية قبل الصورة الجاية.";
+
+    /// <summary>The ask card's question for a Mind-side tool (spec §8: the image ask says where the prompt goes).</summary>
+    public static string Ask(ToolSpec spec)
+    {
+        if (spec.Name == MediaTools.Image.Name) return "برسملك ياها؟ رح ابعت وصف الصورة لخدمة Pollinations.";
+        if (spec.Name == MediaTools.Voice.Name) return "بعملّك الملف الصوتي؟ رح ابعت الكلام لخدمة Groq.";
+        var (server, tool) = McpParts(spec.Name);
+        return $"بشغّل «{tool}» من «{server}»؟" + (spec.Sensitive ? " (هالأداة حساسة، بسألك كل مرة)" : "");
+    }
+
+    /// <summary>Her line after a Mind-side tool ran well (the card beside it shows the tool's own output).</summary>
+    public static string MindDone(ToolSpec spec) =>
+        spec.Name == MediaTools.Image.Name ? "رسمتلك ياها." : spec.Name == MediaTools.Voice.Name ? "عملتلك الملف الصوتي." : $"هاد اللي رجّعته «{McpParts(spec.Name).Tool}».";
+
+    /// <summary><c>mcp.&lt;slug&gt;.&lt;tool&gt;</c> → (slug, tool).</summary>
+    public static (string Server, string Tool) McpParts(string name)
+    {
+        var parts = name.Split('.', 3);
+        return parts.Length == 3 ? (parts[1], parts[2]) : ("", name);
+    }
+
     public static string Num(int n) => Digits.ToArabicIndic(n.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>The line for a call that ran (data = a read tool's result, as the engine reports it).</summary>
@@ -77,6 +106,9 @@ public static class ToolTemplates
             "shelf.tidy" => "رتّبت رفّي",
             "shelf.clear" => "فضّيت رفّي",
             "prayer.next" or "music.now" or "weather.now" or "claude.status" => data is null ? "شفت" : Digits.ToArabicIndic(data),
+            "image.make" => "رسمتلك صورة",
+            "voice.make" => "عملتلك ملف صوتي",
+            _ when call.Tool.StartsWith("mcp.", StringComparison.Ordinal) => $"شغّلت «{McpParts(call.Tool).Tool}»",
             _ => "عملتها",
         };
     }

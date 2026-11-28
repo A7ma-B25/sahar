@@ -18,7 +18,9 @@ public sealed record AutonomyContext(
     /// <summary>A call just started (camera/mic turned on): a self-sourced music pause may act.</summary>
     bool CallStarting = false,
     /// <summary>Self-sourced asks already made this hour (rate limit 3/h).</summary>
-    int SelfAsksThisHour = 0);
+    int SelfAsksThisHour = 0,
+    /// <summary>0.19 spec §7: untrusted tool output is already in this turn — every further call asks him again.</summary>
+    bool Tainted = false);
 
 /// <summary>The policy's answer. <see cref="Reason"/> for Refuse: c-class | away | locked | adhan | fullscreen |
 /// camera | self-off | rate | not-allowed; for Ask: b-class | self-a. <see cref="PointTo"/>: where he can do it

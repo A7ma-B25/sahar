@@ -26,6 +26,16 @@ public sealed class AutonomyPolicy : IAutonomyPolicy
         if (cls == ActionClass.C || spec.Class == ActionClass.C)
             return new(Verdict.Refuse, "c-class", source == ActSource.User ? PointToSettings : null);
 
+        // 0.19: MCP and media tools — only for his own lines; tainted turns and sensitive tools always ask (D4).
+        if (spec.MindSide)
+        {
+            if (source == ActSource.Self) return Refuse("self-tool");
+            if (ctx.Tainted) return new(Verdict.Ask, "tainted");
+            if (spec.Sensitive) return new(Verdict.Ask, "sensitive");
+            return ToolGrants.Effective(spec.Grant, spec.Sensitive) is ToolGrant.Read or ToolGrant.Always ? new(Verdict.Act) : new(Verdict.Ask, "b-class");
+        }
+        if (source == ActSource.User && ctx.Tainted) return new(Verdict.Ask, "tainted");
+
         if (source == ActSource.User)
             return cls == ActionClass.B ? new(Verdict.Ask, "b-class") : new(Verdict.Act);
 
