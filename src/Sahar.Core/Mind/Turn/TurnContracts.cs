@@ -20,6 +20,21 @@ public interface ITurnRunner
     Task RunAsync(MindMsg turn, MindMsg hello, ITurnIO io, CancellationToken ct);
 }
 
+/// <summary>0.19 spec §4: the tools the Mind itself runs (MCP servers he added, image.make, voice.make). The engine
+/// still validates and decides each call; after its yes the runner calls <see cref="RunAsync"/>, which applies its own
+/// timeout (30 s, media 90 s), sanitizes the output and never throws for a tool's failure.</summary>
+public interface IMindTools
+{
+    /// <summary>What may be announced now (enabled, approved, fitting; media once checked). Only for his own chat/voice turns.</summary>
+    IReadOnlyList<Tools.ToolSpec> Announced { get; }
+    Task<MindToolResult> RunAsync(Tools.ToolCall call, CancellationToken ct);
+}
+
+/// <summary>One Mind-side run. <see cref="Kind"/>: text | image | voice | none; <see cref="Say"/> her template line
+/// (never the tool's words); <see cref="Text"/> the sanitized output (text only); <see cref="File"/> the picture or clip's
+/// file name; <see cref="Error"/> a code (timeout | changed | failed | wait | too-long | quota | offline…).</summary>
+public sealed record MindToolResult(bool Ok, string Kind, string Say, string? Text = null, string? File = null, string? Error = null);
+
 /// <summary>A deterministic distress result (spec §7.4): the fixed, reviewed reply and help lines. Never improvised.</summary>
 public sealed record DistressReply(string Text, IReadOnlyList<string> Help);
 
