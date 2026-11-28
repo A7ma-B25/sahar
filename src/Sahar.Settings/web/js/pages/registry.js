@@ -1,11 +1,12 @@
 // The pages (spec §6; 0.13 adds النشاطات; 0.14 adds her brain's four as their own group, mockups «الإصدار 14 —
-// الذكاء»; 0.16 adds «شخصية سحر» after عقلي; 0.17 «العقل أونلاين» after شخصية سحر), grouped by spacing; two stay hidden until they work (plan Ruling 1). Group 5 is the foot (about).
+// الذكاء»; 0.16 adds «شخصية سحر» after عقلي; 0.17 «العقل أونلاين» after شخصية سحر; 0.19 «الأدوات» after it), grouped by spacing; two stay hidden until they work (plan Ruling 1). Group 5 is the foot (about).
 export const pages = [
   { id: 'sahar', group: 1, icon: 'sparkle', available: true, title: 'pageSahar' },
   { id: 'menu', group: 1, icon: 'squares-four', available: true, title: 'pageMenu' },
   { id: 'brain', group: 2, icon: 'brain', available: true, title: 'pageBrain' },
   { id: 'persona', group: 2, icon: 'smiley', available: true, title: 'pagePersona' },
   { id: 'online', group: 2, icon: 'globe-simple', available: true, title: 'pageOnline' },
+  { id: 'tools', group: 2, icon: 'wrench', available: true, title: 'pageTools' },
   { id: 'models', group: 2, icon: 'cpu', available: true, title: 'pageModels' },
   { id: 'you', group: 2, icon: 'user-circle', available: true, title: 'pageYou' },
   { id: 'today', group: 2, icon: 'clock-counter-clockwise', available: true, title: 'pageToday' },

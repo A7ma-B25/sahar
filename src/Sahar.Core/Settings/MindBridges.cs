@@ -29,6 +29,7 @@ public static partial class MindBridges
         AddMemory(t, ctx);
         AddAutonomy(t, ctx);
         AddOnline(t, ctx);
+        AddTools(t, ctx);
         return t;
     }
 
@@ -36,4 +37,5 @@ public static partial class MindBridges
     static partial void AddMemory(Dictionary<string, Handler> t, MindBridgeContext ctx);
     static partial void AddAutonomy(Dictionary<string, Handler> t, MindBridgeContext ctx);
     static partial void AddOnline(Dictionary<string, Handler> t, MindBridgeContext ctx);
+    static partial void AddTools(Dictionary<string, Handler> t, MindBridgeContext ctx);
 }

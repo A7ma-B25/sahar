@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Sahar.Settings;
 
-/// <summary>Windows' open-file dialog for a .gguf model (GetOpenFileNameW; no WinForms). Never logs the path.</summary>
+/// <summary>Windows' open-file dialog for a .gguf model (0.19: or an MCP server's .exe) (GetOpenFileNameW; no WinForms). Never logs the path.</summary>
 internal static unsafe partial class GgufDialog
 {
     [StructLayout(LayoutKind.Sequential)]
@@ -30,14 +30,18 @@ internal static unsafe partial class GgufDialog
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetOpenFileName(OpenFileName* ofn);
 
-    public static string? Pick(nint owner)
+    public static string? Pick(nint owner) => Pick(owner, "GGUF (*.gguf)\0*.gguf\0\0", "اختاري ملف النموذج");
+
+    /// <summary>0.19 «الأدوات»: an MCP server program (.exe only).</summary>
+    public static string? PickExe(nint owner) => Pick(owner, "Program (*.exe)\0*.exe\0\0", "اختار البرنامج");
+
+    private static string? Pick(nint owner, string filter, string title)
     {
         const int OFN_FILEMUSTEXIST = 0x1000, OFN_PATHMUSTEXIST = 0x800, OFN_NOCHANGEDIR = 0x8, OFN_EXPLORER = 0x80000;
-        var filter = "GGUF (*.gguf)\0*.gguf\0\0";
         var buffer = new char[1024];
         fixed (char* f = filter)
         fixed (char* b = buffer)
-        fixed (char* t = "اختاري ملف النموذج")
+        fixed (char* t = title)
         {
             var ofn = new OpenFileName
             {

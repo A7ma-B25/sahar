@@ -54,6 +54,7 @@ internal static class Program
             };
             // 0.14 «النماذج»: «اختاري ملف» opens Windows' own file dialog for a .gguf.
             MindBridges.PickGguf = () => Task.FromResult(GgufDialog.Pick(window.Hwnd));
+            MindBridges.PickExe = () => Task.FromResult(GgufDialog.PickExe(window.Hwnd));
             var web = new WebHost(window, options, bridge);
             bool closing = false;
             window.CloseRequested += async () =>

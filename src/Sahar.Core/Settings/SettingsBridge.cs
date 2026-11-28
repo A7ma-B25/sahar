@@ -55,7 +55,7 @@ public sealed class SettingsBridge(string settingsPath, IEngineLink engine, ILoc
     public const string Unreadable = "unreadable";
 
     /// <summary>The pages shown (plan Ruling 1: الأصوات and Claude Code stay hidden until they work).</summary>
-    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "persona", "online", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"];
+    public static IReadOnlyList<string> Pages { get; } = ["sahar", "menu", "brain", "persona", "online", "tools", "models", "you", "today", "prayer", "listen", "activities", "general", "privacy", "about"];
 
     /// <summary>0.13: the engine's exe (Claude Code's hooks run it) and Claude Code's settings file.</summary>
     public string? EnginePath { get; init; }
