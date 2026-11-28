@@ -69,7 +69,27 @@ public sealed record MindMsg
     public bool? Window { get; init; }
     /// <summary>online-status: the providers, keys present, today's quota, the last key test and bench.</summary>
     public OnlineInfo? Online { get; init; }
+
+    // ---- 0.19: tools and MCP ----
+    /// <summary>tools-status: her servers, their tools (full descriptions, states) and what is announced. Never a secret.</summary>
+    public ToolsInfo? Toolbox { get; init; }
 }
+
+/// <summary>0.19 tools-status (mind → engine → page). <see cref="Result"/>: the last op's code for <see cref="ResultServer"/>.</summary>
+public sealed record ToolsInfo(IReadOnlyList<ToolsServerInfo> Servers, IReadOnlyList<Tools.ToolSpec> Announced, ToolsMediaInfo Media,
+    string? Result = null, string? ResultServer = null);
+
+/// <summary>A server as the page shows it. <see cref="State"/>: ok | paused | exe-changed | oauth | error | unknown.</summary>
+public sealed record ToolsServerInfo(string Id, string Name, string Slug, string Kind, string Target, IReadOnlyList<string> Args, string State,
+    bool HasSecret, IReadOnlyList<ToolsToolInfo> Tools);
+
+/// <summary>A tool as the page shows it (<see cref="State"/>: ok | new | changed | unfit).</summary>
+public sealed record ToolsToolInfo(string Name, string Qualified, string Description, IReadOnlyList<Tools.ArgSpec>? Args, bool Enabled,
+    Tools.ToolGrant Grant, bool Sensitive, bool AutoSensitive, string State);
+
+/// <summary>The media tools on the page: checked once, a Groq key, his grants, the last «جرّب» codes.</summary>
+public sealed record ToolsMediaInfo(bool ImageChecked, bool VoiceChecked, bool GroqKey, Tools.ToolGrant ImageGrant, Tools.ToolGrant VoiceGrant,
+    string? ImageTest, string? VoiceTest);
 
 /// <summary>One provider as the page and the engine see it: never its key, only whether one is sealed.</summary>
 public sealed record OnlineProvider(string Id, string Model, bool Key, int Used, int? Limit, bool Exhausted);
@@ -91,11 +111,11 @@ public static class MindTypes
 {
     public static readonly IReadOnlySet<string> ToMind = new HashSet<string>
     {
-        "hello", "turn", "tool-result", "answer", "cancel", "warm", "unload", "quit", "store-changed", "download", "bench", "model", "online",
+        "hello", "turn", "tool-result", "answer", "cancel", "warm", "unload", "quit", "store-changed", "download", "bench", "model", "online", "tools",
     };
     public static readonly IReadOnlySet<string> ToEngine = new HashSet<string>
     {
-        "ready", "state", "partial", "call", "say", "propose", "progress", "bench-result", "error", "models", "draft", "online-status",
+        "ready", "state", "partial", "call", "say", "propose", "progress", "bench-result", "error", "models", "draft", "online-status", "tools-status", "tool-out",
     };
 }
 
@@ -125,4 +145,5 @@ public static class MindWire
 [JsonSerializable(typeof(Runtime.DownloadState))]
 [JsonSerializable(typeof(Memory.ProfileItem))]
 [JsonSerializable(typeof(OnlineInfo))]
+[JsonSerializable(typeof(ToolsInfo))]
 public sealed partial class MindJson : JsonSerializerContext;
