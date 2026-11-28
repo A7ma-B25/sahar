@@ -1,5 +1,19 @@
-سَحَر · Sahar — نسخة تجريبية 0.18.0 (ويندوز)
+سَحَر · Sahar — نسخة تجريبية 0.19.0 (ويندوز)
 =============================================
+
+شو الجديد بـ 0.19.0 — الأدوات 🧰✨
+-------------------------------------------------
+- صار فيك تعطيها أدوات: صفحة جديدة بـ«إعداداتي» اسمها «الأدوات».
+- بتضيف «رابط» لسيرفر MCP، أو «برنامج» ‎.exe‎ عجهازك. بتشوف كل أداة شو بتعمل ووصفها كامل قبل ما تشغّلها، وكلهن بيبلّشو مطفيين.
+- لما تطلب منها شي بالمحادثة، بتسألك «بشغّل…؟» قبل ما تستعمل أي أداة. فيك تقلها «دايماً» من صفحة «الأدوات»، إلا الأدوات اللي بتمسح أو بتبعت باسمك أو بتتعامل بالمصاري: هدول بتسألك كل مرة.
+- اللي بترجّعو الأداة بيطلع ببطاقة لحالو بالمحادثة، مكتوب عليه من وين إجا، وبعدين هي بتحكيلك شو فيه باختصار.
+- إذا سيرفر غيّر وصف أداة من بعد ما وافقت، بتوقّفها وبتطلب موافقتك من جديد. وإذا البرنامج تغيّر، بيوقف لحتى توافق.
+- كل برنامج بيشتغل لحالو: إذا علّق أو أكل ذاكرة كتير بيتوقّف، وبيتسكّر معها.
+- «ارسميلي…»: بترسملك صورة (Pollinations، مجاناً وبلا مفتاح) وبتحطها بمجلد الصور «Sahar» مع زر «افتح المجلد».
+- «اعمليلي ملف صوتي…»: بتعملّك ملف صوتي بصوت سعودي (Groq، بنفس المفتاح تبع «العقل أونلاين»، لحد ٢٠٠ حرف) مع زر تشغيل.
+- لازم تكبس «جرّب» مرة وحدة للرسم وللصوت قبل ما تبلّش تستعملهن.
+- لسا مو مدعوم: الفيديو، وبرامج Node وPython، والسيرفرات اللي بدها تسجيل دخول.
+- السجل ما بيكتب أبداً شو بعتّ للأداة ولا شو رجّعت ولا أسماء الملفات.
 
 شو الجديد بـ 0.18.0 — العقل الكبير 🧠🌙
 -------------------------------------------------
@@ -77,7 +91,7 @@
 هالنسخة بتجمع كل شي اشتغلنا عليه من بعد 0.11: المثبّت والتحديثات، برنامج «إعداداتي»، «النشاطات»، و«عقلها».
 
 📦 المثبّت والتحديثات
-- صار في مثبّت: Sahar-Setup-0.18.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
+- صار في مثبّت: Sahar-Setup-0.19.0.exe. بتشغّلو مرة وحدة وخلص، بلا فك ضغط ولا صلاحيات أدمن.
   بيحطها بـ %LocalAppData%\Programs\Sahar، وبيحط «سحر» بقائمة ابدأ، وبيسألك إذا بدك ياها تشتغل مع الويندوز (معلّمة من حالها).
   بيثبّت معها برنامج الإعدادات وعقلها (Sahar.Mind.exe وملفات llama.cpp: Vulkan والمعالج). النموذج ما بيجي بالمثبّت:
   بتنزّلو من جوّاها لما تقلها (تحت).
@@ -111,7 +125,7 @@
 - السجل (engine.log و mind.log و settings.log) بيكتب أنواع وأرقام وأوقات بس — أبداً شو كتبت ولا اسم أغنية ولا ملف.
 
 جرّب بإيدك:
-  ١. ثبّتها من Sahar-Setup-0.18.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
+  ١. ثبّتها من Sahar-Setup-0.19.0.exe؛ دوّر على «سحر» بقائمة ابدأ؛ أعد تشغيل الجهاز وشوف إذا طلعت لحالها.
   ٢. افتح «إعداداتي» وغيّر حجمها؛ وبعدين شغّل المثبّت مرة تانية والنافذة مفتوحة (لازم تتسكّر هي وسحر وترجع سحر، وإعداداتك متل ما هي).
   ٣. شغّل أغنية؛ افلت ملف عليها؛ اربط Claude Code وخلّيه يسألك إذن.
   ٤. افتح «النماذج» وكبّس «نزّليه» (≈ ٥ غيغا)؛ وقّفه وكمّله؛ لما يخلص كبّس «جرّبيه» وصوّرلنا الأرقام.
@@ -267,12 +281,12 @@
 
 كيف تثبّتها
 -----------
-1. نزّل Sahar-Setup-0.18.0.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
+1. نزّل Sahar-Setup-0.19.0.exe من صفحة النسخة («test-build») على GitHub وشغّلو.
 2. الويندوز رح يقلك «Windows protected your PC» (هاد SmartScreen) لأن النسخة مش موقّعة لسا. طبيعي:
    كبّس على «More info» (معلومات إضافية) ← بيطلع زر «Run anyway» (تشغيل على أي حال) ← كبّس عليه.
    هالرسالة بتطلع أول مرة بس؛ التحديثات من جوّا سَحَر ما بتطلّعها.
 3. اختار إذا بدك ياها تشتغل مع الويندوز ← «التالي» ← «إنهاء». سَحَر بتطلع تحت عاليمين، فوق التاسك بار.
-   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.18.0-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
+   بدك النسخة المحمولة بلا تثبيت؟ فك الضغط عن Sahar-0.19.0-test-win-x64.zip بأي مجلد وشغّل Sahar.Engine.exe
    (نفس تحذير SmartScreen؛ خلّي كل الملفات والمجلدات يلي جنبها سوا). إذا كنت مشغّلها من الـ zip: المثبّت بيسكّرها لحالو؛ بعد التثبيت احذف المجلد القديم.
 4. للإغلاق: كبسة يمين على أيقونتها جنب الساعة (يمكن تكون مخبّاية تحت السهم ^) ← "إغلاق / Quit".
    "إخفاء ساعة" بيخبّيها ساعة وبترجع لحالها.
@@ -327,8 +341,27 @@
   (أو الصق %LocalAppData%\Sahar بشريط العنوان بمستكشف الملفات.)
 
 
-Sahar — test build 0.18.0 (Windows)
+Sahar — test build 0.19.0 (Windows)
 ==================================
+
+What's new in 0.19.0 — tools 🧰✨
+-------------------------------------------------
+- You can give her tools: a new page in her settings called «الأدوات».
+- Add a «رابط» (an MCP server link) or a «برنامج» (an .exe on your PC). You see what each tool does, with its full
+  description, before you turn it on; every tool starts off.
+- When you ask her in the chat, she asks «بشغّل…؟» before using any tool. You can set «دايماً» (always) on «الأدوات»,
+  except for tools that delete, send something in your name or touch money: those ask every time.
+- What a tool returns shows in its own card in the chat, labelled with where it came from; then she tells you briefly
+  what is in it.
+- If a server changes a tool's description after you approved it, she stops it and asks you again. If the program file
+  changes, it is paused until you approve it.
+- Each program runs on its own: if it hangs or eats too much memory it is stopped, and it closes with her.
+- «ارسميلي…»: she draws a picture (Pollinations, free, no key), saves it in Pictures\Sahar, with «افتح المجلد».
+- «اعمليلي ملف صوتي…»: she makes a voice clip in a Saudi voice (Groq, the same key as «العقل أونلاين», up to 200
+  characters) with a play button.
+- Press «جرّب» once for pictures and for voice clips before they can be used.
+- Not yet: video, Node and Python programs, servers that need a sign-in.
+- The logs never hold what was sent to a tool, what it returned, or any file name.
 
 What's new in 0.18.0 — the big brain 🧠🌙
 -------------------------------------------------
@@ -375,7 +408,7 @@ What's new in 0.17.0 — an online brain for words 🌐
 What's new in 0.14.0 — the installer, her settings, her activities and her brain 🌙
 -----------------------------------------------
 Everything since 0.11 in one build:
-- Installer: Sahar-Setup-0.18.0.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
+- Installer: Sahar-Setup-0.19.0.exe, per user, no admin, %LocalAppData%\Programs\Sahar, «سحر» in the Start menu, start with
   Windows (ticked). It installs the settings app and her brain (Sahar.Mind.exe and the pinned llama.cpp runtime, Vulkan
   and CPU) beside her; no model is bundled — she downloads one in the app when you say yes.
 - Updates: she asks in her bubble (yes / later) and never updates without a yes; the setup is checked against a signed
@@ -535,11 +568,11 @@ Still here from 0.2.0
 
 Install it
 ----------
-1. Download Sahar-Setup-0.18.0.exe from the release page ("test-build") on GitHub and run it.
+1. Download Sahar-Setup-0.19.0.exe from the release page ("test-build") on GitHub and run it.
 2. Windows SmartScreen says "Windows protected your PC" because the build is not signed yet. That is expected:
    click "More info", then "Run anyway". Only the first time; Sahar's own updates do not show it.
 3. Choose whether she starts with Windows → Next → Finish. Sahar appears bottom-right, above the taskbar.
-   Portable instead: unzip Sahar-0.18.0-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
+   Portable instead: unzip Sahar-0.19.0-test-win-x64.zip anywhere and run Sahar.Engine.exe (same SmartScreen warning;
    keep the files and folders beside it together). Running her from the zip: the installer closes her for you;
    delete the old folder afterwards.
 4. To quit: right-click her icon next to the clock (it may be under the ^ arrow) → "إغلاق / Quit".
