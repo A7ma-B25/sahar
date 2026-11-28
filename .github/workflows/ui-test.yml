@@ -131,8 +131,15 @@ jobs:
         run: dotnet publish src/Sahar.Engine -c Release -r win-x64 -o artifacts/engine
       - name: Publish the settings app (self-contained, next to the engine)
         run: dotnet publish src/Sahar.Settings -c Release -r win-x64 -o artifacts/engine/Sahar.Settings
-      - name: Publish her brain's process (Native AOT, next to the engine)
-        run: dotnet publish src/Sahar.Mind -c Release -r win-x64 -o artifacts/mind-exe
+      # 0.19 AOT gate: the MCP client package (ModelContextProtocol.Core 2.4.0) must add no trim/AOT warning (baseline 0).
+      - name: Publish her brain's process (Native AOT, next to the engine; zero IL warnings)
+        shell: pwsh
+        run: |
+          dotnet publish src/Sahar.Mind -c Release -r win-x64 -o artifacts/mind-exe 2>&1 | Tee-Object -FilePath mind-publish.log
+          if ($LASTEXITCODE -ne 0) { throw "the Mind did not publish ($LASTEXITCODE)" }
+          $il = @(Select-String -Path mind-publish.log -Pattern 'warning IL\d+' | ForEach-Object { $_.Line } | Sort-Object -Unique)
+          Write-Host "Mind publish: $($il.Count) IL (trim/AOT) warning(s)"
+          if ($il.Count) { $il | ForEach-Object { Write-Host "  $_" }; throw 'the Mind publish has trim/AOT warnings (0.19 gate: zero)' }
       - name: Her brain's runtime (official llama.cpp release, pinned SHA-256 and GitHub's digest)
         shell: pwsh
         env:

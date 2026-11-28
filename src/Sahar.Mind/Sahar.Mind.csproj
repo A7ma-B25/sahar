@@ -15,4 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Sahar.Core\Sahar.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 0.19: the official MCP C# SDK, client side only (pinned; the AOT gate checks zero trim/AOT warnings). -->
+    <PackageReference Include="ModelContextProtocol.Core" Version="[2.4.0]" />
+  </ItemGroup>
 </Project>

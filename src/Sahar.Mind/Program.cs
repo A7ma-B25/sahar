@@ -7,7 +7,7 @@ namespace Sahar.Mind;
 /// Sahar.Mind.exe (spec 0.14 §3): <c>--pipe &lt;name&gt; --parent &lt;pid&gt; [--script &lt;file&gt;]</c>. Connects to the
 /// engine's private pipe (current user only), runs the turn loop on the model runtime, exits when idle or when the
 /// engine goes. <c>--version</c>; <c>--probe</c> prints the hardware tier (numbers only); <c>--gpu-memory &lt;pid&gt;</c>
-/// that process's dedicated video memory (numbers only).
+/// that process's dedicated video memory (numbers only); <c>--mcp-probe &lt;url|exe&gt;</c> one MCP server's tool count.
 /// </summary>
 internal static class Program
 {
@@ -30,6 +30,8 @@ internal static class Program
             Console.WriteLine(FormattableString.Invariant($"pid={gpid} dedicatedMB={mb} instances={n} status=0x{status:x8}"));
             return 0;
         }
+        // 0.19: one MCP server, listed (numbers only): «tools=<n>» or «error=<kind>». A url (https or loopback) or a local .exe.
+        if (Arg("--mcp-probe") is { } target) return Tools.McpProbe.Run(target);
         var pipeName = Arg("--pipe");
         if (pipeName is null) return 2;
         int parent = int.TryParse(Arg("--parent"), out var pid) ? pid : 0;
