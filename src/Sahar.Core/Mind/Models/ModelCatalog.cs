@@ -10,6 +10,10 @@ public static class ModelCatalog
 {
     public const string DefaultId = "gemma-4-e4b-q4km";
 
+    /// <summary>0.18: the big local brain (Qwen3.6-35B-A3B MoE, ggml-org's official GGUF, HF API 2026-11-28). Never the
+    /// default: the Mind switches to it once when it finds the file he downloaded (<see cref="BigFinder"/>).</summary>
+    public const string BigId = "qwen3.6-35b-a3b-q4km";
+
     public static IReadOnlyList<ModelEntry> Recommended { get; } =
     [
         Pin(DefaultId, "Gemma 4 E4B", "default", "unsloth/gemma-4-E4B-it-GGUF", "bfc15c382204943c3a8fff0c750b94ae2364d7a3",
@@ -22,6 +26,8 @@ public static class ModelCatalog
             "gemma-4-E4B-it-Q5_K_M.gguf", 5_481_798_784, "a5d6e634db151368d2caa4270fd32ab604d96c2d1291950586989f46d8e17d36", "Q5_K_M"),
         Pin("jais-3-3.7b-q4km", "Jais 3 · 3.7B", "light-challenger", "IFM/Jais-3-3.7B-GGUF", "dbdeb53ba90fc21a20b39e35564dcad2e8f3955a",
             "Jais-3-3.7B-Q4_K_M.gguf", 3_156_606_176, "d2039e169049f0646f79bc27aec82ffc0842ff9af1bf75bfc16628929636e09a", "Q4_K_M"),
+        Pin(BigId, "Qwen 3.6 · 35B A3B", "big", "ggml-org/Qwen3.6-35B-A3B-GGUF", "52f9f9b8052fb9c8b69bba4a95eda0f319ac3d2a",
+            "Qwen3.6-35B-A3B-Q4_K_M.gguf", 20_542_732_576, "f4ffe03c9139e6a905a5d346f77d9fabdd179367c3280dfd005d1e75ca5ed8c8", "Q4_K_M"),
     ];
 
     /// <summary>The tiny CI model (plan Ruling 4): never offered on the page.</summary>

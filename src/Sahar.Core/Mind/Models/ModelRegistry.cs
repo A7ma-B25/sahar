@@ -92,6 +92,18 @@ public sealed class ModelRegistry
         return e;
     });
 
+    /// <summary>0.18: a file he picked by hand. When its SHA-256 is a recommended pin's, that pin is installed at this path
+    /// (its name and role, e.g. the big brain); otherwise it is added as his own file.</summary>
+    public ModelEntry InstallOrAdd(string path, string sha256, long bytes)
+    {
+        if (ModelCatalog.Recommended.FirstOrDefault(r => string.Equals(r.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) is { } pin)
+        {
+            MarkInstalled(pin.Id, path);
+            return Find(pin.Id)!;
+        }
+        return AddLocal(path, sha256, bytes);
+    }
+
     /// <summary>Removes an added model from the list (recommended ones stay listed; delete their file instead).</summary>
     public bool Remove(string id) => Locked(() =>
     {

@@ -16,7 +16,6 @@ public static class ServerArgs
         {
             "-m", modelPath, "--host", "127.0.0.1", "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--api-key", apiKey, "--no-webui", "--jinja", "-c", plan.Context.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            "-ngl", plan.Offload == Offload.None ? "0" : "999",
             "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
             "-t", Cpu(plan, threads), "-tb", Cpu(plan, threads), "--parallel", "1",
             // 0.17.2 (other apps lagged): no busy-wait between jobs and low priority (b12207 common/arg.cpp: --poll 0 = no
@@ -24,7 +23,10 @@ public static class ServerArgs
             "--poll", "0", "--prio", "-1",
             "--reasoning", "off", "--reasoning-budget", "0",   // 0.14.1: Gemma 4 still opened a thought now and then
         };
+        // 0.18 Auto: no -ngl at all — llama.cpp fits the layers and the MoE experts to the GPU's free memory itself.
+        if (plan.Offload != Offload.Auto) a.InsertRange(a.IndexOf("--cache-type-k"), ["-ngl", plan.Offload == Offload.None ? "0" : "999"]);
         if (plan.Offload == Offload.Fit) a.AddRange(["--fit", "on"]);
+        if (plan.Offload == Offload.Auto) a.AddRange(["--fit", "on", "--fit-target", "1024"]);
         if (device is { Length: > 0 } && plan.Backend != Backend.Cpu && plan.Offload != Offload.None) a.AddRange(["--device", device]);
         return a;
     }
@@ -35,6 +37,16 @@ public static class ServerArgs
 
     private static string Cpu(TierPlan plan, int threads) =>
         (plan.Offload == Offload.All && plan.Backend != Backend.Cpu ? Math.Min(threads, GpuThreads) : threads).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>0.18: healthy within 120 s, plus 10 s per GB above 6 GB (a 20.5 GB file: 265 s), at most 300 s.</summary>
+    public static TimeSpan LoadDeadline(long modelBytes)
+    {
+        double gb = modelBytes / 1e9;
+        return TimeSpan.FromSeconds(Math.Clamp(120 + (int)Math.Round(Math.Max(0, gb - 6) * 10), 120, 300));
+    }
+
+    /// <summary>0.18: her model time per chat turn — 20 s, or 45 s for a model over 10 GB (experts run on the CPU).</summary>
+    public static TimeSpan ChatBudget(long modelBytes) => TimeSpan.FromSeconds(modelBytes > 10_000_000_000 ? 45 : 20);
 
     /// <summary>Physical cores − 2, at least 2 (without a physical count: half the logical ones).</summary>
     public static int Threads(int logical, int physical) => Math.Max(2, (physical > 0 ? physical : logical / 2) - 2);

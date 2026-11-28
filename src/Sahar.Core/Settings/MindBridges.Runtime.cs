@@ -112,7 +112,7 @@ public static partial class MindBridges
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
                 return Convert.ToHexStringLower(SHA256.HashData(fs));
             });
-            var e = reg.AddLocal(path, sha, new FileInfo(path).Length);
+            var e = reg.InstallOrAdd(path, sha, new FileInfo(path).Length);   // 0.18: a pin's file gets its name and role
             return new MindBridgeReply(true, w => { w.WriteString("added", e.Id); Models(w); });
         }
         if (HfRef.Parse(query) is not { } hf) return new MindBridgeReply(false, w => w.WriteString("reason", BadQuery));

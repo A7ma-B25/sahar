@@ -13,8 +13,10 @@ public sealed record Gpu(int Vendor, long DedicatedMB, bool Software, string Nam
 /// <summary>The probe's numbers (the Mind fills them: GlobalMemoryStatusEx, DXGI EnumAdapters1, Avx2, free disk).</summary>
 public sealed record HardwareProbe(long RamMB, IReadOnlyList<Gpu> Gpus, bool Avx2, long FreeDiskMB);
 
-/// <summary>How many layers go to the GPU: none, as many as fit (<c>--fit on</c>), or all (<c>-ngl 999</c>).</summary>
-public enum Offload { None, Fit, All }
+/// <summary>How many layers go to the GPU: none, as many as fit (<c>--fit on</c>), or all (<c>-ngl 999</c>). 0.18
+/// <see cref="Auto"/>: a model bigger than the GPU — no <c>-ngl</c>, llama.cpp's own fit places attention on the GPU and
+/// the MoE experts in RAM.</summary>
+public enum Offload { None, Fit, All, Auto }
 
 public sealed record TierPlan(Tier Tier, string? ModelId, int Context, Offload Offload, Backend Backend);
 
@@ -35,6 +37,17 @@ public static class Tiers
         if (gpu >= Gpu6MB && p.RamMB >= StandardRamMB) return Tier.Gpu6;
         return p.RamMB >= StandardRamMB ? Tier.StandardCpu : Tier.Light;
     }
+
+    /// <summary>0.18: llama.cpp's own fit for a model file bigger than the GPU's memory minus 1 GB (only when the plan
+    /// offloads at all). Smaller models keep the tier's plan.</summary>
+    public static TierPlan ForModel(TierPlan plan, HardwareProbe p, long modelBytes)
+    {
+        if (plan.Offload == Offload.None || plan.Backend == Backend.Cpu || Best(p) is not { } g) return plan;
+        return modelBytes / (1024 * 1024) > g.DedicatedMB - 1024 ? plan with { Offload = Offload.Auto } : plan;
+    }
+
+    /// <summary>0.18 RAM guard: the file must fit in RAM with 4 GB left for Windows and his apps.</summary>
+    public static bool TooBig(HardwareProbe p, long modelBytes) => modelBytes / (1024 * 1024) > p.RamMB - 4096;
 
     /// <summary>The discrete GPU with the most memory, or null.</summary>
     public static Gpu? Best(HardwareProbe p) => p.Gpus.Where(g => g.Discrete).OrderByDescending(g => g.DedicatedMB).FirstOrDefault();

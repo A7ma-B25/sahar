@@ -17,6 +17,10 @@ public static class RuntimeText
     public const string Verifying = "خلص التنزيل، عم اتأكّد منه…";
     public const string Done = "هلق صرت فكّر لحالي ✨";
     public const string Mismatch = "الملف وصل خربان، فمسحته. جرّب كمان مرة؟";
+    // 0.18: the big brain.
+    public const string FoundBig = "لقيت عقلي الكبير بالتنزيلات 🌙 عم اتأكّد منه، بياخد دقيقة…";
+    public const string BigFailed = "عقلي الكبير ما اشتغل عجهازك، فرجعت عالعقل الصغير. ابعتلي سجلّي إذا بتحب نشوف ليش.";
+    public const string TooBig = "هالعقل أكبر من الرام يلي عندك، فما بقدر شغّله. خلّيني عالصغير.";
     public const string Failed = "ما زبط التنزيل هلق. بكمّل من نفس المطرح لما تقلي.";
 
     /// <summary>4,977,171,584 B → «٤٫٩٨» (GB, two decimals, trailing zeros dropped).</summary>
