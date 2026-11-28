@@ -144,6 +144,8 @@ internal sealed class SurfaceHost
         view.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         view.WebResourceRequested += (_, e) =>
         {
+            // 0.19: her own picture and voice files from Pictures\Sahar (a bare sahar-image/voice name only; anything else 404).
+            if (e.Request.Uri.StartsWith(Origin + "pictures/", StringComparison.OrdinalIgnoreCase)) { e.Response = Picture(e.Request.Uri[(Origin.Length + 9)..]); return; }
             if (e.Request.Uri.StartsWith(Origin, StringComparison.OrdinalIgnoreCase)) return;
             _blocked++;
             SettingsLog.Write("surfaces: blocked a request");
@@ -160,6 +162,21 @@ internal sealed class SurfaceHost
         s.Win.Activated += active => { if (!active) Deactivated(s); };
         s.Win.CloseAsked += () => { if (s.Open) Close(s, "closed"); };
         view.Navigate(Origin + "surfaces/" + (s.Name == "chat" ? "chat.html" : "panel.html"));
+    }
+
+    /// <summary>A file of Pictures\Sahar by its bare name (her media names only), or 404.</summary>
+    private CoreWebView2WebResourceResponse Picture(string name)
+    {
+        name = Uri.UnescapeDataString(name.Split('?', '#')[0]);
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Sahar", name);
+        if (!Sahar.Core.Mind.Tools.MediaTools.IsMediaFile(name) || !File.Exists(path)) return _env!.CreateWebResourceResponse(null, 404, "Not Found", "");
+        try
+        {
+            var type = name.EndsWith(".wav", StringComparison.Ordinal) ? "audio/wav" : name.EndsWith(".png", StringComparison.Ordinal) ? "image/png" : "image/jpeg";
+            var bytes = File.ReadAllBytes(path);
+            return _env!.CreateWebResourceResponse(new MemoryStream(bytes), 200, "OK", $"Content-Type: {type}\r\nContent-Length: {bytes.Length}\r\nCache-Control: no-store");
+        }
+        catch (Exception x) when (x is IOException or UnauthorizedAccessException) { return _env!.CreateWebResourceResponse(null, 404, "Not Found", ""); }
     }
 
     // ---- engine → host ----

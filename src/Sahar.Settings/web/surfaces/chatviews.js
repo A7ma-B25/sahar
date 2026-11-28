@@ -24,6 +24,32 @@ function message(x, first, emit) {
         h('button', { cls: 'sec', 'data-id': 'copy-' + x.id, on: { click: () => emit('copy', x.id) } }, icon(x.draft.copied ? 'check' : 'copy', 15), x.draft.copied ? x.draft.copiedLabel : x.draft.copy),
         h('span', null, x.draft.note)));
   }
+  // 0.19: a tool's own words (plain text, never markdown: no links), her picture, her voice clip.
+  if (x.kind === 'tool') {
+    return h('div', { cls: 'toolcard', 'data-msg': x.id, role: 'note', 'aria-label': x.tool.label },
+      h('span', { cls: 'lab' }, icon('terminal', 14), x.tool.label),
+      h('p', null, x.text));
+  }
+  if (x.kind === 'image' || x.kind === 'voice') {
+    const folder = h('button', { cls: 'sec', 'data-id': 'folder-' + x.id, on: { click: () => emit('open-folder') } }, icon('folder', 15), x.open);
+    if (x.kind === 'image') {
+      return h('div', { cls: 'mediacard', 'data-msg': x.id },
+        h('img', { cls: 'pic', src: x.src, alt: x.alt || '' }),
+        h('div', { cls: 'row2' }, folder));
+    }
+    const toggle = (e) => {
+      const card = e && e.currentTarget && e.currentTarget.closest('.mediacard');
+      const a = card && card.querySelector('audio');
+      if (!a) return;
+      if (a.paused) a.play(); else a.pause();
+    };
+    return h('div', { cls: 'mediacard voice', 'data-msg': x.id },
+      h('div', { cls: 'row2' },
+        h('button', { cls: 'pri btn small play', 'data-id': 'play-' + x.id, 'aria-label': x.play, title: x.play, on: { click: toggle } }, icon('play', 16), x.play),
+        h('span', { cls: 'lab' }, icon('music', 14), x.label),
+        folder),
+      h('audio', { src: x.src, preload: 'metadata' }));
+  }
   const cls = `msg ${x.who === 'me' ? 'me' : 'her'}${first ? ' first' : ''}`;
   return h('div', { cls, 'data-msg': x.id, 'data-who': x.who },
     x.kind === 'ask' ? h('p', null, x.text) : x.who === 'her' ? h('div', { cls: 'md' }, md(x.text)) : x.text,

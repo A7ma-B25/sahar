@@ -192,6 +192,17 @@ header .brainchip.online{background:var(--soft);color:var(--softInk)}
 .draft .row2{display:flex;align-items:center;gap:8px;margin-top:2px}
 .draft .row2 .sec{height:34px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500}
 .draft .row2 span{font-size:12px;color:var(--t3)}
+/* 0.19: a tool's own words (its card, not her bubble), her picture and her voice clip */
+.toolcard{align-self:flex-start;width:84%;box-sizing:border-box;padding:10px 12px 12px;border-radius:16px;border:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;gap:6px;margin-bottom:2px}
+.toolcard .lab{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--t2)}
+.toolcard p{font-size:14px;line-height:1.6;user-select:text;-webkit-user-select:text;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow-y:auto}
+.mediacard{align-self:flex-start;width:84%;box-sizing:border-box;padding:8px;border-radius:16px;background:var(--menu);display:flex;flex-direction:column;gap:8px;margin-bottom:2px}
+.mediacard .pic{display:block;width:100%;height:auto;max-height:300px;object-fit:contain;border-radius:10px;background:var(--bg)}
+.mediacard .row2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mediacard .row2 .sec{height:34px;padding:0 12px;border-radius:10px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;background:var(--bg)}
+.mediacard .row2 .play{display:flex;align-items:center;gap:6px}
+.mediacard .row2 .lab{flex:1;min-width:0;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--t2)}
+.mediacard.voice{padding:8px 10px}
 .typingdots{align-self:flex-start;height:36px;padding:0 14px;border-radius:6px 16px 16px 16px;background:var(--tint);display:flex;align-items:center;gap:5px}
 .newchip{position:sticky;bottom:8px;align-self:center;height:30px;padding:0 12px;border-radius:15px;background:var(--accent);color:var(--onAccent);font-size:13px;display:flex;align-items:center;gap:4px;box-shadow:var(--shadow)}
 .chat footer{flex:none;padding:10px 10px 12px;background:var(--bg)}

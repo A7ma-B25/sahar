@@ -77,6 +77,23 @@ internal sealed partial class MindEngine
             Log.Write($"mind: online {op}");
             return new PipeReply(sent, sent ? "ok=true" : "no mind");
         });
+        // 0.19 «الأدوات»: the page's tool ops go to the Mind (a secret passes once, base64, never logged or kept here).
+        Pipe.Register("mind-tools", r =>
+        {
+            var op = Arg(r, "op");
+            if (op is not ("status" or "add" or "remove" or "enable" or "disable" or "grant" or "sensitive" or "approve" or "refresh" or "media-grant" or "check-image" or "check-voice"))
+                return new PipeReply(false, "bad tools op");
+            string? Decode(string key)
+            {
+                if (Arg(r, key) is not { Length: > 0 } b) return null;
+                try { return Encoding.UTF8.GetString(Convert.FromBase64String(b)); } catch (FormatException) { return null; }
+            }
+            bool sent = EnsureAndSend(new MindMsg { T = "tools", Op = op, Model = Arg(r, "server"), Tool = Decode("tool64"), Data = Decode("data64"), Text = Decode("value64") });
+            Log.Write($"mind: tools {op}");
+            return new PipeReply(sent, sent ? "ok=true" : "no mind");
+        });
+        Pipe.Register("mind-tools-status", _ => new PipeReply(true, "json64=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            _toolbox is { } tb ? System.Text.Json.JsonSerializer.Serialize(tb, MindJson.Default.ToolsInfo) : "null")) + $" seq={_toolsSeq}"));
         Pipe.Register("mind-online-status", _ => new PipeReply(true, "json64=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(
             _online is { } o ? System.Text.Json.JsonSerializer.Serialize(o, MindJson.Default.OnlineInfo) : "null")) + $" seq={_onlineSeq}"));
         if (TestMode)
@@ -195,6 +212,11 @@ internal sealed partial class MindEngine
                 if (m.Ready is { } r) Log.Write($"mind: ready ({r.Backend}, {r.LoadMs} ms, vram {r.VramMB} MB)");
                 if (_wantsReady) { _wantsReady = false; Speech.Say(Address.For(Address.You, RuntimeText.Done)); }
                 break;
+            case "tools-status" when m.Toolbox is { } box:
+                _toolbox = box;
+                _toolsSeq++;
+                ToolsSeen(box);
+                break;
             case "online-status" when m.Online is { } info:
                 _online = info;
                 _onlineSeq++;
@@ -279,6 +301,10 @@ internal sealed partial class MindEngine
             if (yes) EnsureAndSend(new MindMsg { T = "download", Op = "start", Model = model.Id });
         }, yesIcon: "download");
     }
+
+    private ToolsInfo? _toolbox;
+    private int _toolsSeq;
+    partial void ToolsSeen(ToolsInfo info);
 
     private OnlineInfo? _online;
     private int _onlineSeq;

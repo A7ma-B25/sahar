@@ -5,7 +5,9 @@ using Sahar.Core.Mind.Memory;
 namespace Sahar.Core.Chat;
 
 public enum ChatWho { Me, Her }
-public enum ChatLine { Text, Draft, Ask, Receipt }
+/// <summary>0.19: Tool = a tool's own (sanitized) words, shown as the tool's, not hers; Image / Voice = her picture or
+/// voice clip (the file name in Pictures\Sahar).</summary>
+public enum ChatLine { Text, Draft, Ask, Receipt, Tool, Image, Voice }
 
 /// <summary>One line in a conversation. <see cref="Answer"/> (yes | no | timeout) only for an ask.</summary>
 public sealed record ChatEntry(DateTimeOffset At, ChatWho Who, ChatLine Kind, string Text)
@@ -13,6 +15,8 @@ public sealed record ChatEntry(DateTimeOffset At, ChatWho Who, ChatLine Kind, st
     public string? Answer { get; init; }
     /// <summary>0.17: which brain wrote her line (local | online; null = before 0.17, local) — the chat's tiny badge.</summary>
     public string? Brain { get; init; }
+    /// <summary>0.19: the tool a Tool / Image / Voice card came from (mcp.&lt;server&gt;.&lt;tool&gt;, image.make, voice.make).</summary>
+    public string? Tool { get; init; }
 }
 
 /// <summary>A conversation in the list: its title and last line are content too (encrypted like the rest).</summary>

@@ -144,6 +144,7 @@ internal sealed class ChatHub
                     break;
                 case "copy" when e.Value is { } mid && int.TryParse(mid.TrimStart('m'), out int i): CopyDraft(i); break;
                 case "ask" when e.Value is { } a: AnswerAsk(a); break;
+                case "open-folder": OpenFolder?.Invoke(); break;
                 case "brain" when e.Value is "online" or "local":
                     SetBrain?.Invoke(e.Value);
                     Log.Write($"chat: brain {e.Value}");
@@ -199,6 +200,17 @@ internal sealed class ChatHub
         _conv = _store.Append(_conv, m);
         if (_open) Push();
         else AnsweredWhileClosed?.Invoke();
+    }
+
+    /// <summary>0.19: «افتح المجلد» on a picture or voice card (the engine opens Pictures\Sahar).</summary>
+    public Action? OpenFolder { get; set; }
+
+    /// <summary>0.19: a tool's own words (<see cref="ChatLine.Tool"/>), her picture or her voice clip, from <paramref name="tool"/>.
+    /// The window opens for it (like a draft).</summary>
+    public void Card(ChatLine kind, string tool, string text)
+    {
+        _conv = _store.Append(_conv, new ChatEntry(_now(), ChatWho.Her, kind, text) { Tool = tool });
+        if (_open) Push(); else Open();
     }
 
     /// <summary>«بصوتك»: her draft card in the thread (the window opens for it). She never sends it.</summary>
@@ -440,6 +452,16 @@ internal sealed class ChatHub
                         "timeout" => Address.ToYou("ما جاوبت، فما عملت شي"),
                         _ => Address.ToYou("ما سمحتلها"),
                     }).End();
+                break;
+            case ChatLine.Tool:
+                var label = m.Tool is { } tn && tn.StartsWith("mcp.", StringComparison.Ordinal) ? Sahar.Core.Mind.Tools.ToolTemplates.McpParts(tn).Tool : m.Tool ?? "";
+                j.S("kind", "tool").S("text", m.Text).O("tool").S("label", "من «" + label + "»").End();
+                break;
+            case ChatLine.Image:
+                j.S("kind", "image").S("src", "../pictures/" + Uri.EscapeDataString(m.Text)).S("alt", "صورة رسمتها").S("open", "افتح المجلد");
+                break;
+            case ChatLine.Voice:
+                j.S("kind", "voice").S("src", "../pictures/" + Uri.EscapeDataString(m.Text)).S("label", "ملف صوتي").S("play", "شغّل").S("open", "افتح المجلد");
                 break;
             case ChatLine.Receipt:
                 var parts = m.Text.Split('\n', 2);

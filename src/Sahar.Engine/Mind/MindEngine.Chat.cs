@@ -58,6 +58,7 @@ internal sealed partial class MindEngine
     private string? _chatTurn;   // the chat turn the header follows
     private readonly Dictionary<string, string> _ran = [];   // 0.15.0: what the turn's last action really did (Core template)
     private readonly HashSet<string> _acting = [];            // review I2: chat turns that sent a call (no bubble streaming)
+    private readonly HashSet<string> _tainted = [];           // 0.19 spec §7: turns that already got untrusted tool output
     private BubbleStream? _bubble;                            // review I2: the chat turn's words in her bubble (card closed)
     private int _bubbleClicks;                                // his bubble clicks when this turn first drew there
     private int _turnSeq;
@@ -96,6 +97,7 @@ internal sealed partial class MindEngine
         Surfaces.ChatHub.Clipboard = Copy;
         if (Chat is { } chatHub)
         {
+            chatHub.OpenFolder = () => Safe(OpenPictures);   // 0.19: «افتح المجلد» on her picture and voice cards
             // 0.17.2: warm the online connection when the window opens (no chat quota; the Mind throttles it). Only a
             // running Mind (opening the window never starts her brain; a Mind that starts asks OpenRouter's counter anyway).
             chatHub.Opened = () => Safe(() => { if (Sahar.Core.Mind.Online.OnlineChain.Usable(Settings())) SendIfRunning(new MindMsg { T = "online", Op = "warm" }); });
@@ -376,6 +378,9 @@ internal sealed partial class MindEngine
             case "call":
                 HandleCall(m);
                 break;
+            case "tool-out" when m.Id is { } outId:
+                ToolOut(outId, m);
+                break;
             case "say":
                 Said(m);
                 break;
@@ -474,6 +479,7 @@ internal sealed partial class MindEngine
     {
         _ran.Remove(id);
         _acting.Remove(id);
+        _tainted.Remove(id);
         if (id == _chatTurn || _chatTurn is null) _bubble = null;
     }
 
@@ -498,7 +504,7 @@ internal sealed partial class MindEngine
         var spec = _registry.Announced.First(t => t.Name == call.Tool);
         var cls = _registry.ClassOf(call);
         var source = turn.Source;
-        var ctx = Context(turn.Kind);
+        var ctx = Context(turn.Kind) with { Tainted = _tainted.Contains(id) };   // 0.19: untrusted output in this turn → ask again
         var d = _policy.Decide(spec, call, cls, source, ctx);
         var why = source == ActSource.User ? turn.Line : Clip(call.Why, 80);
         bool callPause = ctx.CallStarting && call.Tool == "music.control" && EngineTools.Str(call, "op") == "pause";
@@ -507,6 +513,27 @@ internal sealed partial class MindEngine
         if (d.Verdict == Verdict.Act && call.Tool is "timer.start" or "timer.cancel" && _tools.HisTimerRunning)
             d = new AutonomyDecision(Verdict.Ask, "his-timer");   // his timer: never replaced or stopped without his yes
         Log.Write($"mind: call {call.Tool} {d.Verdict.ToString().ToLowerInvariant()}{(d.Reason is { } r ? $" ({r})" : "")}");
+        if (spec.MindSide && d.Verdict != Verdict.Refuse)
+        {
+            // 0.19: an MCP or media tool runs in the Mind: the engine's yes is an answer{yes}; his «لا» a refusal.
+            void Go(ActionOutcome how)
+            {
+                Append(call.Tool, call, source, why, how, null);
+                SendMind(new MindMsg { T = "answer", Id = id, Call = n, Yes = true });
+            }
+            if (d.Verdict == Verdict.Act) { Go(ActionOutcome.Done); return; }
+            var ask = ToolTemplates.Ask(spec);
+            _ask.Ask(ask, yes => Safe(() =>
+            {
+                if (yes) Go(ActionOutcome.AskedYes);
+                else
+                {
+                    Append(call.Tool, call, source, why, ActionOutcome.AskedNo, null, "سألتك: " + ask);
+                    Reply(id, n, false, "asked-no", ToolTemplates.AskedNo);
+                }
+            }));
+            return;
+        }
         switch (d.Verdict)
         {
             case Verdict.Act:
@@ -548,6 +575,37 @@ internal sealed partial class MindEngine
             if (o.Ok && !tool.Spec.ReadOnly && id == _chatTurn) _ran[id] = o.Summary;   // her short line if the card closes
             Reply(id, n, o.Ok, o.Error, o.Summary, o.Data);
         })), TaskScheduler.Default);
+    }
+
+    /// <summary>0.19: what a Mind-side tool returned, shown in the chat window as the tool's (a text card, her picture,
+    /// her voice clip); text marks the turn tainted. Logged: the tool name, the kind and ok/code only.</summary>
+    private void ToolOut(string id, MindMsg m)
+    {
+        var tool = m.Tool ?? "";
+        var kind = m.Kind ?? "none";
+        if (m.Text is { Length: > 0 }) _tainted.Add(id);
+        Log.Write($"mind: tool-out {tool} {kind} {(m.Ok == true ? "ok" : m.Error ?? "failed")}");
+        if (Chat is not { } chat) return;
+        if (m.Text is { Length: > 0 } text) chat.Card(Sahar.Core.Chat.ChatLine.Tool, tool, text);
+        else if (m.Ok == true && m.Data is { } file && MediaTools.IsMediaFile(file))
+            chat.Card(kind == "voice" ? Sahar.Core.Chat.ChatLine.Voice : Sahar.Core.Chat.ChatLine.Image, tool, file);
+    }
+
+    /// <summary>«افتح المجلد»: Pictures\Sahar in Explorer.</summary>
+    private static void OpenPictures()
+    {
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Sahar");
+        Directory.CreateDirectory(dir);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe") { ArgumentList = { dir }, UseShellExecute = false });
+        Log.Write("mind: pictures folder opened");
+    }
+
+    /// <summary>0.19: her tools (the Mind's tools-status): the engine validates and decides MCP and media calls too.</summary>
+    partial void ToolsSeen(ToolsInfo info)
+    {
+        if (_tools is null) return;   // before the chat side is attached
+        _registry = MindParts.ToolRegistry([.. _tools.Announced(), .. info.Announced.Where(t => t.MindSide)]);
+        Log.Write($"mind: {_registry.Announced.Count} tools ({info.Announced.Count} of hers)");
     }
 
     private void Reply(string id, int n, bool ok, string? error, string text, string? data = null) =>

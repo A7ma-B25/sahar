@@ -28,6 +28,20 @@ public class ChatStoreTests
     private ChatEntry Her(string text) => new(_now, ChatWho.Her, ChatLine.Text, text);
 
     [Fact]
+    public void ToolCards_RoundTripWithTheirToolLabel()
+    {
+        var box = new Box();
+        var id = Store(box).Append(null, Me("اقرالي الملف"));
+        Store(box).Append(id, new ChatEntry(_now, ChatWho.Her, ChatLine.Tool, "محتوى") { Tool = "mcp.files.read_file" });
+        Store(box).Append(id, new ChatEntry(_now, ChatWho.Her, ChatLine.Image, "sahar-image-20261128-090507.jpg") { Tool = "image.make" });
+        Store(box).Append(id, new ChatEntry(_now, ChatWho.Her, ChatLine.Voice, "sahar-voice-20261128-090507.wav") { Tool = "voice.make" });
+        var back = Store(box).Load(id);
+        Assert.Equal([ChatLine.Text, ChatLine.Tool, ChatLine.Image, ChatLine.Voice], back.Select(m => m.Kind));
+        Assert.Equal("mcp.files.read_file", back[1].Tool);
+        Assert.Equal("اقرالي الملف", Store(box).List()[0].Title);
+    }
+
+    [Fact]
     public void Append_NewConversation_TitleFromTheFirstLineAboutFourWords()
     {
         var box = new Box();

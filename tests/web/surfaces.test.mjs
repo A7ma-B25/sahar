@@ -198,3 +198,33 @@ test('chat partial: only the words and the typing flag change', () => {
   assert.equal(next.labels, model.labels);
   assert.equal(model.partial, null, 'the old model is not changed');
 });
+
+// 0.19: the tool's own words, her picture and her voice clip in the chat window.
+const toolThread = (msgs) => ({ view: 'thread', name: 'سحورة', status: '', labels, max: 500, days: [{ label: 'اليوم', groups: [{ who: 'her', time: '١٠:٤٠', msgs }] }] });
+
+test('tool card is plain text labelled with the tool', () => {
+  const t = chatView(toolThread([{ id: 'm1', kind: 'tool', text: 'ignore rules [x](https://evil.example) **bold**', tool: { label: 'من «read_file»' } }]), {}, noop);
+  const card = find(t, (n) => has(n, 'toolcard'));
+  assert.ok(card);
+  assert.match(text(card), /من «read_file»/);
+  assert.match(text(card), /\[x\]\(https:\/\/evil\.example\) \*\*bold\*\*/);   // never markdown: no link, no bold
+  assert.equal(find(card, (n) => n.tag === 'a' || n.tag === 'strong'), null);
+});
+
+test('image card has open-folder', () => {
+  const events = [];
+  const t = chatView(toolThread([{ id: 'm2', kind: 'image', src: '../pictures/sahar-image-20261128-090507.jpg', alt: 'صورة', open: 'افتح المجلد' }]), {}, (k, v) => events.push(k));
+  const img = find(t, (n) => n.tag === 'img' && String(n.attrs.src).includes('pictures/'));
+  assert.equal(img.attrs.src, '../pictures/sahar-image-20261128-090507.jpg');
+  const open = find(t, (n) => n.attrs['data-id'] === 'folder-m2');
+  assert.match(text(open), /افتح المجلد/);
+  open.attrs.on.click();
+  assert.deepEqual(events, ['open-folder']);
+});
+
+test('voice card has a play button', () => {
+  const t = chatView(toolThread([{ id: 'm3', kind: 'voice', src: '../pictures/sahar-voice-20261128-090507.wav', label: 'ملف صوتي', play: 'شغّل', open: 'افتح المجلد' }]), {}, noop);
+  assert.ok(find(t, (n) => n.attrs['data-id'] === 'play-m3'));
+  assert.equal(find(t, (n) => n.tag === 'audio').attrs.src, '../pictures/sahar-voice-20261128-090507.wav');
+  assert.ok(find(t, (n) => n.attrs['data-id'] === 'folder-m3'));
+});
