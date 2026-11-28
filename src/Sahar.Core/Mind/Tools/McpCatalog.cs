@@ -106,6 +106,46 @@ public static class McpCatalog
             result, resultServer);
     }
 
+    /// <summary>His one-line arguments, split as Windows programs read them (spaces; "double quotes" group).</summary>
+    public static IReadOnlyList<string> SplitArgs(string? line)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(line)) return list;
+        var b = new System.Text.StringBuilder();
+        bool quoted = false, any = false;
+        foreach (var c in line)
+        {
+            if (c == '"') { quoted = !quoted; any = true; continue; }
+            if (char.IsWhiteSpace(c) && !quoted) { if (any || b.Length > 0) list.Add(b.ToString()); b.Clear(); any = false; continue; }
+            b.Append(c);
+        }
+        if (any || b.Length > 0) list.Add(b.ToString());
+        return list;
+    }
+
+    /// <summary>The CreateProcess command line: the program and each argument quoted by the Windows rules (never cmd.exe).</summary>
+    public static string CommandLine(string exe, IReadOnlyList<string> args)
+    {
+        var b = new System.Text.StringBuilder();
+        b.Append('"').Append(exe).Append('"');
+        foreach (var a in args)
+        {
+            b.Append(' ');
+            if (a.Length > 0 && !a.Any(c => char.IsWhiteSpace(c) || c == '"')) { b.Append(a); continue; }
+            b.Append('"');
+            int slashes = 0;
+            foreach (var c in a)
+            {
+                if (c == '\\') { slashes++; continue; }
+                if (c == '"') b.Append('\\', slashes * 2 + 1).Append('"');
+                else b.Append('\\', slashes).Append(c);
+                slashes = 0;
+            }
+            b.Append('\\', slashes * 2).Append('"');
+        }
+        return b.ToString();
+    }
+
     public static string Serialize(McpToolsFile f) => JsonSerializer.Serialize(f, ToolsJson.Default.McpToolsFile);
 
     public static McpToolsFile Parse(string? json)

@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Sahar.Mind.Tools;
 
 /// <summary><c>Sahar.Mind.exe --mcp-probe &lt;url|exe&gt;</c>: connects to one MCP server, lists its tools and prints
@@ -30,12 +28,8 @@ internal static class McpProbe
             await using var link = await McpLink.HttpAsync(u, new Dictionary<string, string>(), handler, ct);
             return (await link.ListAsync(ct)).Count;
         }
-        using var p = Process.Start(new ProcessStartInfo(target) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true })!;
-        try
-        {
-            await using var link = await McpLink.StreamAsync(p.StandardInput.BaseStream, p.StandardOutput.BaseStream, ct);
-            return (await link.ListAsync(ct)).Count;
-        }
-        finally { try { p.Kill(true); } catch (InvalidOperationException) { } }
+        using var p = JobProcess.Start(Path.GetFullPath(target), [], new Dictionary<string, string>());
+        await using var stdio = await McpLink.StreamAsync(p.Input, p.Output, ct);
+        return (await stdio.ListAsync(ct)).Count;
     }
 }

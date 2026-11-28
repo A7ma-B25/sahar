@@ -37,6 +37,8 @@ internal sealed class OnlineHost(Func<SaharSettings> settings, Action<MindMsg> s
     public OnlineState State => _state ??= new OnlineState(Box, () => DateTimeOffset.Now);
     public TurnHistory History => _history ??= new TurnHistory(Box, () => DateTimeOffset.Now, () => settings().MindEpisodeDays);
     private OnlineKeys Keys => new(Box);
+    /// <summary>0.19: voice.make uses his Groq key (none, or «محلي فقط» → not announced).</summary>
+    public string? GroqKey => settings().MindLocalOnly ? null : Keys.Get(ProviderProfiles.GroqId);
 
     /// <summary>«انسي كل شي» or a store change: everything is read again from the (maybe new) box.</summary>
     public void Reset() { _box = null; _state = null; _history = null; }

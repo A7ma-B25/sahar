@@ -173,3 +173,19 @@ public sealed class McpCatalogTests
         Assert.NotNull(MindWire.Decode(MindWire.Encode(new MindMsg { T = "tools", Op = "status" })));
     }
 }
+
+/// <summary>0.19 spec §6: his «برنامج» arguments, as one line on the page, split like Windows does and quoted back.</summary>
+public sealed class McpArgsTests
+{
+    [Fact]
+    public void SplitArgs_QuotesAndSpaces() =>
+        Assert.Equal(["--root", @"C:\My Files", "-v"], McpCatalog.SplitArgs(@"--root ""C:\My Files""  -v"));
+
+    [Fact]
+    public void CommandLine_QuotesExeAndArgs() =>
+        Assert.Equal(@"""C:\P F\s.exe"" --root ""C:\My Files"" ""a\""b"" plain", McpCatalog.CommandLine(@"C:\P F\s.exe", ["--root", @"C:\My Files", "a\"b", "plain"]));
+
+    [Fact]
+    public void CommandLine_TrailingBackslashInQuotes() =>
+        Assert.Equal(@"""x.exe"" ""C:\dir a\\""", McpCatalog.CommandLine("x.exe", [@"C:\dir a\"]));
+}

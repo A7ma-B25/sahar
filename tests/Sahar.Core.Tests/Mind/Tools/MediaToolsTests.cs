@@ -18,7 +18,8 @@ public sealed class MediaToolsTests
     [Fact]
     public void ImageUri_EscapesPrompt()
     {
-        var u = MediaTools.ImageUri("a cat & a moon/sky?");
+        var u = MediaTools.ImageUri("a cat & a moon/sky?", seed: 7);
+        Assert.EndsWith("?seed=7", u.AbsoluteUri);
         Assert.StartsWith("https://image.pollinations.ai/prompt/", u.AbsoluteUri);
         Assert.Contains("a%20cat%20%26%20a%20moon%2Fsky%3F", u.AbsoluteUri);
     }
@@ -27,13 +28,14 @@ public sealed class MediaToolsTests
     public void FileName_Pattern()
     {
         var at = new DateTimeOffset(2026, 11, 28, 9, 5, 7, TimeSpan.Zero);
-        Assert.Equal("sahar-image-20261128-090507.png", MediaTools.FileName("image", at));
+        Assert.Equal("sahar-image-20261128-090507.jpg", MediaTools.FileName("image", at));   // Pollinations answers JPEG
         Assert.Equal("sahar-voice-20261128-090507.wav", MediaTools.FileName("voice", at));
     }
 
     [Theory]
     [InlineData("sahar-image-20261128-090507.png", true)]
     [InlineData("sahar-voice-20261128-090507-2.wav", true)]
+    [InlineData("sahar-image-20261128-090507.jpg", true)]
     [InlineData("../sahar-image-20261128-090507.png", false)]
     [InlineData("sahar-image-20261128-090507.png.exe", false)]
     [InlineData("sahar-voice-20261128-090507.png", false)]

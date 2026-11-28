@@ -38,6 +38,7 @@ internal sealed class MindHost : ITurnIO
     private ITurnRunner? _runner;
     private int _busy;   // a bench running: never unloaded under it
     private readonly OnlineHost _online;
+    private readonly Tools.McpHost _tools;
     private BigWatch? _big;
 
     public MindHost(NamedPipeClientStream pipe, string? script)
@@ -46,6 +47,7 @@ internal sealed class MindHost : ITurnIO
         _out = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
         _runtime = script is null ? new RuntimeHost(_registry, Settings) : new ScriptRuntime(script);
         _online = new OnlineHost(Settings, Send);
+        _tools = new Tools.McpHost(Settings, Send, () => _online.GroqKey);
     }
 
     private static SaharSettings Settings()
@@ -106,6 +108,7 @@ internal sealed class MindHost : ITurnIO
         catch (OperationCanceledException) { }
         catch (IOException) { }
         await _runtime.UnloadAsync();
+        await _tools.DisposeAsync();   // 0.19: every MCP server stops with her brain (their jobs die anyway)
         MindLog.Write("mind: exit");
         return 0;
     }
@@ -117,6 +120,7 @@ internal sealed class MindHost : ITurnIO
             case "hello":
                 _hello = m;
                 Send(Models());
+                _tools.SendStatus();   // 0.19: the engine knows her tools before any turn can call one
                 if (_big is null && _runtime is RuntimeHost)
                 {
                     // 0.18: the file he downloaded with his browser is found, checked and used by itself.
@@ -126,6 +130,7 @@ internal sealed class MindHost : ITurnIO
                 _ = Task.Run(async () => { try { await _online.HandleAsync(new MindMsg { T = "online", Op = "status" }, _quit.Token); } catch (Exception e) when (e is not OperationCanceledException) { MindLog.Write($"online: status failed ({e.GetType().Name})"); } catch (OperationCanceledException) { } });
                 break;
             case "online": Online(m); break;
+            case "tools": Tools(m); break;
             case "turn": StartTurn(m); break;
             case "tool-result" or "answer" when m.Id is { } id && m.Call is { } call:
                 _replies.GetOrAdd((id, call), _ => new TaskCompletionSource<MindMsg>(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult(m);
@@ -134,7 +139,7 @@ internal sealed class MindHost : ITurnIO
             case "warm": _ = Warm(); break;
             case "unload": _ = Unload(); break;
             case "quit": _quit.Cancel(); break;
-            case "store-changed": _store = null; _runner = null; _online.Reset(); _online.SendStatus(); break;   // 0.17: a forget takes the keys too: the chip hides
+            case "store-changed": _store = null; _runner = null; _online.Reset(); _online.SendStatus(); _ = _tools.ResetAsync().ContinueWith(_ => _tools.SendStatus(), TaskScheduler.Default); break;   // 0.17: a forget takes the keys too: the chip hides
             case "download": Download(m); break;
             case "bench": _ = Bench(m.Model == "quick"); break;
             case "model": Model(m); break;
@@ -215,6 +220,7 @@ internal sealed class MindHost : ITurnIO
                         ChatBudget = EvalBudget() ?? ServerArgs.ChatBudget(_registry.Active?.Bytes ?? 0),   // 0.18: 45 s for the big brain
                         Dropped = kind => MindLog.Write($"turn: dropped {kind}"),
                         Timed = t => _timing = t,   // 0.15.0: where the time went, on the turn's own line
+                        MindTools = _tools,         // 0.19: MCP servers he added, image.make, voice.make
                     };
                     await _runner.RunAsync(turn with { Id = id }, _hello, this, cts.Token);
                 }
@@ -250,6 +256,18 @@ internal sealed class MindHost : ITurnIO
             }
             catch (OperationCanceledException) { }
             catch (Exception e) { MindLog.Write($"online: {m.Op} failed ({e.GetType().Name})"); _online.SendStatus(); }
+        });
+    }
+
+    /// <summary>0.19: the «الأدوات» page's ops (add, enable, grant, check…), each ending with a tools-status.</summary>
+    private void Tools(MindMsg m)
+    {
+        _lastUse = DateTimeOffset.UtcNow;
+        _ = Task.Run(async () =>
+        {
+            try { await _tools.HandleAsync(m, _quit.Token); }
+            catch (OperationCanceledException) { }
+            catch (Exception e) { MindLog.Write($"tools: {m.Op} failed ({e.GetType().Name})"); _tools.SendStatus(); }
         });
     }
 
