@@ -21,6 +21,9 @@
 .tl-tool { display: flex; flex-direction: column; gap: 6px; padding-block: 12px; border-block-start: 1px solid var(--sunken); }
 .tl-toolhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tl-toolhead .label { font-weight: 600; }
+/* A server's words may be English inside the Arabic page: their own direction (punctuation in place), on the page's side. */
+.tl-desc, .tl-args { unicode-bidi: plaintext; }
+[dir=rtl] .tl-desc, [dir=rtl] .tl-args { text-align: right; }
 .tl-desc { margin: 0; font-size: 14px; line-height: 1.65; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 72ch; }
 .tl-args { margin: 0; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
 .tl-controls { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }

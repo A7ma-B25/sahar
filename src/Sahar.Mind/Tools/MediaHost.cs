@@ -35,7 +35,7 @@ internal sealed class MediaHost
     public async Task<string> CheckImageAsync(CancellationToken ct)
     {
         var r = await ImageAsync("a small paper star, simple", save: false, ct);
-        return r.Ok ? "ok" : r.Error == "wait" ? "wait:" + (r.Text ?? "45") : r.Error ?? "failed";
+        return r.Ok ? "ok" : r.Error ?? "failed";
     }
 
     public async Task<MindToolResult> ImageAsync(string prompt, bool save, CancellationToken ct)
@@ -110,7 +110,7 @@ internal sealed class MediaHost
     }
 
     private static MindToolResult Wait(int seconds) =>
-        new(false, "none", ToolTemplates.ImageWait(Math.Clamp(seconds, 1, 3600)), Text: Math.Clamp(seconds, 1, 3600).ToString(System.Globalization.CultureInfo.InvariantCulture), Error: "wait");
+        new(false, "none", ToolTemplates.ImageWait(Math.Clamp(seconds, 1, 3600)), Error: "wait:" + Math.Clamp(seconds, 1, 3600).ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     private static MindToolResult Fail(string code) => new(false, "none", ToolTemplates.ToolFailed, Error: code);
 

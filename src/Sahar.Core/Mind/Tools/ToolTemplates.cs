@@ -52,12 +52,15 @@ public static class ToolTemplates
         if (spec.Name == MediaTools.Image.Name) return "برسملك ياها؟ رح ابعت وصف الصورة لخدمة Pollinations.";
         if (spec.Name == MediaTools.Voice.Name) return "بعملّك الملف الصوتي؟ رح ابعت الكلام لخدمة Groq.";
         var (server, tool) = McpParts(spec.Name);
-        return $"بشغّل «{tool}» من «{server}»؟" + (spec.Sensitive ? " (هالأداة حساسة، بسألك كل مرة)" : "");
+        return $"بشغّل «{Iso(tool)}» من «{Iso(server)}»؟" + (spec.Sensitive ? " (هالأداة حساسة، بسألك كل مرة)" : "");
     }
 
     /// <summary>Her line after a Mind-side tool ran well (the card beside it shows the tool's own output).</summary>
     public static string MindDone(ToolSpec spec) =>
-        spec.Name == MediaTools.Image.Name ? "رسمتلك ياها." : spec.Name == MediaTools.Voice.Name ? "عملتلك الملف الصوتي." : $"هاد اللي رجّعته «{McpParts(spec.Name).Tool}».";
+        spec.Name == MediaTools.Image.Name ? "رسمتلك ياها." : spec.Name == MediaTools.Voice.Name ? "عملتلك الملف الصوتي." : $"هاد اللي رجّعته «{Iso(McpParts(spec.Name).Tool)}».";
+
+    /// <summary>A Latin name inside her Arabic line, isolated (FSI…PDI) so «» and punctuation stay where they belong.</summary>
+    public static string Iso(string name) => "\u2068" + name + "\u2069";
 
     /// <summary><c>mcp.&lt;slug&gt;.&lt;tool&gt;</c> → (slug, tool).</summary>
     public static (string Server, string Tool) McpParts(string name)
@@ -108,7 +111,7 @@ public static class ToolTemplates
             "prayer.next" or "music.now" or "weather.now" or "claude.status" => data is null ? "شفت" : Digits.ToArabicIndic(data),
             "image.make" => "رسمتلك صورة",
             "voice.make" => "عملتلك ملف صوتي",
-            _ when call.Tool.StartsWith("mcp.", StringComparison.Ordinal) => $"شغّلت «{McpParts(call.Tool).Tool}»",
+            _ when call.Tool.StartsWith("mcp.", StringComparison.Ordinal) => $"شغّلت «{Iso(McpParts(call.Tool).Tool)}»",
             _ => "عملتها",
         };
     }

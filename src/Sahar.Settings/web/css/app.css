@@ -56,8 +56,8 @@ p, .pr { text-wrap: pretty; }
 @media (max-height: 760px) {
   .nav { padding-block: 16px; }
   .brand { padding-block-end: 12px; }
-  .nav-group { margin-block-end: 12px; }
-  .nav-item { block-size: 34px; }
+  .nav-group { margin-block-end: 10px; }
+  .nav-item { block-size: 33px; }   /* 0.19: «الأدوات» made it 2 px too tall at 680 */
 }
 .page.enter { animation: page-in .14s ease; }
 @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }

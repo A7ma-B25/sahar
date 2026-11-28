@@ -455,7 +455,7 @@ internal sealed class ChatHub
                 break;
             case ChatLine.Tool:
                 var label = m.Tool is { } tn && tn.StartsWith("mcp.", StringComparison.Ordinal) ? Sahar.Core.Mind.Tools.ToolTemplates.McpParts(tn).Tool : m.Tool ?? "";
-                j.S("kind", "tool").S("text", m.Text).O("tool").S("label", "من «" + label + "»").End();
+                j.S("kind", "tool").S("text", m.Text).O("tool").S("label", "من «" + Sahar.Core.Mind.Tools.ToolTemplates.Iso(label) + "»").End();
                 break;
             case ChatLine.Image:
                 j.S("kind", "image").S("src", "../pictures/" + Uri.EscapeDataString(m.Text)).S("alt", "صورة رسمتها").S("open", "افتح المجلد");

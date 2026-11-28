@@ -583,10 +583,10 @@ internal sealed partial class MindEngine
     {
         var tool = m.Tool ?? "";
         var kind = m.Kind ?? "none";
-        if (m.Text is { Length: > 0 }) _tainted.Add(id);
+        if (kind == "text" && m.Text is { Length: > 0 }) _tainted.Add(id);
         Log.Write($"mind: tool-out {tool} {kind} {(m.Ok == true ? "ok" : m.Error ?? "failed")}");
         if (Chat is not { } chat) return;
-        if (m.Text is { Length: > 0 } text) chat.Card(Sahar.Core.Chat.ChatLine.Tool, tool, text);
+        if (kind == "text" && m.Text is { Length: > 0 } text) chat.Card(Sahar.Core.Chat.ChatLine.Tool, tool, text);
         else if (m.Ok == true && m.Data is { } file && MediaTools.IsMediaFile(file))
             chat.Card(kind == "voice" ? Sahar.Core.Chat.ChatLine.Voice : Sahar.Core.Chat.ChatLine.Image, tool, file);
     }
