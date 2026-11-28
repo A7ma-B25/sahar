@@ -31,6 +31,15 @@ internal sealed partial class MindEngine
     public Action? OfferDownload { get; set; }
     /// <summary>«اكتبلي رد بأسلوبي…» (stream B's <c>DraftAsk.Parse(line) is not null</c>, set at integration): such a line
     /// is a turn with source "draft" (Ruling 6); B shows the draft with «بصوتك» and a copy button. Drafting never sends.</summary>
+    /// <summary>The line for a turn that never reached her model (0.18: the big brain fell back, or is too big for his RAM).</summary>
+    private static string? ErrorLine(string? error) => error switch
+    {
+        "model-missing" or "load-failed" or "oom" or "busy" => ChatReply.Learning,
+        "big-failed" => Sahar.Core.Mind.Runtime.RuntimeText.BigFailed,
+        "too-big" => Sahar.Core.Mind.Runtime.RuntimeText.TooBig,
+        _ => null,
+    };
+
     public Func<string, bool>? IsDraftAsk { get; set; }
     /// <summary>0.17 (ruling R2): a card line that asks her to write or explain, with online usable: App moves it to the chat window.</summary>
     public Action<string>? MoveToChat { get; set; }
@@ -375,15 +384,15 @@ internal sealed partial class MindEngine
                 if (m.Id == _chatTurn) ThinkingFace(false);
                 if (m.Id == _chatTurn && FromWindow(m.Id))
                 {
-                    if (m.Error is "model-missing" or "load-failed" or "oom" or "busy") Chat?.Said(Address.For(Address.You, ChatReply.Learning));
+                    if (ErrorLine(m.Error) is { } errLine) Chat?.Said(Address.For(Address.You, errLine));
                     if (m.Error != "timeout") { EndWindowTurn(m.Id); _chatTurn = null; }   // review I3: a timeout's line follows
                 }
                 else if (m.Id == _chatTurn)
                 {
                     Menu.MindThinking(false);
-                    if (m.Error is "model-missing" or "load-failed" or "oom" or "busy")
+                    if (ErrorLine(m.Error) is { } errLine)
                     {
-                        var learning = Address.For(Address.You, ChatReply.Learning);
+                        var learning = Address.For(Address.You, errLine);
                         if (Menu.IsOpen) Menu.SetReply(learning); else Speech.Say(learning);   // review (a): the card may be closed
                     }
                     if (m.Error != "timeout") _chatTurn = null;   // a timeout's line follows

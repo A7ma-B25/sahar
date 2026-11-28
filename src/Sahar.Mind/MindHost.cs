@@ -38,6 +38,7 @@ internal sealed class MindHost : ITurnIO
     private ITurnRunner? _runner;
     private int _busy;   // a bench running: never unloaded under it
     private readonly OnlineHost _online;
+    private BigWatch? _big;
 
     public MindHost(NamedPipeClientStream pipe, string? script)
     {
@@ -116,6 +117,12 @@ internal sealed class MindHost : ITurnIO
             case "hello":
                 _hello = m;
                 Send(Models());
+                if (_big is null && _runtime is RuntimeHost)
+                {
+                    // 0.18: the file he downloaded with his browser is found, checked and used by itself.
+                    _big = new BigWatch(_registry, msg => { _lastUse = DateTimeOffset.UtcNow; Send(msg); }, Models, () => { _runner = null; _ = Unload(); });
+                    _big.Start();
+                }
                 _ = Task.Run(async () => { try { await _online.HandleAsync(new MindMsg { T = "online", Op = "status" }, _quit.Token); } catch (Exception e) when (e is not OperationCanceledException) { MindLog.Write($"online: status failed ({e.GetType().Name})"); } catch (OperationCanceledException) { } });
                 break;
             case "online": Online(m); break;
@@ -146,7 +153,8 @@ internal sealed class MindHost : ITurnIO
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_quit.Token);
         // A last-resort net only: the runner keeps its own 20 s budget for the model, and an Ask may wait up to 150 s for
         // his «إي»/«لا» (review X1: a 25 s net cut the confirmation after his yes).
-        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMinutes(3) + EvalBudget().GetValueOrDefault());
+        // 0.18: plus the model's load deadline (a cold big brain may take minutes to load inside the turn).
+        cts.CancelAfter(source == "reflect" ? TimeSpan.FromMinutes(10) : TimeSpan.FromMinutes(3) + EvalBudget().GetValueOrDefault() + ServerArgs.LoadDeadline(_registry.Active?.Bytes ?? 0));
         _turn = (id, source, cts);
         _lastUse = DateTimeOffset.UtcNow;
         _ = Task.Run(async () =>
@@ -204,7 +212,7 @@ internal sealed class MindHost : ITurnIO
                     _runner ??= new TurnRunner(new LazyLlm(_runtime), MindParts.PromptParts(Store), Store)
                     {
                         History = _online.History,   // 0.17: she remembers the last turns after a restart
-                        ChatBudget = EvalBudget() ?? TimeSpan.FromSeconds(20),
+                        ChatBudget = EvalBudget() ?? ServerArgs.ChatBudget(_registry.Active?.Bytes ?? 0),   // 0.18: 45 s for the big brain
                         Dropped = kind => MindLog.Write($"turn: dropped {kind}"),
                         Timed = t => _timing = t,   // 0.15.0: where the time went, on the turn's own line
                     };
@@ -272,7 +280,7 @@ internal sealed class MindHost : ITurnIO
         switch (m.Op)
         {
             case "use" when m.Model is { } id:
-                if (_registry.Use(id)) _ = Unload();   // the next warm loads it; memory is untouched
+                if (_registry.Use(id)) { _runner = null; _ = Unload(); }   // the next warm loads it; memory is untouched (0.18: a new budget)
                 break;
             case "remove" when m.Model is { } id && _registry.Find(id) is { } e:
                 if (e.Active) _ = Unload();

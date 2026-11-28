@@ -20,6 +20,7 @@ public static class RuntimeText
     // 0.18: the big brain.
     public const string FoundBig = "لقيت عقلي الكبير بالتنزيلات 🌙 عم اتأكّد منه، بياخد دقيقة…";
     public const string BigFailed = "عقلي الكبير ما اشتغل عجهازك، فرجعت عالعقل الصغير. ابعتلي سجلّي إذا بتحب نشوف ليش.";
+    public const string LocalMismatch = "لقيت ملف عقلي الكبير بالتنزيلات بس مو كامل أو خربان، فما استعملته. نزّله كمان مرة؟";
     public const string TooBig = "هالعقل أكبر من الرام يلي عندك، فما بقدر شغّله. خلّيني عالصغير.";
     public const string Failed = "ما زبط التنزيل هلق. بكمّل من نفس المطرح لما تقلي.";
 

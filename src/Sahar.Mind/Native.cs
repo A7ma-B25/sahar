@@ -84,6 +84,28 @@ internal static unsafe partial class Native
         AssignProcessToJobObject(_job, process);
     }
 
+    [LibraryImport("shell32.dll")]
+    private static partial int SHGetKnownFolderPath(Guid* id, uint flags, nint token, out nint path);
+
+    [LibraryImport("ole32.dll")]
+    private static partial void CoTaskMemFree(nint p);
+
+    /// <summary>0.18: his Downloads folder (Known Folder, so a moved one is found), else %USERPROFILE%\Downloads.</summary>
+    public static string Downloads()
+    {
+        var id = new Guid("374DE290-123F-4565-9164-39C4925E467B");   // FOLDERID_Downloads
+        try
+        {
+            if (SHGetKnownFolderPath(&id, 0, 0, out var p) == 0 && p != 0)
+            {
+                try { if (Marshal.PtrToStringUni(p) is { Length: > 0 } s) return s; }
+                finally { CoTaskMemFree(p); }
+            }
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException) { }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+    }
+
     public static long TotalRamMB()
     {
         var s = new MemoryStatusEx { Length = (uint)sizeof(MemoryStatusEx) };

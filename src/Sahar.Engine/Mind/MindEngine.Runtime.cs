@@ -229,8 +229,11 @@ internal sealed partial class MindEngine
             "downloading" when RuntimeText.Milestone(p.Done, p.Total, _saidQuarter) is { } q => Said(q),
             "paused" when before is "downloading" => RuntimeText.Paused,
             "retrying" when before is "downloading" => RuntimeText.Retrying(p.Done, p.Total),   // 0.14.1: once, then quiet
-            "verifying" when before is not "verifying" => RuntimeText.Verifying,
+            "found" when before is not "found" => RuntimeText.FoundBig,   // 0.18: the file he downloaded with his browser
+            "verifying" when before is not ("verifying" or "found") => RuntimeText.Verifying,
             "mismatch" => RuntimeText.Mismatch,
+            "local-mismatch" => RuntimeText.LocalMismatch,   // 0.18: his file stays (it is his)
+            "too-big" => RuntimeText.TooBig,
             "no-disk" => RuntimeText.NoDisk(long.TryParse(p.Error, out var miss) ? miss : 0),
             "failed" => RuntimeText.Failed,
             _ => null,

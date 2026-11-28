@@ -46,21 +46,43 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
             if (model.LocalPath is not { } path || !File.Exists(path)) throw new MindRuntimeException("model-missing");
             var s = settings();
             var probe = Probe.Read();
-            var plan = Tiers.Plan(probe, s.MindUseGpu, s.MindBackend);
+            long bytes = new FileInfo(path).Length;
+            // 0.18: a model bigger than his RAM is never started; the big brain hands over to the small one.
+            if (Tiers.TooBig(probe, bytes)) { MindLog.Write("runtime: model too big for this RAM"); FallBack(model); throw new MindRuntimeException("too-big"); }
+            var plan = Tiers.ForModel(Tiers.Plan(probe, s.MindUseGpu, s.MindBackend), probe, bytes);   // 0.18: bigger than the GPU → llama.cpp fits it
             if (plan.Tier == Tier.None) plan = plan with { Context = 4096 };
-            try { return await StartAsync(model, path, plan, Tiers.Best(probe), ct); }
-            catch (MindRuntimeException e) when (plan.Backend != Backend.Cpu && e.Code is "load-failed" or "oom")
+            try
             {
-                MindLog.Write($"runtime: {plan.Backend} load failed ({e.Code}), trying the CPU");
-                return await StartAsync(model, path, plan with { Backend = Backend.Cpu, Offload = Offload.None }, null, ct);
+                try { return await StartAsync(model, path, plan, Tiers.Best(probe), bytes, ct); }
+                catch (MindRuntimeException e) when (plan.Backend != Backend.Cpu && e.Code is "load-failed" or "oom")
+                {
+                    MindLog.Write($"runtime: {plan.Backend} load failed ({e.Code}), trying the CPU");
+                    return await StartAsync(model, path, plan with { Backend = Backend.Cpu, Offload = Offload.None }, null, bytes, ct);
+                }
+            }
+            catch (MindRuntimeException e) when (model.Id == ModelCatalog.BigId && e.Code is "load-failed" or "oom" or "timeout")
+            {
+                MindLog.Write($"runtime: big brain failed ({e.Code})");
+                if (FallBack(model)) throw new MindRuntimeException("big-failed");
+                throw;
             }
         }
         finally { _gate.Release(); }
     }
 
+    /// <summary>0.18: the big brain did not run — the default (or any other installed model) becomes active again.</summary>
+    private bool FallBack(ModelEntry failed)
+    {
+        if (failed.Id != ModelCatalog.BigId) return false;
+        var back = registry.List().Where(m => m.Installed && m.Id != failed.Id).OrderBy(m => m.Id == ModelCatalog.DefaultId ? 0 : 1).FirstOrDefault();
+        if (back is null || !registry.Use(back.Id)) return false;
+        MindLog.Write("runtime: back to the small brain");
+        return true;
+    }
+
     private readonly Dictionary<string, IReadOnlyList<LlamaDevice>> _devices = [];
 
-    private async Task<RuntimeReady> StartAsync(ModelEntry model, string path, TierPlan plan, Gpu? gpu, CancellationToken ct)
+    private async Task<RuntimeReady> StartAsync(ModelEntry model, string path, TierPlan plan, Gpu? gpu, long bytes, CancellationToken ct)
     {
         var appDir = AppContext.BaseDirectory;
         var dir = ServerArgs.RuntimeDir(appDir, MindPaths.Runtime, plan.Backend);
@@ -112,7 +134,7 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         p.BeginOutputReadLine();
         _server = p;
         var client = new OpenAiClient(new SocketsHttpHandler { UseProxy = false }, port, key);
-        var deadline = TimeSpan.FromSeconds(120);
+        var deadline = ServerArgs.LoadDeadline(bytes);   // 0.18: 120 s, more for a big file (20.5 GB: 265 s)
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -135,7 +157,7 @@ internal sealed partial class RuntimeHost(ModelRegistry registry, Func<SaharSett
         var (vram, source) = GpuMemory.Best(pdh, buffers, delta);
         _vramMB = vram;
         _ready = new RuntimeReady(model.Name, model.Quant, plan.Tier, plan.Backend, (int)loadMs, _vramMB, ram);
-        MindLog.Write(FormattableString.Invariant($"runtime: ready model={model.Name} {model.Quant} backend={plan.Backend} device={device?.Name ?? (plan.Backend == Backend.Cpu ? "cpu" : "default")} tier={plan.Tier} load={loadMs}ms vram={_vramMB}MB ({source}) ram={ram}MB"));
+        MindLog.Write(FormattableString.Invariant($"runtime: ready model={model.Name} {model.Quant} offload={plan.Offload} backend={plan.Backend} device={device?.Name ?? (plan.Backend == Backend.Cpu ? "cpu" : "default")} tier={plan.Tier} load={loadMs}ms vram={_vramMB}MB ({source}) ram={ram}MB"));
         return _ready;
     }
 

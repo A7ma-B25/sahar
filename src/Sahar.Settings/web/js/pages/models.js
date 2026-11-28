@@ -19,7 +19,7 @@ export function leave() {
 const num = (n) => (getLang() === 'ar' ? toArabicIndic(String(n)).replace('.', '٫') : String(n));
 const gb = (bytes) => num(Math.round(bytes / 1e7) / 100);
 const ROLE = { default: ['roleDefault', 'recDefault'], challenger: ['roleChallenger', 'recChallenger'], light: ['roleLight', 'recLight'],
-  gpu8: ['roleGpu8', 'recGpu8'], 'light-challenger': ['roleLightChallenger', 'recLightChallenger'] };
+  gpu8: ['roleGpu8', 'recGpu8'], 'light-challenger': ['roleLightChallenger', 'recLightChallenger'], big: ['roleBig', 'recBig'] };
 
 export async function render({ tx, ask, render: rerender }) {
   leave();
