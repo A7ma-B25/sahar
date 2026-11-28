@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Sahar.Core.Mind.Tools;
 
@@ -16,7 +17,21 @@ public sealed record ArgSpec(string Name, ArgType Type, bool Required = true, in
 /// <summary>A tool she may propose (spec §3.4): <c>{name, description_ar, args, class, readOnly, undo}</c>.
 /// <see cref="Class"/> can depend on the arguments (settings.set: A or B by key): see <see cref="IToolRegistry.ClassOf"/>.</summary>
 public sealed record ToolSpec(string Name, string DescriptionAr, IReadOnlyList<ArgSpec> Args, ActionClass Class,
-    bool ReadOnly = false, bool Undoable = false);
+    bool ReadOnly = false, bool Undoable = false,
+    ToolSource Source = ToolSource.Builtin, string? ServerId = null, string? DescriptorHash = null, bool Sensitive = false,
+    ToolGrant Grant = ToolGrant.Ask)
+{
+    /// <summary>0.19: an MCP or media tool runs in the Mind after the engine's yes (the engine only validates, decides, shows).</summary>
+    [JsonIgnore] public bool MindSide => Source != ToolSource.Builtin;
+}
+
+/// <summary>0.19 spec §5: where a tool comes from. Builtin = her engine abilities; Mcp = a server he added; Media =
+/// image.make / voice.make (online providers, run by the Mind).</summary>
+public enum ToolSource { Builtin, Mcp, Media }
+
+/// <summary>0.19 spec §5 ToolGrants, per tool, set by him on «الأدوات»: ask every time, always allowed, or read-only
+/// («بس بتقرا», never asks). Sensitive tools are always <see cref="Ask"/> (D4).</summary>
+public enum ToolGrant { Ask, Always, Read }
 
 /// <summary>A proposed call, as the Mind sends it (args = the JSON object the grammar produced).</summary>
 public sealed record ToolCall(string Tool, JsonElement Args, string? Why = null);
