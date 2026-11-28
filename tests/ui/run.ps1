@@ -5018,6 +5018,7 @@ function Stage-Activities {
 . (Join-Path $PSScriptRoot 'mind-memory.ps1')
 . (Join-Path $PSScriptRoot 'mind-autonomy.ps1')
 . (Join-Path $PSScriptRoot 'mind-online.ps1')   # 0.17: the online brain against a fake provider on 127.0.0.1
+. (Join-Path $PSScriptRoot 'mind-tools.ps1')   # 0.19: her tools against a fake MCP program and fake services on 127.0.0.1
 . (Join-Path $PSScriptRoot 'mind-eval.ps1')   # 0.14.1: opt-in, mind-eval.yml only
 . (Join-Path $PSScriptRoot 'look.ps1')   # 0.16: the new surfaces, light and dark
 function Stage-Mind {
@@ -5025,6 +5026,7 @@ function Stage-Mind {
     Stage-MindMemory
     Stage-MindAutonomy
     Stage-MindOnline
+    Stage-MindTools
 }
 
 # ---- installer + update (owner roadmap: installer + auto-update; review fixes 2026-11-13) ----

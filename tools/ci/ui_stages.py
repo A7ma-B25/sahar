@@ -65,7 +65,9 @@ RULES = [
     ("src/Sahar.Engine/Mind/", ["mind"]),
     ("src/Sahar.Core/assets/mind/", ["mind"]),
     ("tools/mind/", ["mind"]),
-    ("tests/ui/mind-", ["mind"]),       # mind-runtime/-memory/-autonomy.ps1
+    ("tests/ui/mind-", ["mind"]),       # mind-runtime/-memory/-autonomy/-online/-tools.ps1
+    ("tests/ui/fake_tools.py", ["mind"]),   # 0.19: the fake MCP server and media services
+    ("tests/fakes/", ["mind"]),         # 0.19: the stdio MCP test program
     # Parts with one owner.
     ("src/Sahar.Core/Games/", ["games", "face"]),   # face starts a game in its burst
     ("src/Sahar.Engine/Games/", ["games", "face"]),

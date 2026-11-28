@@ -17,7 +17,9 @@ namespace Sahar.Mind.Tools;
 internal sealed class MediaHost
 {
     public static readonly TimeSpan Limit = TimeSpan.FromSeconds(90);
-    public static readonly TimeSpan ImageGap = TimeSpan.FromSeconds(45);
+    /// <summary>45 s (Pollinations' published per-IP gap). CI only (with the loopback test base): <c>SAHAR_MIND_IMAGE_GAP_S</c>.</summary>
+    public static readonly TimeSpan ImageGap = ProviderProfiles.TestBase is not null && int.TryParse(Environment.GetEnvironmentVariable("SAHAR_MIND_IMAGE_GAP_S"), out var g) && g is >= 0 and <= 45
+        ? TimeSpan.FromSeconds(g) : TimeSpan.FromSeconds(45);
     public const string Voice = "noura";
 
     private readonly HttpClient _images = new(new SocketsHttpHandler { UseProxy = ProviderProfiles.TestBase is null, AllowAutoRedirect = true, MaxAutomaticRedirections = 3, ConnectTimeout = TimeSpan.FromSeconds(15) })

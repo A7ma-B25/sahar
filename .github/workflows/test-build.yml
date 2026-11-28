@@ -135,6 +135,9 @@ jobs:
           $il = @(Select-String -Path mind-publish.log -Pattern 'warning IL\d+' | ForEach-Object { $_.Line } | Sort-Object -Unique)
           Write-Host "Mind publish: $($il.Count) IL (trim/AOT) warning(s)"
           if ($il.Count) { $il | ForEach-Object { Write-Host "  $_" }; throw 'the Mind publish has trim/AOT warnings (0.19 gate: zero)' }
+      # 0.19 CI only: the stdio MCP test program (the official SDK's server side) for the mind stage; never packaged.
+      - name: The MCP test program (CI only)
+        run: dotnet publish tests/fakes/McpFake -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/engine/ci-fakes
       - name: Her brain's runtime (official llama.cpp release, pinned SHA-256 and GitHub's digest)
         shell: pwsh
         env:
